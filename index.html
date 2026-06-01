@@ -967,7 +967,10 @@
         </div>
         <div class="form-group">
           <label class="form-label">Date souhaitée *</label>
-          <input type="date" class="form-control" id="fo-date">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" class="form-control" id="fo-date" style="flex:1">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('fo-date').value=formatDate(new Date())" style="white-space:nowrap">Auj.</button>
+          </div>
         </div>
       </div>
       <div class="form-group">
@@ -1132,7 +1135,10 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Date *</label>
-          <input type="date" class="form-control" id="interv-date">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" class="form-control" id="interv-date" style="flex:1">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('interv-date').value=formatDate(new Date())" style="white-space:nowrap">Aujourd'hui</button>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Type *</label>
@@ -2281,7 +2287,24 @@ function ouvrirDetailIntervention(id) {
     ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
   `;
 
+  // Boutons statut rapide (admin)
+  const statutsRapides = [
+    { val: 'planifie',   icon: '📋', label: 'Planifié' },
+    { val: 'en-cours',  icon: '🔧', label: 'En cours' },
+    { val: 'termine',   icon: '✅', label: 'Terminé'  },
+  ];
+  const btnsStatut = modeAdmin ? `
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-right:auto">
+      ${statutsRapides.map(s => `
+        <button onclick="changerStatutRapide('${id}','${s.val}')"
+          style="padding:5px 10px;border-radius:6px;border:2px solid ${s.val===iv.statut?'var(--vert)':'var(--border)'};
+                 background:${s.val===iv.statut?'var(--vert-pale)':'white'};font-size:0.78rem;font-weight:600;cursor:pointer">
+          ${s.icon} ${s.label}
+        </button>`).join('')}
+    </div>` : '';
+
   document.getElementById('detail-footer').innerHTML = `
+    ${btnsStatut}
     <button class="btn btn-secondary btn-sm" onclick="ouvrirRemarque('${id}')">+ Remarque</button>
     ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
     ${modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>` : ''}
@@ -2289,6 +2312,14 @@ function ouvrirDetailIntervention(id) {
   `;
 
   document.getElementById('modal-detail').classList.remove('hidden');
+}
+
+function changerStatutRapide(id, statut) {
+  const iv = appData.interventions.find(i => i.id === id);
+  if (!iv) return;
+  saveDoc('interventions', { ...iv, statut });
+  // Rafraîchir le détail
+  setTimeout(() => ouvrirDetailIntervention(id), 300);
 }
 
 // =====================================================
