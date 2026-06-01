@@ -163,6 +163,19 @@
   .dot-A { background: #0d6efd; }
   .dot-B { background: #fd7e14; }
 
+  /* RECHERCHE CLIENT */
+  .client-search-wrap { position: relative; }
+  .client-search-input { width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: white; }
+  .client-search-input:focus { outline: none; border-color: var(--vert-clair); box-shadow: 0 0 0 3px rgba(82,183,136,0.15); }
+  .client-search-dropdown { position: absolute; left: 0; right: 0; top: calc(100% + 2px); background: white; border: 1.5px solid var(--vert-clair); border-radius: 8px; z-index: 500; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none; }
+  .client-search-dropdown.open { display: block; }
+  .client-search-option { padding: 9px 14px; font-size: 0.88rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+  .client-search-option:last-child { border-bottom: none; }
+  .client-search-option:hover, .client-search-option.active { background: var(--vert-pale); color: var(--vert); }
+  .client-search-option .opt-addr { font-size: 0.75rem; color: var(--gris); margin-top: 1px; }
+  .client-search-option.selected { background: var(--vert-pale); font-weight: 700; }
+  .client-search-empty { padding: 10px 14px; font-size: 0.85rem; color: var(--gris); text-align: center; }
+
   textarea.form-control { resize: vertical; min-height: 80px; }
   select.form-control { appearance: auto; }
   .empty-state { text-align: center; color: var(--gris); padding: 2rem; font-size: 0.9rem; }
@@ -958,7 +971,15 @@
       </div>
       <div class="form-group">
         <label class="form-label">Client *</label>
-        <select class="form-control" id="fo-client"></select>
+        <div class="client-search-wrap" id="fo-client-wrap">
+          <input type="text" class="client-search-input" id="fo-client-search"
+            placeholder="🔍 Rechercher un client…" autocomplete="off"
+            oninput="filtrerClientSearch('fo')"
+            onfocus="ouvrirClientSearch('fo')"
+            onblur="fermerClientSearch('fo', 300)">
+          <input type="hidden" id="fo-client-id">
+          <div class="client-search-dropdown" id="fo-client-dropdown"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Type de travail *</label>
@@ -1115,7 +1136,15 @@
       </div>
       <div class="form-group">
         <label class="form-label">Client *</label>
-        <select class="form-control" id="interv-client"></select>
+        <div class="client-search-wrap" id="interv-client-wrap">
+          <input type="text" class="client-search-input" id="interv-client-search"
+            placeholder="🔍 Rechercher un client…" autocomplete="off"
+            oninput="filtrerClientSearch('interv')"
+            onfocus="ouvrirClientSearch('interv')"
+            onblur="fermerClientSearch('interv', 300)">
+          <input type="hidden" id="interv-client-id">
+          <div class="client-search-dropdown" id="interv-client-dropdown"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Adresse (si différente du client)</label>
@@ -2070,18 +2099,13 @@ function ouvrirNouvelleIntervention(dateStr) {
   resetPulveFields('');
   document.getElementById('interv-recurrent').checked = false;
   document.getElementById('recurrence-section').style.display = 'none';
+  resetClientSearch('interv');
 
   // Reset membres
   document.querySelectorAll('.membre-chip').forEach(chip => {
     chip.classList.remove('selected');
     if (chip.dataset.membre === 'Jimi') chip.classList.add('selected');
   });
-
-  // Populate clients
-  const { clients } = getData();
-  const sel = document.getElementById('interv-client');
-  sel.innerHTML = clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
-  if (!clients.length) sel.innerHTML = '<option value="">— Ajouter un client d\'abord —</option>';
 
   document.getElementById('modal-intervention').classList.remove('hidden');
 }
@@ -2111,9 +2135,7 @@ function ouvrirEditionIntervention(id) {
   document.getElementById('pulve-section').style.display = isPulve ? '' : 'none';
   if (isPulve) resetPulveFields(iv.pulve || {});
 
-  const sel = document.getElementById('interv-client');
-  sel.innerHTML = clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
-  sel.value = iv.clientId;
+  setClientSearch('interv', iv.clientId);
 
   const membres = iv.membres || [iv.chef];
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -2131,7 +2153,7 @@ function toggleMembre(el) {
 
 function sauvegarderIntervention() {
   const data = getData();
-  const clientId = document.getElementById('interv-client').value;
+  const clientId = document.getElementById('interv-client-id').value;
   if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
   const date = document.getElementById('interv-date').value;
   if (!date) { alert('Veuillez choisir une date.'); return; }
@@ -3018,11 +3040,7 @@ async function confirmerGenererTontes() {
 // FICHE OUVRIER
 // =====================================================
 function ouvrirFicheOuvrier(dateStr) {
-  const { clients } = getData();
-  const sel = document.getElementById('fo-client');
-  sel.innerHTML = clients.length
-    ? clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('')
-    : '<option value="">— Ajouter un client d\'abord —</option>';
+  resetClientSearch('fo');
   document.getElementById('fo-date').value = dateStr || formatDate(new Date());
   document.getElementById('fo-description').value = '';
   document.getElementById('fo-materiel').value = '';
@@ -3033,7 +3051,7 @@ function ouvrirFicheOuvrier(dateStr) {
 }
 
 function sauvegarderFicheOuvrier() {
-  const clientId = document.getElementById('fo-client').value;
+  const clientId = document.getElementById('fo-client-id').value;
   const date     = document.getElementById('fo-date').value;
   const desc     = document.getElementById('fo-description').value.trim();
   if (!clientId || !date || !desc) {
@@ -3261,6 +3279,73 @@ document.addEventListener('DOMContentLoaded', () => {
     if (file) lireExcel(file);
   });
 });
+
+// =====================================================
+// RECHERCHE CLIENT (composant réutilisable)
+// =====================================================
+function renderClientSearchDropdown(prefix, filtre) {
+  const { clients } = getData();
+  const q = (filtre || '').toLowerCase().trim();
+  const filtered = q
+    ? clients.filter(c =>
+        c.nom.toLowerCase().includes(q) ||
+        (c.adresse || '').toLowerCase().includes(q) ||
+        (c.tel || '').includes(q))
+    : clients.slice(0, 80); // Afficher les 80 premiers si pas de filtre
+
+  const dropdown = document.getElementById(prefix + '-client-dropdown');
+  const selectedId = document.getElementById(prefix + '-client-id').value;
+
+  if (!filtered.length) {
+    dropdown.innerHTML = `<div class="client-search-empty">Aucun client trouvé</div>`;
+  } else {
+    dropdown.innerHTML = filtered.map(c => `
+      <div class="client-search-option${c.id === selectedId ? ' selected' : ''}"
+           data-id="${c.id}" data-nom="${c.nom.replace(/"/g,'&quot;')}"
+           onmousedown="selectionnerClient('${prefix}','${c.id}',this)">
+        <div>${c.nom}</div>
+        ${c.adresse ? `<div class="opt-addr">📍 ${c.adresse}</div>` : ''}
+      </div>`).join('');
+  }
+  dropdown.classList.add('open');
+}
+
+function filtrerClientSearch(prefix) {
+  const q = document.getElementById(prefix + '-client-search').value;
+  // Si texte effacé, reset la sélection
+  if (!q.trim()) document.getElementById(prefix + '-client-id').value = '';
+  renderClientSearchDropdown(prefix, q);
+}
+
+function ouvrirClientSearch(prefix) {
+  renderClientSearchDropdown(prefix, document.getElementById(prefix + '-client-search').value);
+}
+
+function fermerClientSearch(prefix, delay) {
+  setTimeout(() => {
+    document.getElementById(prefix + '-client-dropdown').classList.remove('open');
+  }, delay || 200);
+}
+
+function selectionnerClient(prefix, id, el) {
+  document.getElementById(prefix + '-client-id').value = id;
+  document.getElementById(prefix + '-client-search').value = el.querySelector('div').textContent;
+  document.getElementById(prefix + '-client-dropdown').classList.remove('open');
+}
+
+function setClientSearch(prefix, clientId) {
+  // Pré-remplir depuis un ID existant
+  const { clients } = getData();
+  const c = clients.find(x => x.id === clientId);
+  document.getElementById(prefix + '-client-id').value = clientId || '';
+  document.getElementById(prefix + '-client-search').value = c ? c.nom : '';
+}
+
+function resetClientSearch(prefix) {
+  document.getElementById(prefix + '-client-id').value = '';
+  document.getElementById(prefix + '-client-search').value = '';
+  document.getElementById(prefix + '-client-dropdown').classList.remove('open');
+}
 
 // =====================================================
 // UTILS
