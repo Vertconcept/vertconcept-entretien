@@ -606,7 +606,6 @@
           <div class="fiche-equipe-selector">
             <button class="fiche-equipe-btn active-jimi" id="fiche-btn-jimi" onclick="selectFicheEquipe('Jimi')">🔵 Jimi</button>
             <button class="fiche-equipe-btn" id="fiche-btn-timo" onclick="selectFicheEquipe('Timo')">🟢 Timo</button>
-            <button class="fiche-equipe-btn" id="fiche-btn-justin" onclick="selectFicheEquipe('Justin')">🟣 Justin</button>
           </div>
         </div>
         <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimer</button>
@@ -1793,9 +1792,8 @@ function renderPlanningMois() {
 // =====================================================
 function selectFicheEquipe(equipe) {
   ficheEquipe = equipe;
-  document.getElementById('fiche-btn-jimi').className   = 'fiche-equipe-btn' + (equipe === 'Jimi'   ? ' active-jimi' : '');
-  document.getElementById('fiche-btn-timo').className   = 'fiche-equipe-btn' + (equipe === 'Timo'   ? ' active-timo' : '');
-  document.getElementById('fiche-btn-justin').className = 'fiche-equipe-btn' + (equipe === 'Justin' ? ' active-jimi' : '');
+  document.getElementById('fiche-btn-jimi').className = 'fiche-equipe-btn' + (equipe === 'Jimi' ? ' active-jimi' : '');
+  document.getElementById('fiche-btn-timo').className = 'fiche-equipe-btn' + (equipe === 'Timo' ? ' active-timo' : '');
   renderFiche();
 }
 
