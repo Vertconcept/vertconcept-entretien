@@ -296,7 +296,7 @@
     .bottom-nav button.active .nav-icon { transform: scale(1.1); }
 
     /* FAB repositionné au-dessus de la bottom-nav */
-    .fab-ouvrier { bottom: 76px; right: 1rem; padding: 12px 18px; font-size: 0.9rem; }
+    .fab-ouvrier { bottom: calc(68px + env(safe-area-inset-bottom)); right: 1rem; padding: 12px 18px; font-size: 0.9rem; }
 
     /* Planning semaine — 1 colonne */
     .jours-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
