@@ -213,6 +213,42 @@
   .preview-table td { padding: 3px 8px; border-bottom: 1px solid #eee; }
   .import-result { padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; margin-top: 1rem; }
 
+  /* MATÉRIEL TAB */
+  .materiel-tabs { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .materiel-tab { padding: 8px 18px; border-radius: 20px; border: 2px solid var(--border); background: white; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--gris); }
+  .materiel-tab.active { border-color: var(--vert); background: var(--vert); color: white; }
+  .materiel-section { display: none; }
+  .materiel-section.active { display: block; }
+
+  /* MACHINES */
+  .machine-card { background: white; border-radius: 10px; padding: 14px 16px; box-shadow: var(--ombre); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+  .machine-card .mc-info .mc-nom { font-weight: 700; font-size: 0.95rem; }
+  .machine-card .mc-info .mc-type { font-size: 0.8rem; color: var(--gris); }
+  .machine-card .mc-entretien { font-size: 0.82rem; text-align: right; }
+  .badge-ok { background: #d1e7dd; color: #0a3622; }
+  .badge-bientot { background: #fff3cd; color: #664d03; }
+  .badge-retard { background: #f8d7da; color: #842029; }
+
+  /* PANNES */
+  .panne-card { background: white; border-radius: 10px; padding: 14px 16px; box-shadow: var(--ombre); margin-bottom: 8px; border-left: 4px solid var(--rouge); }
+  .panne-card.resolu { border-left-color: var(--vert-clair); opacity: 0.75; }
+  .panne-card .pc-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+  .panne-card .pc-machine { font-weight: 700; }
+  .panne-card .pc-desc { font-size: 0.88rem; color: #444; }
+  .panne-card .pc-meta { font-size: 0.78rem; color: var(--gris); margin-top: 4px; }
+
+  /* ACHATS */
+  .achat-card { background: white; border-radius: 10px; padding: 12px 16px; box-shadow: var(--ombre); margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+  .achat-card.recu { opacity: 0.55; }
+  .achat-card .ac-check { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.9rem; }
+  .achat-card .ac-check.done { background: var(--vert); border-color: var(--vert); color: white; }
+  .achat-card .ac-info { flex: 1; }
+  .achat-card .ac-article { font-weight: 700; font-size: 0.92rem; }
+  .achat-card .ac-meta { font-size: 0.78rem; color: var(--gris); margin-top: 2px; }
+  .priorite-haute { color: var(--rouge); font-weight: 700; }
+  .priorite-normale { color: var(--orange); }
+  .priorite-basse { color: var(--gris); }
+
   /* STATUTS ÉTENDUS */
   .badge-en-attente { background: #ffe5d0; color: #a0522d; }
   .badge-refuse { background: #f8d7da; color: #842029; }
@@ -355,6 +391,7 @@
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
+    <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="notif-btn" id="notif-btn" onclick="ouvrirValidation()" title="Fiches en attente de validation" style="display:none">
@@ -459,6 +496,43 @@
     <div class="factu-list" id="factu-list"></div>
   </div>
 
+  <!-- ===== MATÉRIEL ===== -->
+  <div class="page" id="page-materiel">
+    <div class="flex-between mb-1">
+      <div class="materiel-tabs">
+        <button class="materiel-tab active" onclick="switchMaterielTab('machines')">🔧 Machines</button>
+        <button class="materiel-tab" onclick="switchMaterielTab('pannes')">⚠️ Pannes & Casses</button>
+        <button class="materiel-tab" onclick="switchMaterielTab('achats')">🛒 À commander</button>
+      </div>
+      <div id="materiel-actions"></div>
+    </div>
+
+    <!-- Machines -->
+    <div class="materiel-section active" id="ms-machines">
+      <div id="machines-list"></div>
+    </div>
+
+    <!-- Pannes -->
+    <div class="materiel-section" id="ms-pannes">
+      <div class="flex-between mb-1">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="masquer-resolues" onchange="renderPannes()"> Masquer résolues
+        </label>
+      </div>
+      <div id="pannes-list"></div>
+    </div>
+
+    <!-- Achats -->
+    <div class="materiel-section" id="ms-achats">
+      <div class="flex-between mb-1">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="masquer-recus" onchange="renderAchats()"> Masquer reçus
+        </label>
+      </div>
+      <div id="achats-list"></div>
+    </div>
+  </div>
+
   <!-- ===== TONTES ===== -->
   <div class="page" id="page-tontes">
     <div class="stats-row" id="stats-tontes"></div>
@@ -473,6 +547,162 @@
   </div>
 
 </main>
+
+<!-- ===== MODAL MACHINE ===== -->
+<div class="modal-overlay hidden" id="modal-machine">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-machine-titre">Nouvelle machine</h3>
+      <button class="close-btn" onclick="fermerModal('modal-machine')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nom de la machine *</label>
+          <input type="text" class="form-control" id="machine-nom" placeholder="Tondeuse autoportée, Taille-haie…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-control" id="machine-type">
+            <option value="tondeuse">Tondeuse</option>
+            <option value="taille-haie">Taille-haie</option>
+            <option value="debroussailleuse">Débroussailleuse</option>
+            <option value="souffleur">Souffleur</option>
+            <option value="tronconneuse">Tronçonneuse</option>
+            <option value="vehicule">Véhicule</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Dernier entretien</label>
+          <input type="date" class="form-control" id="machine-dernier-entretien">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prochain entretien</label>
+          <input type="date" class="form-control" id="machine-prochain-entretien">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type d'entretien à prévoir</label>
+        <input type="text" class="form-control" id="machine-type-entretien" placeholder="Vidange, affûtage lames, remplacement filtre…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="machine-notes" rows="2" placeholder="Numéro de série, fournisseur, remarques…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-machine" onclick="supprimerMachine()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-machine')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderMachine()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL PANNE ===== -->
+<div class="modal-overlay hidden" id="modal-panne">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-panne-titre">Signaler une panne / casse</h3>
+      <button class="close-btn" onclick="fermerModal('modal-panne')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Machine concernée *</label>
+          <select class="form-control" id="panne-machine"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Signalé par *</label>
+          <select class="form-control" id="panne-auteur">
+            <option value="Marco">Marco</option>
+            <option value="Jimi">Jimi</option>
+            <option value="Timo">Timo</option>
+            <option value="Justin">Justin</option>
+            <option value="Matheo">Mathéo</option>
+            <option value="Bryan">Bryan</option>
+            <option value="Evann">Evann</option>
+            <option value="Lucas">Lucas (étudiant)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date *</label>
+        <input type="date" class="form-control" id="panne-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description du problème *</label>
+        <textarea class="form-control" id="panne-desc" rows="3" placeholder="Décrivez précisément la panne ou la casse…"></textarea>
+      </div>
+      <div class="form-group" id="panne-resolution-group" style="display:none">
+        <label class="form-label">Résolution / réparation effectuée</label>
+        <textarea class="form-control" id="panne-resolution" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Statut</label>
+        <select class="form-control" id="panne-statut" onchange="document.getElementById('panne-resolution-group').style.display=this.value==='resolu'?'':'none'">
+          <option value="ouvert">🔴 Ouvert</option>
+          <option value="en-cours">🟡 En cours de réparation</option>
+          <option value="resolu">🟢 Résolu</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-panne" onclick="supprimerPanne()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-panne')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderPanne()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL ACHAT ===== -->
+<div class="modal-overlay hidden" id="modal-achat">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-achat-titre">Article à commander</h3>
+      <button class="close-btn" onclick="fermerModal('modal-achat')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Article *</label>
+        <input type="text" class="form-control" id="achat-article" placeholder="Lame de tondeuse, huile moteur, gants…">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Quantité</label>
+          <input type="text" class="form-control" id="achat-qte" placeholder="ex: 2 paires, 5L…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Priorité</label>
+          <select class="form-control" id="achat-priorite">
+            <option value="haute">🔴 Haute — urgent</option>
+            <option value="normale">🟡 Normale</option>
+            <option value="basse">⚪ Basse — quand possible</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes / fournisseur</label>
+        <textarea class="form-control" id="achat-notes" rows="2" placeholder="Référence, où acheter, pour quelle machine…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Statut</label>
+        <select class="form-control" id="achat-statut">
+          <option value="a-commander">📋 À commander</option>
+          <option value="commande">📦 Commandé</option>
+          <option value="recu">✅ Reçu</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-achat" onclick="supprimerAchat()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-achat')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderAchat()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== MODAL FICHE FACTURATION (impression) ===== -->
 <div class="modal-overlay hidden" id="modal-factu-print">
@@ -860,7 +1090,7 @@ firebase.initializeApp({
 const db = firebase.firestore();
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -871,7 +1101,7 @@ function getData() {
 // saveData() compare newData avec le cache et écrit uniquement les différences
 function saveData(newData) {
   const batch = db.batch();
-  ['clients', 'interventions'].forEach(col => {
+  ['clients', 'interventions', 'machines', 'pannes', 'achats'].forEach(col => {
     const newItems = newData[col] || [];
     const oldItems = appData[col] || [];
     // Ajouts / modifications
@@ -902,7 +1132,7 @@ function showLoading(show) {
 // Re-rend la page active après chaque mise à jour Firestore
 function renderCurrentPage() {
   const pages = { planning: renderPlanning, fiches: renderFiche,
-    clients: renderClients, tontes: renderTontes, facturation: renderFacturation };
+    clients: renderClients, tontes: renderTontes, facturation: renderFacturation, materiel: renderMateriel };
   for (const [name, fn] of Object.entries(pages)) {
     if (document.getElementById('page-'+name)?.classList.contains('active')) { fn(); break; }
   }
@@ -931,6 +1161,13 @@ function initFirestore() {
     if (!intervReady) { intervReady = true; if (clientsReady) onBothReady(); }
     else renderCurrentPage();
   }, err => { showLoading(false); alert('Erreur Firebase interventions : ' + err.message); });
+
+  ['machines','pannes','achats'].forEach(col => {
+    db.collection(col).onSnapshot(snap => {
+      appData[col] = snap.docs.map(d => d.data());
+      if (clientsReady && intervReady) renderCurrentPage();
+    });
+  });
 }
 
 // Semaine de référence : numéro ISO de la semaine 1 de l'année comme base pour A/B
@@ -971,6 +1208,7 @@ function showPage(name) {
   if (name === 'clients') renderClients();
   if (name === 'tontes') renderTontes();
   if (name === 'facturation') renderFacturation();
+  if (name === 'materiel') renderMateriel();
 }
 
 // =====================================================
@@ -1949,6 +2187,274 @@ function marquerFacturee(checked) {
   const data = getData();
   const iv = data.interventions.find(i => i.id === currentFactuId);
   if (iv) { iv.facturee = checked; saveData(data); renderFacturation(); }
+}
+
+// =====================================================
+// MATÉRIEL
+// =====================================================
+let materielTabActive = 'machines';
+let currentMachineId = null, currentPanneId = null, currentAchatId = null;
+
+function switchMaterielTab(tab) {
+  materielTabActive = tab;
+  document.querySelectorAll('.materiel-tab').forEach((btn, i) => {
+    btn.classList.toggle('active', ['machines','pannes','achats'][i] === tab);
+  });
+  document.querySelectorAll('.materiel-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('ms-' + tab).classList.add('active');
+  updateMaterielActions();
+  if (tab === 'machines') renderMachines();
+  if (tab === 'pannes') renderPannes();
+  if (tab === 'achats') renderAchats();
+}
+
+function renderMateriel() {
+  updateMaterielActions();
+  if (materielTabActive === 'machines') renderMachines();
+  if (materielTabActive === 'pannes') renderPannes();
+  if (materielTabActive === 'achats') renderAchats();
+}
+
+function updateMaterielActions() {
+  const actions = document.getElementById('materiel-actions');
+  if (materielTabActive === 'machines')
+    actions.innerHTML = modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirMachine()">+ Machine</button>` : '';
+  else if (materielTabActive === 'pannes')
+    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="ouvrirPanne()">⚠️ Signaler une panne</button>`;
+  else if (materielTabActive === 'achats')
+    actions.innerHTML = modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirAchat()">+ Article à commander</button>` : '';
+}
+
+// --- Machines ---
+function statEntretien(prochainDate) {
+  if (!prochainDate) return { cls: '', label: '—' };
+  const diff = (new Date(prochainDate) - new Date()) / 86400000;
+  if (diff < 0)  return { cls: 'badge-retard', label: '⚠️ En retard' };
+  if (diff < 30) return { cls: 'badge-bientot', label: `⏳ Dans ${Math.round(diff)}j` };
+  return { cls: 'badge-ok', label: '✅ OK' };
+}
+
+function renderMachines() {
+  const list = document.getElementById('machines-list');
+  const { machines } = getData();
+  if (!machines.length) {
+    list.innerHTML = `<div class="card"><div class="empty-state">Aucune machine enregistrée.<br>Cliquez "+ Machine" pour commencer.</div></div>`;
+    return;
+  }
+  machines.sort((a,b) => a.nom.localeCompare(b.nom));
+  list.innerHTML = machines.map(m => {
+    const st = statEntretien(m.prochainEntretien);
+    return `<div class="machine-card">
+      <div class="mc-info">
+        <div class="mc-nom">${m.nom}</div>
+        <div class="mc-type">${m.type}${m.typeEntretien ? ' · ' + m.typeEntretien : ''}</div>
+        ${m.notes ? `<div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${m.notes}</div>` : ''}
+      </div>
+      <div class="mc-entretien">
+        ${m.dernierEntretien ? `<div style="font-size:0.78rem;color:var(--gris)">Dernier : ${formatDateFR(m.dernierEntretien)}</div>` : ''}
+        ${m.prochainEntretien ? `<div style="font-size:0.78rem;margin-top:2px">Prochain : ${formatDateFR(m.prochainEntretien)}</div>` : ''}
+        <span class="badge ${st.cls}" style="margin-top:4px">${st.label}</span>
+      </div>
+      ${modeAdmin ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirMachine('${m.id}')">✏️</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function ouvrirMachine(id) {
+  currentMachineId = id || null;
+  const m = id ? getData().machines.find(x => x.id === id) : null;
+  document.getElementById('modal-machine-titre').textContent = m ? 'Modifier la machine' : 'Nouvelle machine';
+  document.getElementById('btn-suppr-machine').style.display = m ? '' : 'none';
+  document.getElementById('machine-nom').value = m?.nom || '';
+  document.getElementById('machine-type').value = m?.type || 'tondeuse';
+  document.getElementById('machine-dernier-entretien').value = m?.dernierEntretien || '';
+  document.getElementById('machine-prochain-entretien').value = m?.prochainEntretien || '';
+  document.getElementById('machine-type-entretien').value = m?.typeEntretien || '';
+  document.getElementById('machine-notes').value = m?.notes || '';
+  document.getElementById('modal-machine').classList.remove('hidden');
+}
+
+function sauvegarderMachine() {
+  const nom = document.getElementById('machine-nom').value.trim();
+  if (!nom) { alert('Nom obligatoire.'); return; }
+  const data = getData();
+  const machine = {
+    id: currentMachineId || uuid(), nom,
+    type: document.getElementById('machine-type').value,
+    dernierEntretien: document.getElementById('machine-dernier-entretien').value || null,
+    prochainEntretien: document.getElementById('machine-prochain-entretien').value || null,
+    typeEntretien: document.getElementById('machine-type-entretien').value,
+    notes: document.getElementById('machine-notes').value
+  };
+  if (currentMachineId) data.machines = data.machines.map(x => x.id === currentMachineId ? machine : x);
+  else data.machines.push(machine);
+  saveData(data);
+  fermerModal('modal-machine');
+}
+
+function supprimerMachine() {
+  if (!currentMachineId || !confirm('Supprimer cette machine ?')) return;
+  const data = getData();
+  data.machines = data.machines.filter(x => x.id !== currentMachineId);
+  saveData(data);
+  fermerModal('modal-machine');
+}
+
+// --- Pannes ---
+function renderPannes() {
+  const masquer = document.getElementById('masquer-resolues')?.checked;
+  const { pannes, machines } = getData();
+  const list = document.getElementById('pannes-list');
+  let items = [...pannes].sort((a,b) => b.date.localeCompare(a.date));
+  if (masquer) items = items.filter(p => p.statut !== 'resolu');
+  if (!items.length) {
+    list.innerHTML = `<div class="card"><div class="empty-state">Aucune panne signalée. ✅</div></div>`;
+    return;
+  }
+  const statutIcon = { 'ouvert': '🔴', 'en-cours': '🟡', 'resolu': '🟢' };
+  const statutLabel = { 'ouvert': 'Ouvert', 'en-cours': 'En cours', 'resolu': 'Résolu' };
+  list.innerHTML = items.map(p => `
+    <div class="panne-card${p.statut === 'resolu' ? ' resolu' : ''}" onclick="ouvrirPanne('${p.id}')">
+      <div class="pc-header">
+        <div class="pc-machine">🔧 ${p.machine}</div>
+        <span class="badge badge-${p.statut === 'resolu' ? 'ok' : p.statut === 'en-cours' ? 'bientot' : 'retard'}">
+          ${statutIcon[p.statut]} ${statutLabel[p.statut]}
+        </span>
+      </div>
+      <div class="pc-desc">${p.description}</div>
+      ${p.resolution ? `<div class="pc-desc" style="color:var(--vert);margin-top:4px">✅ ${p.resolution}</div>` : ''}
+      <div class="pc-meta">Signalé par ${p.auteur} · ${formatDateFR(p.date)}</div>
+    </div>`).join('');
+}
+
+function ouvrirPanne(id) {
+  currentPanneId = id || null;
+  const p = id ? getData().pannes.find(x => x.id === id) : null;
+  const { machines } = getData();
+  document.getElementById('modal-panne-titre').textContent = p ? 'Modifier la panne' : 'Signaler une panne / casse';
+  document.getElementById('btn-suppr-panne').style.display = (p && modeAdmin) ? '' : 'none';
+  // Peupler select machines
+  const sel = document.getElementById('panne-machine');
+  sel.innerHTML = machines.length
+    ? machines.map(m => `<option value="${m.nom}">${m.nom}</option>`).join('')
+    : `<option value="Autre">Autre</option>`;
+  sel.value = p?.machine || sel.options[0]?.value;
+  document.getElementById('panne-date').value = p?.date || formatDate(new Date());
+  document.getElementById('panne-desc').value = p?.description || '';
+  document.getElementById('panne-statut').value = p?.statut || 'ouvert';
+  document.getElementById('panne-resolution').value = p?.resolution || '';
+  document.getElementById('panne-resolution-group').style.display = (p?.statut === 'resolu') ? '' : 'none';
+  // Auto-remplir auteur depuis utilisateur connecté
+  const saved = localStorage.getItem('vc_user');
+  if (saved && !p) {
+    const u = JSON.parse(saved);
+    const auteurSel = document.getElementById('panne-auteur');
+    for (const opt of auteurSel.options) { if (opt.value === u.name) { auteurSel.value = u.name; break; } }
+  }
+  if (p) document.getElementById('panne-auteur').value = p.auteur;
+  document.getElementById('modal-panne').classList.remove('hidden');
+}
+
+function sauvegarderPanne() {
+  const machine = document.getElementById('panne-machine').value;
+  const desc = document.getElementById('panne-desc').value.trim();
+  if (!machine || !desc) { alert('Machine et description obligatoires.'); return; }
+  const data = getData();
+  const panne = {
+    id: currentPanneId || uuid(),
+    machine,
+    auteur: document.getElementById('panne-auteur').value,
+    date: document.getElementById('panne-date').value,
+    description: desc,
+    statut: document.getElementById('panne-statut').value,
+    resolution: document.getElementById('panne-resolution').value
+  };
+  if (currentPanneId) data.pannes = data.pannes.map(x => x.id === currentPanneId ? panne : x);
+  else data.pannes.push(panne);
+  saveData(data);
+  fermerModal('modal-panne');
+}
+
+function supprimerPanne() {
+  if (!currentPanneId || !confirm('Supprimer ce signalement ?')) return;
+  const data = getData();
+  data.pannes = data.pannes.filter(x => x.id !== currentPanneId);
+  saveData(data);
+  fermerModal('modal-panne');
+}
+
+// --- Achats ---
+function renderAchats() {
+  const masquer = document.getElementById('masquer-recus')?.checked;
+  const { achats } = getData();
+  const list = document.getElementById('achats-list');
+  const ordre = { 'haute': 0, 'normale': 1, 'basse': 2 };
+  let items = [...achats].sort((a,b) => (ordre[a.priorite]||1) - (ordre[b.priorite]||1));
+  if (masquer) items = items.filter(a => a.statut !== 'recu');
+  if (!items.length) {
+    list.innerHTML = `<div class="card"><div class="empty-state">Aucun article à commander.</div></div>`;
+    return;
+  }
+  const statutLabel = { 'a-commander': '📋 À commander', 'commande': '📦 Commandé', 'recu': '✅ Reçu' };
+  list.innerHTML = items.map(a => `
+    <div class="achat-card${a.statut === 'recu' ? ' recu' : ''}">
+      <div class="ac-check${a.statut === 'recu' ? ' done' : ''}" onclick="${modeAdmin ? `toggleAchatRecu('${a.id}')` : ''}">
+        ${a.statut === 'recu' ? '✓' : ''}
+      </div>
+      <div class="ac-info">
+        <div class="ac-article">${a.article}${a.qte ? ` <span style="font-weight:400;color:var(--gris)">· ${a.qte}</span>` : ''}</div>
+        <div class="ac-meta">
+          <span class="priorite-${a.priorite}">${a.priorite === 'haute' ? '🔴 Urgent' : a.priorite === 'normale' ? '🟡 Normal' : '⚪ Basse priorité'}</span>
+          · ${statutLabel[a.statut]}
+          ${a.notes ? ' · ' + a.notes : ''}
+        </div>
+      </div>
+      ${modeAdmin ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirAchat('${a.id}')">✏️</button>` : ''}
+    </div>`).join('');
+}
+
+function toggleAchatRecu(id) {
+  const data = getData();
+  const a = data.achats.find(x => x.id === id);
+  if (a) { a.statut = a.statut === 'recu' ? 'a-commander' : 'recu'; saveData(data); }
+}
+
+function ouvrirAchat(id) {
+  currentAchatId = id || null;
+  const a = id ? getData().achats.find(x => x.id === id) : null;
+  document.getElementById('modal-achat-titre').textContent = a ? 'Modifier l\'article' : 'Article à commander';
+  document.getElementById('btn-suppr-achat').style.display = a ? '' : 'none';
+  document.getElementById('achat-article').value = a?.article || '';
+  document.getElementById('achat-qte').value = a?.qte || '';
+  document.getElementById('achat-priorite').value = a?.priorite || 'normale';
+  document.getElementById('achat-notes').value = a?.notes || '';
+  document.getElementById('achat-statut').value = a?.statut || 'a-commander';
+  document.getElementById('modal-achat').classList.remove('hidden');
+}
+
+function sauvegarderAchat() {
+  const article = document.getElementById('achat-article').value.trim();
+  if (!article) { alert('Article obligatoire.'); return; }
+  const data = getData();
+  const achat = {
+    id: currentAchatId || uuid(), article,
+    qte: document.getElementById('achat-qte').value,
+    priorite: document.getElementById('achat-priorite').value,
+    notes: document.getElementById('achat-notes').value,
+    statut: document.getElementById('achat-statut').value
+  };
+  if (currentAchatId) data.achats = data.achats.map(x => x.id === currentAchatId ? achat : x);
+  else data.achats.push(achat);
+  saveData(data);
+  fermerModal('modal-achat');
+}
+
+function supprimerAchat() {
+  if (!currentAchatId || !confirm('Supprimer cet article ?')) return;
+  const data = getData();
+  data.achats = data.achats.filter(x => x.id !== currentAchatId);
+  saveData(data);
+  fermerModal('modal-achat');
 }
 
 // =====================================================
