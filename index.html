@@ -1079,15 +1079,25 @@
           <div style="font-weight:600;margin-bottom:4px">Cliquez ou glissez-déposez votre fichier Excel</div>
           <div style="font-size:0.8rem">.xlsx, .xls ou .csv acceptés</div>
         </div>
-        <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="lireExcel(this.files[0])">
+        <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv,.CSV" style="display:none" onchange="lireExcel(this.files[0])">
       </div>
 
-      <!-- Étape 2 : mapping colonnes -->
+      <!-- Étape 2a : format Vertuoza détecté (automatique) -->
+      <div id="import-step-vertuoza" style="display:none">
+        <div class="alert alert-success" id="import-info-v" style="margin-bottom:1rem"></div>
+        <p style="font-size:0.85rem;margin-bottom:0.5rem;font-weight:600">Aperçu :</p>
+        <div style="overflow-x:auto;font-size:0.78rem">
+          <table class="preview-table" id="preview-table-v"></table>
+        </div>
+        <div id="import-result"></div>
+      </div>
+
+      <!-- Étape 2b : mapping manuel (autres formats) -->
       <div id="import-step-2" style="display:none">
         <div class="alert alert-info" id="import-info" style="margin-bottom:1rem"></div>
         <p style="font-size:0.85rem;margin-bottom:0.75rem;font-weight:600">Associez les colonnes de votre fichier aux champs clients :</p>
         <table class="mapping-table">
-          <thead><tr><th>Champ application</th><th>Colonne Excel détectée</th></tr></thead>
+          <thead><tr><th>Champ application</th><th>Colonne détectée</th></tr></thead>
           <tbody>
             <tr><td><strong>Nom *</strong></td><td><select id="map-nom"></select></td></tr>
             <tr><td>Adresse</td><td><select id="map-adresse"></select></td></tr>
@@ -1101,12 +1111,12 @@
         <div style="overflow-x:auto">
           <table class="preview-table" id="preview-table"></table>
         </div>
-        <div id="import-result"></div>
+        <div id="import-result-manual"></div>
       </div>
     </div>
     <div class="modal-footer" id="import-footer">
       <button class="btn btn-secondary" onclick="fermerModal('modal-import')">Annuler</button>
-      <button class="btn btn-primary" id="btn-confirmer-import" style="display:none" onclick="confirmerImport()">Importer les clients</button>
+      <button class="btn btn-primary" id="btn-confirmer-import" style="display:none" onclick="confirmerImport()">⚡ Importer les clients</button>
     </div>
   </div>
 </div>
@@ -3180,84 +3190,187 @@ function ouvrirImportExcel() {
   document.getElementById('modal-import').classList.remove('hidden');
 }
 
-function lireExcel(file) {
-  if (!file) return;
-  if (typeof XLSX === 'undefined') {
-    alert("La bibliothèque de lecture Excel n'est pas chargée. Vérifiez votre connexion internet.");
-    return;
+// ── Parser CSV texte ────────────────────────────────────────────────────────
+function parseCsvTexte(text) {
+  const rows = [];
+  let cur = '', inQ = false, row = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') { if (inQ && text[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (c === ',' && !inQ) { row.push(cur); cur = ''; }
+    else if ((c === '\n' || c === '\r') && !inQ) {
+      if (cur || row.length) { row.push(cur); rows.push(row); }
+      cur = ''; row = [];
+      if (c === '\r' && text[i+1] === '\n') i++;
+    } else cur += c;
   }
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      if (data.length < 2) { alert('Le fichier semble vide ou sans données.'); return; }
-
-      excelHeaders = data[0].map(String);
-      excelRows = data.slice(1).filter(row => row.some(cell => String(cell).trim() !== ''));
-
-      document.getElementById('import-info').textContent =
-        `✅ Fichier lu : ${excelRows.length} ligne(s) détectée(s) dans "${wb.SheetNames[0]}"`;
-
-      // Peupler les selects de mapping
-      const AUCUN = '<option value="">— Ne pas importer —</option>';
-      const opts = excelHeaders.map((h, i) => `<option value="${i}">${h || 'Colonne ' + (i+1)}</option>`).join('');
-      ['map-nom','map-adresse','map-tel','map-email','map-notes'].forEach(id => {
-        document.getElementById(id).innerHTML = AUCUN + opts;
-      });
-
-      // Auto-détection intelligente des colonnes
-      const mappings = { 'map-nom': ['nom','name','client','raison','société','societe','prenom','prénom'],
-        'map-adresse': ['adresse','address','rue','voie','localisation'],
-        'map-tel': ['tel','téléphone','telephone','mobile','portable','phone'],
-        'map-email': ['email','mail','courriel','e-mail'],
-        'map-notes': ['note','notes','remarque','remarques','commentaire','info','accès','acces'] };
-      for (const [selectId, keywords] of Object.entries(mappings)) {
-        const idx = excelHeaders.findIndex(h =>
-          keywords.some(kw => h.toLowerCase().includes(kw)));
-        if (idx >= 0) document.getElementById(selectId).value = String(idx);
-      }
-
-      // Aperçu
-      const preview = document.getElementById('preview-table');
-      preview.innerHTML = `<thead><tr>${excelHeaders.map(h=>`<th>${h||'—'}</th>`).join('')}</tr></thead>
-        <tbody>${excelRows.slice(0,5).map(row =>
-          `<tr>${excelHeaders.map((_,i)=>`<td>${row[i]??''}</td>`).join('')}</tr>`
-        ).join('')}</tbody>`;
-
-      document.getElementById('import-step-1').style.display = 'none';
-      document.getElementById('import-step-2').style.display = '';
-      document.getElementById('btn-confirmer-import').style.display = '';
-    } catch(err) {
-      alert('Erreur de lecture : ' + err.message);
-    }
-  };
-  reader.readAsArrayBuffer(file);
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
 }
 
-function confirmerImport() {
+function cleanTelImport(raw) {
+  const t = (raw || '').trim().replace(/\s/g, '');
+  if (!t || t === '-') return '';
+  if (t.startsWith('32') && t.length >= 10) {
+    const n = '0' + t.slice(2);
+    return n.replace(/(\d{4})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4');
+  }
+  return t;
+}
+
+function lireExcel(file) {
+  if (!file) return;
+  const isCSV = file.name.toLowerCase().endsWith('.csv');
+
+  if (isCSV) {
+    // Lire comme texte pour préserver UTF-8 (accents)
+    const reader = new FileReader();
+    reader.onload = e => traiterLignesImport(parseCsvTexte(e.target.result));
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    if (typeof XLSX === 'undefined') { alert("SheetJS non chargé. Vérifiez votre connexion."); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        traiterLignesImport(data);
+      } catch(err) { alert('Erreur lecture : ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function traiterLignesImport(rows) {
+  if (!rows || rows.length < 2) { alert('Fichier vide ou invalide.'); return; }
+  const headers = rows[0].map(String);
+
+  // Détecter format Vertuoza (présence de "contact_type" et "first_name")
+  const isVertuoza = headers.some(h => h === 'contact_type') && headers.some(h => h === 'first_name');
+
+  if (isVertuoza) {
+    traiterVertuoza(rows);
+  } else {
+    traiterFormatManuel(rows, headers);
+  }
+}
+
+// ── Format Vertuoza (CSV export Vertuoza) ───────────────────────────────────
+function traiterVertuoza(rows) {
+  const data = rows.slice(1);
+  const clients = [];
+  let ignores = 0;
+
+  data.forEach(row => {
+    if (!row || row.length < 5) return;
+    if ((row[1] || '').trim() !== 'client') { ignores++; return; }
+
+    const csvId     = (row[0] || '').trim();
+    const company   = (row[4] || '').trim();
+    const prenom    = (row[2] || '').trim();
+    const nomFam    = (row[3] || '').trim();
+    const nomFamille = company || nomFam;
+    const nom = company ? company : (prenom && nomFam ? `${prenom} ${nomFam}` : (nomFam || prenom));
+    if (!nom) { ignores++; return; }
+
+    const rue      = (row[10] || '').trim();
+    const ville    = (row[11] || '').trim().replace(/^\d+\s*[-–]\s*/, '');
+    const codePostal = (row[12] || '').trim();
+    const adresseFull = (row[18] || '').trim();
+    const adresse  = adresseFull || [rue, [codePostal, ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const tel   = cleanTelImport(row[9]);
+    const email = (row[8] || '').trim().toLowerCase();
+
+    const docId = csvId ? `vc_${csvId}` : uuid();
+    clients.push({ id: docId, prenom: company?'':prenom, nomFamille, nom, rue, codePostal, ville, adresse, tel, email, notes:'', tonte:false, tonteJour:'jeudi', tonteSemaine:'A' });
+  });
+
+  excelRows = clients; // stocker pour confirmerImport
+  excelHeaders = [];
+
+  // Aperçu
+  const preview = document.getElementById('preview-table-v');
+  preview.innerHTML = `<thead><tr><th>Prénom</th><th>Nom</th><th>Rue</th><th>CP</th><th>Ville</th><th>Tél</th><th>Email</th></tr></thead>
+    <tbody>${clients.slice(0,5).map(c=>`<tr>
+      <td>${c.prenom||'—'}</td><td>${c.nomFamille||'—'}</td>
+      <td>${c.rue||'—'}</td><td>${c.codePostal||'—'}</td><td>${c.ville||'—'}</td>
+      <td>${c.tel||'—'}</td><td>${c.email||'—'}</td>
+    </tr>`).join('')}</tbody>`;
+
+  document.getElementById('import-info-v').innerHTML =
+    `✅ Format Vertuoza détecté — <strong>${clients.length} clients</strong> prêts à importer · ${ignores} lignes ignorées`;
+  document.getElementById('import-step-1').style.display = 'none';
+  document.getElementById('import-step-vertuoza').style.display = '';
+  document.getElementById('import-step-2').style.display = 'none';
+  document.getElementById('btn-confirmer-import').style.display = '';
+}
+
+// ── Format manuel (autre Excel/CSV) ─────────────────────────────────────────
+function traiterFormatManuel(rows, headers) {
+  excelHeaders = headers;
+  excelRows = rows.slice(1).filter(row => row.some(cell => String(cell).trim() !== ''));
+
+  document.getElementById('import-info').textContent =
+    `✅ ${excelRows.length} ligne(s) détectée(s)`;
+
+  const AUCUN = '<option value="">— Ne pas importer —</option>';
+  const opts = excelHeaders.map((h, i) => `<option value="${i}">${h || 'Colonne ' + (i+1)}</option>`).join('');
+  ['map-nom','map-adresse','map-tel','map-email','map-notes'].forEach(id => {
+    document.getElementById(id).innerHTML = AUCUN + opts;
+  });
+  const mappings = { 'map-nom': ['nom','name','client','raison'],
+    'map-adresse': ['adresse','address','rue'],
+    'map-tel': ['tel','téléphone','telephone','phone'],
+    'map-email': ['email','mail'],
+    'map-notes': ['note','notes','commentaire'] };
+  for (const [sid, kws] of Object.entries(mappings)) {
+    const idx = excelHeaders.findIndex(h => kws.some(kw => h.toLowerCase().includes(kw)));
+    if (idx >= 0) document.getElementById(sid).value = String(idx);
+  }
+  const preview = document.getElementById('preview-table');
+  preview.innerHTML = `<thead><tr>${excelHeaders.map(h=>`<th>${h||'—'}</th>`).join('')}</tr></thead>
+    <tbody>${excelRows.slice(0,5).map(row=>`<tr>${excelHeaders.map((_,i)=>`<td>${row[i]??''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+
+  document.getElementById('import-step-1').style.display = 'none';
+  document.getElementById('import-step-vertuoza').style.display = 'none';
+  document.getElementById('import-step-2').style.display = '';
+  document.getElementById('btn-confirmer-import').style.display = '';
+}
+
+async function confirmerImport() {
+  document.getElementById('btn-confirmer-import').disabled = true;
+
+  // Mode Vertuoza : excelRows contient déjà les objets clients
+  if (excelRows.length && excelRows[0].nomFamille !== undefined) {
+    const CHUNK = 490;
+    for (let i = 0; i < excelRows.length; i += CHUNK) {
+      const batch = db.batch();
+      excelRows.slice(i, i + CHUNK).forEach(c => batch.set(db.collection('clients').doc(c.id), c));
+      await batch.commit().catch(e => console.error('Batch error:', e));
+    }
+    document.getElementById('import-result').innerHTML =
+      `<div class="import-result" style="background:#d1e7dd;color:#0a3622;padding:10px 14px;border-radius:8px;margin-top:1rem">✅ ${excelRows.length} clients importés avec succès.</div>`;
+    document.getElementById('btn-confirmer-import').style.display = 'none';
+    return;
+  }
+
+  // Mode manuel
   const nomCol   = document.getElementById('map-nom').value;
+  if (nomCol === '') { alert('Veuillez associer la colonne "Nom".'); document.getElementById('btn-confirmer-import').disabled = false; return; }
   const addrCol  = document.getElementById('map-adresse').value;
   const telCol   = document.getElementById('map-tel').value;
   const emailCol = document.getElementById('map-email').value;
   const notesCol = document.getElementById('map-notes').value;
 
-  if (nomCol === '') { alert('Veuillez au minimum associer la colonne "Nom".'); return; }
-
   const data = getData();
   let importes = 0, ignores = 0;
-
   excelRows.forEach(row => {
     const nom = String(row[parseInt(nomCol)] ?? '').trim();
     if (!nom) { ignores++; return; }
-
-    // Éviter les doublons (même nom exact)
     if (data.clients.some(c => c.nom.toLowerCase() === nom.toLowerCase())) { ignores++; return; }
-
     data.clients.push({
-      id: uuid(),
-      nom,
+      id: uuid(), nom,
       adresse: addrCol !== '' ? String(row[parseInt(addrCol)] ?? '').trim() : '',
       tel:     telCol  !== '' ? String(row[parseInt(telCol)]  ?? '').trim() : '',
       email:   emailCol !== '' ? String(row[parseInt(emailCol)] ?? '').trim() : '',
@@ -3266,12 +3379,10 @@ function confirmerImport() {
     });
     importes++;
   });
-
   saveData(data);
-  document.getElementById('import-result').innerHTML =
-    `<div class="import-result alert-success">✅ ${importes} client(s) importé(s) avec succès. ${ignores > 0 ? `${ignores} ligne(s) ignorée(s) (vide ou doublon).` : ''}</div>`;
+  document.getElementById('import-result-manual').innerHTML =
+    `<div class="import-result" style="background:#d1e7dd;color:#0a3622;padding:10px 14px;border-radius:8px;margin-top:1rem">✅ ${importes} client(s) importé(s). ${ignores > 0 ? ignores + ' ignoré(s).' : ''}</div>`;
   document.getElementById('btn-confirmer-import').style.display = 'none';
-  renderClients();
 }
 
 // Drag & drop sur la zone
