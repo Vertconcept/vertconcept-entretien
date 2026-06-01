@@ -1463,6 +1463,7 @@ function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
   const tous = ['Marco','Jimi','Timo','Justin','Mathéo','Bryan','Evann','Lucas'];
+  const bureau = ['Marco','Justin'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
     <button onclick="clicLogin('${n}')"
@@ -1470,7 +1471,7 @@ function initLoginScreen() {
              font-size:0.95rem;font-weight:700;cursor:pointer;transition:all 0.15s"
       onmouseover="this.style.borderColor='var(--vert-clair)';this.style.background='var(--vert-pale)'"
       onmouseout="this.style.borderColor='var(--border)';this.style.background='white'">
-      👷 ${n}
+      ${bureau.includes(n) ? '💼' : '👷'} ${n}
     </button>`).join('');
 }
 
