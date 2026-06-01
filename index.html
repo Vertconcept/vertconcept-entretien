@@ -1078,7 +1078,6 @@
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
-          <option value="Justin">Justin</option>
         </select>
       </div>
       <div class="form-group">
@@ -1087,7 +1086,7 @@
           <div class="membre-chip chef" data-membre="Marco" onclick="toggleMembre(this)">Marco</div>
           <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
           <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
-          <div class="membre-chip chef" data-membre="Justin" onclick="toggleMembre(this)">Justin</div>
+          <div class="membre-chip" data-membre="Justin" onclick="toggleMembre(this)">Justin</div>
           <div class="membre-chip" data-membre="Matheo" onclick="toggleMembre(this)">Mathéo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
           <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
@@ -1288,7 +1287,6 @@
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
-          <option value="Justin">Justin</option>
           <option value="Matheo">Mathéo</option>
           <option value="Bryan">Bryan</option>
           <option value="Evann">Evann</option>
@@ -1324,7 +1322,7 @@
 // DATA MODEL & FIRESTORE
 // =====================================================
 const MEMBRES = ['Marco','Jimi','Timo','Justin','Matheo','Bryan','Evann','Lucas'];
-const CHEFS = ['Marco','Jimi','Timo','Justin'];
+const CHEFS = ['Marco','Jimi','Timo'];
 
 firebase.initializeApp({
   apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
