@@ -508,6 +508,7 @@
         <div class="form-group">
           <label class="form-label">Votre nom *</label>
           <select class="form-control" id="fo-auteur">
+            <option value="Marco">Marco</option>
             <option value="Jimi">Jimi</option>
             <option value="Timo">Timo</option>
             <option value="Justin">Justin</option>
@@ -662,6 +663,7 @@
       <div class="form-group">
         <label class="form-label">Chef d'équipe *</label>
         <select class="form-control" id="interv-chef">
+          <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
           <option value="Justin">Justin</option>
@@ -670,6 +672,7 @@
       <div class="form-group">
         <label class="form-label">Membres de l'équipe</label>
         <div class="equipe-toggle" id="equipe-toggle">
+          <div class="membre-chip chef" data-membre="Marco" onclick="toggleMembre(this)">Marco</div>
           <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
           <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
           <div class="membre-chip chef" data-membre="Justin" onclick="toggleMembre(this)">Justin</div>
@@ -805,6 +808,7 @@
       <div class="form-group">
         <label class="form-label">Votre nom</label>
         <select class="form-control" id="remarque-auteur">
+          <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
           <option value="Justin">Justin</option>
@@ -842,8 +846,8 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Jimi','Timo','Justin','Matheo','Bryan','Evann','Lucas'];
-const CHEFS = ['Jimi','Timo','Justin'];
+const MEMBRES = ['Marco','Jimi','Timo','Justin','Matheo','Bryan','Evann','Lucas'];
+const CHEFS = ['Marco','Jimi','Timo','Justin'];
 
 firebase.initializeApp({
   apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
@@ -972,12 +976,12 @@ function showPage(name) {
 // =====================================================
 // CONNEXION / LOGIN
 // =====================================================
-const ADMIN_PINS = { 'Jimi': '1234', 'Timo': '1111', 'Justin': '0001' };
+const ADMIN_PINS = { 'Marco': '0605', 'Jimi': '1234', 'Timo': '1111', 'Justin': '0001' };
 let pendingAdminUser = null;
 
 function initLoginScreen() {
   const ouvriers = ['Mathéo','Bryan','Evann','Lucas'];
-  const chefs    = ['Jimi','Timo','Justin'];
+  const chefs    = ['Marco','Jimi','Timo','Justin'];
 
   // Boutons ouvriers
   document.getElementById('login-buttons').innerHTML = ouvriers.map(n => `
