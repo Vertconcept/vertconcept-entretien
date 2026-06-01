@@ -972,7 +972,7 @@ function showPage(name) {
 // =====================================================
 // CONNEXION / LOGIN
 // =====================================================
-const ADMIN_PIN = '1234'; // Modifiable ici
+const ADMIN_PINS = { 'Jimi': '1234', 'Timo': '1111', 'Justin': '0001' };
 let pendingAdminUser = null;
 
 function initLoginScreen() {
@@ -1011,7 +1011,7 @@ function demanderPin(name) {
 
 function verifierPin() {
   const saisi = document.getElementById('pin-input').value;
-  if (saisi === ADMIN_PIN) {
+  if (saisi === ADMIN_PINS[pendingAdminUser]) {
     fermerModal('modal-pin');
     loginAs(pendingAdminUser, true);
   } else {
