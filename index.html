@@ -716,6 +716,7 @@
     <div class="flex-between mb-1">
       <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mathéo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:8px;white-space:nowrap">⚡ Générer planning</button>
+      <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
     </div>
     <div class="stats-row" id="stats-tontes" style="margin-top:0.75rem"></div>
     <div class="card">
@@ -2954,6 +2955,14 @@ function getTonteDates(debut, fin) {
     jeudi.setDate(jeudi.getDate() + 14); // +2 semaines
   }
   return pairs;
+}
+
+async function supprimerPlanningTontes() {
+  const sessions = appData.interventions.filter(iv => iv.clientId === 'tonte-collective');
+  if (!sessions.length) { alert('Aucune session de tonte générée à supprimer.'); return; }
+  if (!confirm(`Supprimer les ${sessions.length} sessions de tonte du planning ?`)) return;
+  for (const iv of sessions) await deleteDoc('interventions', iv.id);
+  alert(`✅ ${sessions.length} sessions supprimées. Vous pouvez maintenant regénérer le planning.`);
 }
 
 function ouvrirGenererTontes() {
