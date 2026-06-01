@@ -249,6 +249,13 @@
   .priorite-normale { color: var(--orange); }
   .priorite-basse { color: var(--gris); }
 
+  /* PULVÉRISATION */
+  .pulve-section { background: #f0f7ff; border: 1.5px solid #b6d4fe; border-radius: 10px; padding: 14px; margin-top: 4px; }
+  .pulve-section .pulve-title { font-size: 0.82rem; font-weight: 800; color: #084298; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .fiche-pulve { background: #f0f7ff; border: 1.5px solid #b6d4fe; border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .fiche-pulve .pulve-lbl { font-size: 0.72rem; font-weight: 700; color: #084298; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .fiche-pulve .pulve-val { font-size: 0.88rem; }
+
   /* STATUTS ÉTENDUS */
   .badge-en-attente { background: #ffe5d0; color: #a0522d; }
   .badge-refuse { background: #f8d7da; color: #842029; }
@@ -759,12 +766,39 @@
       </div>
       <div class="form-group">
         <label class="form-label">Type de travail *</label>
-        <select class="form-control" id="fo-type">
+        <select class="form-control" id="fo-type" onchange="document.getElementById('fo-pulve-section').style.display=this.value==='pulverisation'?'':'none'">
           <option value="entretien">Entretien général</option>
           <option value="tonte">Tonte pelouse</option>
+          <option value="pulverisation">💧 Pulvérisation</option>
           <option value="travaux">Travaux spécifiques</option>
           <option value="autre">Autre</option>
         </select>
+      </div>
+      <div id="fo-pulve-section" style="display:none">
+        <div class="pulve-section">
+          <div class="pulve-title">💧 Registre Phytosanitaire</div>
+          <div class="form-group">
+            <label class="form-label">Produit(s) + N° AMM</label>
+            <textarea class="form-control" id="fo-pulve-produit" rows="2" placeholder="Ex : Roundup Pro 360 — AMM 2010015"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Dose</label><input type="text" class="form-control" id="fo-pulve-dose" placeholder="Ex : 4 L/ha"></div>
+            <div class="form-group"><label class="form-label">Volume total (L)</label><input type="number" class="form-control" id="fo-pulve-volume" min="0" step="0.5" placeholder="10"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Surface (m²)</label><input type="number" class="form-control" id="fo-pulve-surface" min="0"></div>
+            <div class="form-group"><label class="form-label">Cible</label><input type="text" class="form-control" id="fo-pulve-cible" placeholder="adventices…"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Température (°C)</label><input type="number" class="form-control" id="fo-pulve-temp"></div>
+            <div class="form-group"><label class="form-label">Vent (km/h)</label><input type="number" class="form-control" id="fo-pulve-vent" min="0"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Matériel</label><input type="text" class="form-control" id="fo-pulve-materiel" placeholder="pulvérisateur dorsal…"></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Opérateur Certiphyto</label><input type="text" class="form-control" id="fo-pulve-operateur"></div>
+            <div class="form-group"><label class="form-label">N° Certiphyto</label><input type="text" class="form-control" id="fo-pulve-certif"></div>
+          </div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Description des travaux / demande client *</label>
@@ -874,9 +908,10 @@
         </div>
         <div class="form-group">
           <label class="form-label">Type *</label>
-          <select class="form-control" id="interv-type">
+          <select class="form-control" id="interv-type" onchange="document.getElementById('pulve-section').style.display=this.value==='pulverisation'?'':'none'">
             <option value="entretien">Entretien</option>
             <option value="tonte">Tonte pelouse</option>
+            <option value="pulverisation">💧 Pulvérisation</option>
             <option value="travaux">Travaux</option>
             <option value="autre">Autre</option>
           </select>
@@ -934,6 +969,71 @@
         <label class="form-label">Remarques / demandes client pour prochaine intervention</label>
         <textarea class="form-control" id="interv-remarques-client" rows="2" placeholder="Ce que le client a demandé pour la prochaine fois…"></textarea>
       </div>
+      <!-- Section Pulvérisation — visible si type = pulverisation -->
+      <div id="pulve-section" style="display:none">
+        <hr>
+        <div class="pulve-section">
+          <div class="pulve-title">💧 Registre Phytosanitaire</div>
+          <div class="form-group">
+            <label class="form-label">Produit(s) utilisé(s) + N° AMM</label>
+            <textarea class="form-control" id="pulve-produit" rows="2" placeholder="Ex : Roundup Pro 360 — AMM 2010015"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Dose (L/ha ou g/ha)</label>
+              <input type="text" class="form-control" id="pulve-dose" placeholder="Ex : 4 L/ha">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Volume total préparé (L)</label>
+              <input type="number" class="form-control" id="pulve-volume" min="0" step="0.5" placeholder="Ex : 10">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Surface traitée (m²)</label>
+              <input type="number" class="form-control" id="pulve-surface" min="0" placeholder="Ex : 200">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cible (adventices, insectes…)</label>
+              <input type="text" class="form-control" id="pulve-cible" placeholder="Ex : adventices, pucerons">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Température (°C)</label>
+              <input type="number" class="form-control" id="pulve-temp" placeholder="Ex : 18">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vent (km/h)</label>
+              <input type="number" class="form-control" id="pulve-vent" min="0" placeholder="Ex : 10">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pluie dans les 24h ?</label>
+              <select class="form-control" id="pulve-pluie">
+                <option value="non">Non</option>
+                <option value="oui">Oui</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Matériel de pulvérisation</label>
+              <input type="text" class="form-control" id="pulve-materiel" placeholder="Ex : pulvérisateur dorsal 16L">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Opérateur Certiphyto</label>
+              <input type="text" class="form-control" id="pulve-operateur" placeholder="Nom de l'opérateur">
+            </div>
+            <div class="form-group">
+              <label class="form-label">N° Certiphyto</label>
+              <input type="text" class="form-control" id="pulve-certif" placeholder="N° de certificat">
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-group">
         <label class="form-label">Statut</label>
         <select class="form-control" id="interv-statut" onchange="onStatutChange(this.value)">
@@ -1612,6 +1712,7 @@ function renderFiche() {
           <div class="fiche-field-label">💬 Remarques client (prochaine intervention)</div>
           <div class="fiche-field-value">${iv.remarquesClient || '—'}</div>
         </div>
+        ${iv.pulve ? pulveFicheHtml(iv.pulve) : ''}
         ${client && client.notes ? `<div class="fiche-field" style="grid-column:1/-1">
           <div class="fiche-field-label">🔑 Notes accès / particularités</div>
           <div class="fiche-field-value">${client.notes}</div>
@@ -1719,6 +1820,8 @@ function ouvrirNouvelleIntervention(dateStr) {
   document.getElementById('interv-remarques-client').value = '';
   document.getElementById('interv-statut').value = 'planifie';
   onStatutChange('planifie');
+  document.getElementById('pulve-section').style.display = 'none';
+  resetPulveFields('');
 
   // Reset membres
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -1756,6 +1859,9 @@ function ouvrirEditionIntervention(id) {
   document.getElementById('interv-statut').value = iv.statut || 'planifie';
   onStatutChange(iv.statut || 'planifie');
   if (iv.statut === 'termine') buildHeuresTable(iv.heuresParMembre);
+  const isPulve = iv.type === 'pulverisation';
+  document.getElementById('pulve-section').style.display = isPulve ? '' : 'none';
+  if (isPulve) resetPulveFields(iv.pulve || {});
 
   const sel = document.getElementById('interv-client');
   sel.innerHTML = clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
@@ -1804,6 +1910,7 @@ function sauvegarderIntervention() {
     remarquesClient: document.getElementById('interv-remarques-client').value,
     statut,
     heuresParMembre: heuresParMembre || null,
+    pulve: document.getElementById('interv-type').value === 'pulverisation' ? getPulveFromForm('') : null,
     facturee: prev?.facturee || false,
     soumisePar: prev?.soumisePar || null,
     soumiseDate: prev?.soumiseDate || null,
@@ -1856,6 +1963,7 @@ function ouvrirDetailIntervention(id) {
       <div><div class="fiche-field-label">🌿 Déchets verts</div><div>${iv.dechets ? iv.dechets + ' m³' : '—'}</div></div>
       <div style="grid-column:1/-1"><div class="fiche-field-label">📋 Demandes spécifiques</div><div>${iv.demandes || '—'}</div></div>
       <div style="grid-column:1/-1"><div class="fiche-field-label">💬 Remarques client (prochaine fois)</div><div>${iv.remarquesClient || '—'}</div></div>
+      ${iv.pulve ? pulveFicheHtml(iv.pulve) : ''}
     </div>
     ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
   `;
@@ -2458,6 +2566,62 @@ function supprimerAchat() {
 }
 
 // =====================================================
+// PULVÉRISATION — helpers
+// =====================================================
+function resetPulveFields(p) {
+  const v = p || {};
+  ['produit','dose','volume','surface','cible','temp','vent','materiel','operateur','certif'].forEach(k => {
+    const el = document.getElementById('pulve-' + k);
+    if (el) el.value = v[k] || '';
+  });
+  const pluie = document.getElementById('pulve-pluie');
+  if (pluie) pluie.value = v.pluie || 'non';
+}
+
+function getPulveFromForm(prefix) {
+  const g = id => document.getElementById('pulve-' + id)?.value || '';
+  return {
+    produit: g('produit'), dose: g('dose'),
+    volume: parseFloat(g('volume')) || null,
+    surface: parseFloat(g('surface')) || null,
+    cible: g('cible'), temp: g('temp'), vent: g('vent'),
+    pluie: g('pluie') || 'non',
+    materiel: g('materiel'), operateur: g('operateur'), certif: g('certif')
+  };
+}
+
+function getPulveFromFoForm() {
+  const g = id => document.getElementById('fo-pulve-' + id)?.value || '';
+  return {
+    produit: g('produit'), dose: g('dose'),
+    volume: parseFloat(g('volume')) || null,
+    surface: parseFloat(g('surface')) || null,
+    cible: g('cible'), temp: g('temp'), vent: g('vent'),
+    materiel: g('materiel'), operateur: g('operateur'), certif: g('certif')
+  };
+}
+
+function pulveFicheHtml(p) {
+  if (!p) return '';
+  return `<div class="fiche-pulve" style="grid-column:1/-1">
+    <div style="font-weight:800;color:#084298;margin-bottom:8px">💧 Registre Phytosanitaire</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem">
+      ${p.produit ? `<div style="grid-column:1/-1"><div class="pulve-lbl">Produit(s) / N° AMM</div><div class="pulve-val">${p.produit}</div></div>` : ''}
+      ${p.dose    ? `<div><div class="pulve-lbl">Dose</div><div class="pulve-val">${p.dose}</div></div>` : ''}
+      ${p.volume  ? `<div><div class="pulve-lbl">Volume préparé</div><div class="pulve-val">${p.volume} L</div></div>` : ''}
+      ${p.surface ? `<div><div class="pulve-lbl">Surface traitée</div><div class="pulve-val">${p.surface} m²</div></div>` : ''}
+      ${p.cible   ? `<div><div class="pulve-lbl">Cible</div><div class="pulve-val">${p.cible}</div></div>` : ''}
+      ${p.temp    ? `<div><div class="pulve-lbl">Température</div><div class="pulve-val">${p.temp} °C</div></div>` : ''}
+      ${p.vent    ? `<div><div class="pulve-lbl">Vent</div><div class="pulve-val">${p.vent} km/h</div></div>` : ''}
+      <div><div class="pulve-lbl">Pluie &lt; 24h</div><div class="pulve-val">${p.pluie === 'oui' ? '⚠️ Oui' : '✅ Non'}</div></div>
+      ${p.materiel   ? `<div style="grid-column:1/-1"><div class="pulve-lbl">Matériel</div><div class="pulve-val">${p.materiel}</div></div>` : ''}
+      ${p.operateur  ? `<div><div class="pulve-lbl">Opérateur Certiphyto</div><div class="pulve-val">${p.operateur}</div></div>` : ''}
+      ${p.certif     ? `<div><div class="pulve-lbl">N° Certiphyto</div><div class="pulve-val">${p.certif}</div></div>` : ''}
+    </div>
+  </div>`;
+}
+
+// =====================================================
 // FICHE OUVRIER
 // =====================================================
 function ouvrirFicheOuvrier(dateStr) {
@@ -2498,6 +2662,7 @@ function sauvegarderFicheOuvrier() {
     duree: parseFloat(document.getElementById('fo-duree').value) || null,
     demandes: desc,
     remarquesClient: document.getElementById('fo-remarque-client').value,
+    pulve: document.getElementById('fo-type').value === 'pulverisation' ? getPulveFromFoForm() : null,
     statut: 'en-attente',
     soumisePar: auteur,
     soumiseDate: formatDate(new Date()),
