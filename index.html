@@ -479,10 +479,6 @@
   <div style="background:white;border-radius:16px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,0.10);width:100%;max-width:420px">
     <div style="font-size:1.1rem;font-weight:700;color:var(--vert);text-align:center;margin-bottom:1.5rem">Qui êtes-vous ?</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="login-buttons"></div>
-    <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
-      <div style="font-size:0.8rem;color:var(--gris);text-align:center;margin-bottom:10px">Accès responsable</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="login-admin-buttons"></div>
-    </div>
   </div>
 </div>
 
@@ -1464,28 +1460,30 @@ const ADMIN_PINS = { 'Marco': '0605', 'Jimi': '1234', 'Timo': '1111', 'Justin': 
 let pendingAdminUser = null;
 
 function initLoginScreen() {
-  const ouvriers = ['Mathéo','Bryan','Evann','Lucas'];
-  const chefs    = ['Marco','Jimi','Timo','Justin'];
+  // Tout le monde dans une seule liste — même apparence 👷
+  // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
+  const tous = ['Marco','Jimi','Timo','Justin','Mathéo','Bryan','Evann','Lucas'];
 
-  // Boutons ouvriers
-  document.getElementById('login-buttons').innerHTML = ouvriers.map(n => `
-    <button onclick="loginAs('${n}', false)"
+  document.getElementById('login-buttons').innerHTML = tous.map(n => `
+    <button onclick="clicLogin('${n}')"
       style="padding:14px;border:2px solid var(--border);border-radius:10px;background:white;
              font-size:0.95rem;font-weight:700;cursor:pointer;transition:all 0.15s"
       onmouseover="this.style.borderColor='var(--vert-clair)';this.style.background='var(--vert-pale)'"
       onmouseout="this.style.borderColor='var(--border)';this.style.background='white'">
       👷 ${n}
     </button>`).join('');
+}
 
-  // Boutons chefs (PIN requis)
-  document.getElementById('login-admin-buttons').innerHTML = chefs.map(n => `
-    <button onclick="demanderPin('${n}')"
-      style="padding:14px;border:2px solid var(--vert);border-radius:10px;background:var(--vert-pale);
-             font-size:0.95rem;font-weight:700;cursor:pointer;color:var(--vert);transition:all 0.15s"
-      onmouseover="this.style.background='var(--vert)';this.style.color='white'"
-      onmouseout="this.style.background='var(--vert-pale)';this.style.color='var(--vert)'">
-      👑 ${n}
-    </button>`).join('');
+function clicLogin(name) {
+  // Si la personne a un PIN → demander le PIN pour accès admin
+  // Sinon → accès direct en mode ouvrier
+  const normalise = n => n.normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const pinKey = Object.keys(ADMIN_PINS).find(k => normalise(k) === normalise(name));
+  if (pinKey) {
+    demanderPin(pinKey);
+  } else {
+    loginAs(name, false);
+  }
 }
 
 function demanderPin(name) {
