@@ -256,6 +256,131 @@
   .fiche-pulve .pulve-lbl { font-size: 0.72rem; font-weight: 700; color: #084298; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
   .fiche-pulve .pulve-val { font-size: 0.88rem; }
 
+  /* =====================================================
+     RESPONSIVE MOBILE
+  ===================================================== */
+
+  /* Navigation bas (mobile uniquement) */
+  .bottom-nav { display: none; }
+
+  @media (max-width: 768px) {
+
+    /* Header simplifié */
+    header { padding: 0 0.75rem; height: 52px; }
+    header .logo { font-size: 1rem; }
+    .header-nav { display: none; }  /* Remplacé par bottom-nav */
+
+    /* Contenu principal — espace pour la bottom nav */
+    main { padding: 1rem 0.75rem 90px; }
+
+    /* Navigation bas */
+    .bottom-nav {
+      display: flex;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: white;
+      border-top: 1px solid var(--border);
+      z-index: 99;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .bottom-nav button {
+      flex: 1; border: none; background: transparent;
+      color: var(--gris); font-size: 0.62rem; font-weight: 600;
+      padding: 8px 2px 6px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      transition: color 0.15s;
+      min-height: 56px;
+    }
+    .bottom-nav button .nav-icon { font-size: 1.3rem; line-height: 1; }
+    .bottom-nav button.active { color: var(--vert); }
+    .bottom-nav button.active .nav-icon { transform: scale(1.1); }
+
+    /* FAB repositionné au-dessus de la bottom-nav */
+    .fab-ouvrier { bottom: 76px; right: 1rem; padding: 12px 18px; font-size: 0.9rem; }
+
+    /* Planning semaine — 1 colonne */
+    .jours-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .jour-col { min-width: 0; }
+    .jour-body { min-height: 60px; padding: 6px; }
+
+    /* Planning mois — cellules plus petites */
+    .mois-jour { min-height: 52px; padding: 4px; }
+    .mois-jour-num { font-size: 0.75rem; }
+
+    /* Modaux — plein écran, slide depuis le bas */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      max-width: 100% !important;
+      max-height: 92vh;
+      border-radius: 18px 18px 0 0 !important;
+      width: 100%;
+    }
+    .modal-header { padding: 0.85rem 1rem; }
+    .modal-body { padding: 1rem; }
+    .modal-footer { padding: 0.85rem 1rem; padding-bottom: calc(0.85rem + env(safe-area-inset-bottom)); }
+
+    /* Formulaires — plus grands pour les doigts */
+    .form-control { padding: 10px 12px; font-size: 1rem; min-height: 44px; }
+    .form-row { grid-template-columns: 1fr; }
+
+    /* Boutons plus grands */
+    .btn { min-height: 44px; padding: 10px 16px; }
+    .btn-sm { min-height: 36px; }
+
+    /* Fiches journalières */
+    .fiche-header { flex-direction: column; align-items: stretch; gap: 10px; }
+    .fiche-interv-body { grid-template-columns: 1fr; }
+    .fiche-equipe-selector { justify-content: stretch; }
+    .fiche-equipe-btn { flex: 1; text-align: center; }
+
+    /* Clients */
+    .client-item { flex-direction: column; align-items: flex-start; }
+
+    /* Facturation */
+    .factu-item { flex-direction: column; }
+    .factu-filters { flex-direction: column; align-items: stretch; }
+
+    /* Semaine indicator + vue toggle — compact */
+    .semaine-indicator { font-size: 0.72rem; padding: 3px 8px; }
+    .vue-toggle button { padding: 4px 10px; font-size: 0.75rem; }
+    #semaine-titre { font-size: 0.85rem; min-width: 0 !important; }
+
+    /* Top bar du planning — compact */
+    #page-planning .flex-between { gap: 6px; }
+
+    /* Matériel cards */
+    .machine-card { flex-direction: column; align-items: flex-start; }
+    .machine-card .mc-entretien { text-align: left; }
+    .panne-card .pc-header { flex-direction: column; }
+
+    /* Stat cards */
+    .stats-row { grid-template-columns: repeat(3, 1fr); }
+
+    /* Validation */
+    .validation-item-body { grid-template-columns: 1fr; }
+    .validation-actions { flex-wrap: wrap; }
+
+    /* Heures table — scrollable */
+    .heures-table { font-size: 0.8rem; }
+    .heures-table input[type=number] { width: 65px; }
+
+    /* User badge compact */
+    #user-badge { padding: 3px 8px; font-size: 0.75rem; }
+    #user-badge button { padding: 2px 6px; font-size: 0.7rem; }
+  }
+
+  @media (max-width: 400px) {
+    .jours-grid { grid-template-columns: 1fr 1fr; }
+    .bottom-nav button { font-size: 0.56rem; }
+    .bottom-nav button .nav-icon { font-size: 1.15rem; }
+  }
+
+  /* Print — toujours sans bottom nav */
+  @media print {
+    .bottom-nav { display: none !important; }
+    main { padding-bottom: 0 !important; }
+  }
+
   /* STATUTS ÉTENDUS */
   .badge-en-attente { background: #ffe5d0; color: #a0522d; }
   .badge-refuse { background: #f8d7da; color: #842029; }
@@ -417,6 +542,28 @@
 <button class="fab-ouvrier" id="fab-ouvrier" onclick="ouvrirFicheOuvrier()">
   ✏️ Créer une fiche
 </button>
+
+<!-- NAVIGATION BAS (mobile) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button onclick="showPage('planning')" id="bnav-planning" class="active">
+    <span class="nav-icon">📅</span>Planning
+  </button>
+  <button onclick="showPage('fiches')" id="bnav-fiches">
+    <span class="nav-icon">📋</span>Fiches
+  </button>
+  <button onclick="showPage('clients')" id="bnav-clients">
+    <span class="nav-icon">👥</span>Clients
+  </button>
+  <button onclick="showPage('tontes')" id="bnav-tontes">
+    <span class="nav-icon">🌿</span>Tontes
+  </button>
+  <button onclick="showPage('materiel')" id="bnav-materiel">
+    <span class="nav-icon">🔧</span>Matériel
+  </button>
+  <button onclick="showPage('facturation')" id="bnav-facturation">
+    <span class="nav-icon">💶</span>Factu
+  </button>
+</nav>
 
 <main>
 
@@ -1300,9 +1447,10 @@ let excelHeaders = [];
 // =====================================================
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.header-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.header-nav button, .bottom-nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  document.getElementById('nav-' + name).classList.add('active');
+  document.getElementById('nav-' + name)?.classList.add('active');
+  document.getElementById('bnav-' + name)?.classList.add('active');
   if (name === 'planning') renderPlanning();
   if (name === 'fiches') renderFiche();
   if (name === 'clients') renderClients();
@@ -1382,6 +1530,7 @@ function applyUser(user) {
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = user.isAdmin ? '' : 'none';
   document.getElementById('nav-facturation').style.display = user.isAdmin ? '' : 'none';
+  document.getElementById('bnav-facturation').style.display = user.isAdmin ? '' : 'none';
 
   // Pré-remplir le nom dans les formulaires
   const auteurSelects = ['fo-auteur', 'remarque-auteur'];
@@ -1422,6 +1571,7 @@ function toggleMode() {
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = modeAdmin ? '' : 'none';
   document.getElementById('nav-facturation').style.display = modeAdmin ? '' : 'none';
+  document.getElementById('bnav-facturation').style.display = modeAdmin ? '' : 'none';
   if (!modeAdmin && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
   }
