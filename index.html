@@ -700,9 +700,13 @@
 
   <!-- ===== TONTES ===== -->
   <div class="page" id="page-tontes">
-    <div class="stats-row" id="stats-tontes"></div>
+    <div class="flex-between mb-1">
+      <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mathéo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
+      <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:8px;white-space:nowrap">⚡ Générer planning</button>
+    </div>
+    <div class="stats-row" id="stats-tontes" style="margin-top:0.75rem"></div>
     <div class="card">
-      <div class="card-title">🗓️ Prochaines tontes</div>
+      <div class="card-title">🗓️ Prochaines sessions de tonte</div>
       <div class="tonte-grid" id="tontes-a-venir"></div>
     </div>
     <div class="card">
@@ -712,6 +716,40 @@
   </div>
 
 </main>
+
+<!-- ===== MODAL GÉNÉRER TONTES ===== -->
+<div class="modal-overlay hidden" id="modal-generer-tontes">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>⚡ Générer le planning des tontes</h3>
+      <button class="close-btn" onclick="fermerModal('modal-generer-tontes')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:1rem">
+        Crée automatiquement une intervention <strong>Tonte - Tournée complète</strong> chaque jeudi et vendredi, toutes les 2 semaines, pour <strong>Timo + Mathéo</strong>.
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">À partir du</label>
+          <input type="date" class="form-control" id="tonte-date-debut" oninput="previewTontes()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Jusqu'au</label>
+          <input type="date" class="form-control" id="tonte-date-fin" oninput="previewTontes()">
+        </div>
+      </div>
+      <div id="tonte-preview" style="font-size:0.85rem;color:var(--vert);font-weight:600;margin-top:4px"></div>
+      <div class="form-group" style="margin-top:1rem">
+        <label class="form-label">Notes (affiché sur chaque fiche)</label>
+        <textarea class="form-control" id="tonte-notes" rows="2" placeholder="Ex: Tonte + ramassage des déchets verts"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-generer-tontes')">Annuler</button>
+      <button class="btn btn-primary" onclick="confirmerGenererTontes()">⚡ Générer les sessions</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== MODAL MACHINE ===== -->
 <div class="modal-overlay hidden" id="modal-machine">
@@ -1201,6 +1239,42 @@
           <option value="refuse">❌ Refusé</option>
         </select>
       </div>
+      <!-- Récurrence -->
+      <div class="form-group" style="margin-top:4px">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="interv-recurrent" style="width:auto" onchange="toggleRecurrence(this.checked)">
+          Tâche récurrente (crée plusieurs interventions identiques)
+        </label>
+      </div>
+      <div id="recurrence-section" style="display:none;background:#f0faf3;border:1.5px solid var(--vert-clair);border-radius:10px;padding:14px;margin-bottom:1rem">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Fréquence</label>
+            <select class="form-control" id="recur-type" onchange="previewRecurrence()">
+              <option value="weekly">Chaque semaine</option>
+              <option value="biweekly">Toutes les 2 semaines</option>
+              <option value="monthly">Chaque mois (même date)</option>
+              <option value="monthly-last">Dernier [jour] du mois</option>
+              <option value="quarterly">Tous les 3 mois</option>
+              <option value="custom">Personnalisé (tous les X jours)</option>
+            </select>
+          </div>
+          <div class="form-group" id="recur-custom-group" style="display:none">
+            <label class="form-label">Tous les (jours)</label>
+            <input type="number" class="form-control" id="recur-custom-days" min="1" value="30" oninput="previewRecurrence()">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Date de fin *</label>
+            <input type="date" class="form-control" id="recur-end" oninput="previewRecurrence()">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end">
+            <div id="recur-preview" style="font-size:0.85rem;color:var(--vert);font-weight:600;padding-bottom:8px"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Heures réelles par membre — visible quand terminé -->
       <div id="heures-section" style="display:none">
         <hr>
@@ -1352,6 +1426,13 @@ let appData = { clients: [], interventions: [], machines: [], pannes: [], achats
 // ne perturbent pas le cache avant saveData()
 function getData() {
   return JSON.parse(JSON.stringify(appData));
+}
+
+// Résolution du nom client — gère le cas spécial "tonte-collective"
+function getNomClient(iv, clients) {
+  if (iv.clientId === 'tonte-collective') return iv.clientNom || '🌿 Tournée tonte';
+  const c = clients.find(c => c.id === iv.clientId);
+  return c ? c.nom : 'Client inconnu';
 }
 
 // saveData() compare newData avec le cache et écrit uniquement les différences
@@ -1689,7 +1770,6 @@ function renderPlanningSemail() {
     body.className = 'jour-body';
 
     interventions.filter(iv => iv.date === dateStr).forEach(iv => {
-      const client = clients.find(c => c.id === iv.clientId);
       const card = document.createElement('div');
       card.className = 'interv-card'
         + (iv.type === 'tonte' ? ' tonte' : '')
@@ -1697,7 +1777,7 @@ function renderPlanningSemail() {
         + (iv.statut === 'en-attente' ? ' en-attente' : '');
       const membres = iv.membres || [iv.chef];
       card.innerHTML = `
-        <div class="client-name">${client ? client.nom : 'Client inconnu'}</div>
+        <div class="client-name">${getNomClient(iv, clients)}</div>
         <div class="interv-meta">${iv.type}</div>
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
@@ -1787,7 +1867,7 @@ function renderPlanningMois() {
         (iv.chef === 'Timo' ? ' equipe-timo' : '') +
         (iv.statut === 'termine' ? ' termine' : '') +
         (iv.statut === 'en-attente' ? ' en-attente' : '');
-      dot.textContent = (iv.statut === 'en-attente' ? '⏳ ' : '') + (client ? client.nom : '?') + ' · ' + iv.chef;
+      dot.textContent = (iv.statut === 'en-attente' ? '⏳ ' : '') + getNomClient(iv, clients) + ' · ' + iv.chef;
       dot.onclick = () => ouvrirDetailIntervention(iv.id);
       cell.appendChild(dot);
     });
@@ -1924,42 +2004,48 @@ function filtrerClients(val) {
 function renderTontes() {
   const { clients, interventions } = getData();
   const clientsTonte = clients.filter(c => c.tonte);
+  const today = formatDate(new Date());
+
+  // Sessions de tonte dans le planning (à venir)
+  const sessionsPlanning = interventions
+    .filter(iv => iv.type === 'tonte' && iv.date >= today)
+    .sort((a,b) => a.date.localeCompare(b.date));
 
   // Stats
+  const totalSessions = sessionsPlanning.length;
+  const prochaine = sessionsPlanning[0];
   document.getElementById('stats-tontes').innerHTML = `
-    <div class="stat-card"><div class="stat-val">${clientsTonte.length}</div><div class="stat-label">Clients avec tonte</div></div>
-    <div class="stat-card"><div class="stat-val">${clientsTonte.filter(c=>c.tonteSemaine==='A').length}</div><div class="stat-label">Semaine A</div></div>
-    <div class="stat-card"><div class="stat-val">${clientsTonte.filter(c=>c.tonteSemaine==='B').length}</div><div class="stat-label">Semaine B</div></div>
+    <div class="stat-card"><div class="stat-val">${clientsTonte.length}</div><div class="stat-label">Clients tonte</div></div>
+    <div class="stat-card"><div class="stat-val">${totalSessions}</div><div class="stat-label">Sessions planifiées</div></div>
+    ${prochaine ? `<div class="stat-card"><div class="stat-val" style="font-size:1rem">${formatDateFR(prochaine.date)}</div><div class="stat-label">Prochaine session</div></div>` : ''}
   `;
 
-  // Prochaines tontes
-  const today = new Date(); today.setHours(0,0,0,0);
-  const prochaines = [];
-  for (let delta = 0; delta < 30; delta++) {
-    const d = new Date(today); d.setDate(today.getDate() + delta);
-    const nomJour = d.toLocaleDateString('fr-FR',{weekday:'long'}).toLowerCase();
-    if (nomJour !== 'jeudi' && nomJour !== 'vendredi') continue;
-    const ab = getSemaineAB(d);
-    const clientsJour = clientsTonte.filter(c => c.tonteJour === nomJour && c.tonteSemaine === ab);
-    clientsJour.forEach(c => prochaines.push({ client: c, date: new Date(d), ab }));
-  }
+  // Prochaines sessions depuis le planning
+  document.getElementById('tontes-a-venir').innerHTML = sessionsPlanning.length
+    ? sessionsPlanning.slice(0, 12).map(iv => {
+        const d = new Date(iv.date + 'T00:00:00');
+        const nomJour = d.toLocaleDateString('fr-FR', { weekday:'long' });
+        const membres = (iv.membres || [iv.chef]).join(' + ');
+        return `<div class="tonte-client" onclick="ouvrirDetailIntervention('${iv.id}')" style="cursor:pointer">
+          <div class="name">${nomJour.charAt(0).toUpperCase()+nomJour.slice(1)} ${formatDateFR(iv.date)}</div>
+          <div class="info">👷 ${membres}</div>
+          <div class="info">${statutBadgeHtml(iv.statut)}</div>
+        </div>`;
+      }).join('')
+    : `<div class="empty-state">Aucune session planifiée.<br>${modeAdmin ? 'Cliquez "⚡ Générer planning" pour créer les sessions.' : ''}</div>`;
 
-  document.getElementById('tontes-a-venir').innerHTML = prochaines.length ? prochaines.slice(0,10).map(p => `
-    <div class="tonte-client">
-      <div class="name">${p.client.nom}</div>
-      <div class="info">📅 ${p.date.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'short'})} · Semaine ${p.ab}</div>
-      <div class="info">📍 ${p.client.adresse}</div>
-    </div>
-  `).join('') : '<div class="empty-state">Aucune tonte dans les 30 prochains jours.</div>';
+  // Clients avec tonte configurée
+  document.getElementById('tonte-clients-list').innerHTML = clientsTonte.length
+    ? clientsTonte.map(c => `
+      <div class="tonte-client">
+        <div class="name">${c.nom}</div>
+        <div class="info">📍 ${c.adresse}</div>
+      </div>`).join('')
+    : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
 
-  // Liste complète
-  document.getElementById('tonte-clients-list').innerHTML = clientsTonte.length ? clientsTonte.map(c => `
-    <div class="tonte-client">
-      <div class="name">${c.nom}</div>
-      <div class="info">📍 ${c.adresse}</div>
-      <div class="info">🗓️ ${c.tonteJour || '—'} · Semaine ${c.tonteSemaine || '—'}</div>
-    </div>
-  `).join('') : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
+  // Afficher/masquer bouton générer selon le mode
+  const btnGen = document.getElementById('btn-generer-tontes');
+  if (btnGen) btnGen.style.display = modeAdmin ? '' : 'none';
 }
 
 // =====================================================
@@ -1983,6 +2069,8 @@ function ouvrirNouvelleIntervention(dateStr) {
   onStatutChange('planifie');
   document.getElementById('pulve-section').style.display = 'none';
   resetPulveFields('');
+  document.getElementById('interv-recurrent').checked = false;
+  document.getElementById('recurrence-section').style.display = 'none';
 
   // Reset membres
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -2078,13 +2166,30 @@ function sauvegarderIntervention() {
     remarques: prev?.remarques || []
   };
 
-  if (currentIntervId) {
-    data.interventions = data.interventions.map(i => i.id === currentIntervId ? iv : i);
+  const isRecurrent = document.getElementById('interv-recurrent').checked && !currentIntervId;
+  if (isRecurrent) {
+    const type = document.getElementById('recur-type').value;
+    const endDate = document.getElementById('recur-end').value;
+    const customDays = document.getElementById('recur-custom-days').value;
+    const dates = calculerOccurrences(iv.date, type, endDate, customDays);
+    if (!dates.length) { alert('Aucune occurrence calculée.'); return; }
+    const batch = db.batch();
+    dates.forEach(d => {
+      const id = uuid();
+      batch.set(db.collection('interventions').doc(id), { ...iv, id, date: d });
+    });
+    batch.commit().catch(err => console.error('Récurrence erreur:', err));
+    fermerModal('modal-intervention');
+    alert(`✅ ${dates.length} intervention(s) récurrente(s) créées.`);
   } else {
-    data.interventions.push(iv);
+    if (currentIntervId) {
+      data.interventions = data.interventions.map(i => i.id === currentIntervId ? iv : i);
+    } else {
+      data.interventions.push(iv);
+    }
+    saveData(data);
+    fermerModal('modal-intervention');
   }
-  saveData(data);
-  fermerModal('modal-intervention');
   updateNotifBadge();
   renderPlanning();
 }
@@ -2780,6 +2885,134 @@ function pulveFicheHtml(p) {
       ${p.certif     ? `<div><div class="pulve-lbl">N° Certiphyto</div><div class="pulve-val">${p.certif}</div></div>` : ''}
     </div>
   </div>`;
+}
+
+// =====================================================
+// RÉCURRENCE & TONTES
+// =====================================================
+
+function toggleRecurrence(show) {
+  document.getElementById('recurrence-section').style.display = show ? '' : 'none';
+  if (show) previewRecurrence();
+}
+
+function calculerOccurrences(startDate, type, endDate, customDays) {
+  const dates = [];
+  let current = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  if (isNaN(current) || isNaN(end) || current > end) return dates;
+
+  const addMois = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; };
+  const dernierJourSemaine = (yr, mo, wd) => {
+    const last = new Date(yr, mo + 1, 0);
+    const diff = (last.getDay() - wd + 7) % 7;
+    last.setDate(last.getDate() - diff);
+    return last;
+  };
+
+  if (type === 'weekly')    { while (current <= end) { dates.push(formatDate(current)); current.setDate(current.getDate() + 7); } }
+  else if (type === 'biweekly')  { while (current <= end) { dates.push(formatDate(current)); current.setDate(current.getDate() + 14); } }
+  else if (type === 'quarterly') { while (current <= end) { dates.push(formatDate(current)); current = addMois(current, 3); } }
+  else if (type === 'monthly') {
+    while (current <= end) { dates.push(formatDate(current)); current = addMois(current, 1); }
+  }
+  else if (type === 'monthly-last') {
+    const wd = current.getDay();
+    while (current <= end) {
+      const d = dernierJourSemaine(current.getFullYear(), current.getMonth(), wd);
+      if (d >= new Date(startDate + 'T00:00:00') && d <= end) dates.push(formatDate(d));
+      current = addMois(current, 1);
+    }
+  }
+  else if (type === 'custom') {
+    const step = parseInt(customDays) || 7;
+    while (current <= end) { dates.push(formatDate(current)); current.setDate(current.getDate() + step); }
+  }
+  return [...new Set(dates)];
+}
+
+function previewRecurrence() {
+  const start = document.getElementById('interv-date').value;
+  const end = document.getElementById('recur-end').value;
+  const type = document.getElementById('recur-type').value;
+  const custom = document.getElementById('recur-custom-days').value;
+  document.getElementById('recur-custom-group').style.display = type === 'custom' ? '' : 'none';
+  if (!start || !end) { document.getElementById('recur-preview').textContent = ''; return; }
+  const occ = calculerOccurrences(start, type, end, custom);
+  document.getElementById('recur-preview').textContent = occ.length > 0
+    ? `→ ${occ.length} intervention(s) seront créées`
+    : '→ Aucune occurrence dans cette période';
+}
+
+// Générateur tontes -------
+function prochainJeudi(fromDate) {
+  const d = new Date(fromDate);
+  const jour = d.getDay(); // 0=dim
+  const delta = (4 - jour + 7) % 7 || 7; // 4=jeudi; si on est déjà jeudi, aller au suivant
+  d.setDate(d.getDate() + delta);
+  return d;
+}
+
+function getTonteDates(debut, fin) {
+  const pairs = [];
+  let jeudi = prochainJeudi(new Date(debut));
+  const end = new Date(fin);
+  while (jeudi <= end) {
+    const vendredi = new Date(jeudi); vendredi.setDate(jeudi.getDate() + 1);
+    pairs.push({ jeudi: formatDate(jeudi), vendredi: vendredi <= end ? formatDate(vendredi) : null });
+    jeudi.setDate(jeudi.getDate() + 14); // +2 semaines
+  }
+  return pairs;
+}
+
+function ouvrirGenererTontes() {
+  // Date de début = lundi prochain
+  const today = new Date();
+  const nextMon = new Date(today);
+  nextMon.setDate(today.getDate() + (8 - today.getDay()) % 7 || 7);
+  document.getElementById('tonte-date-debut').value = formatDate(nextMon);
+  document.getElementById('tonte-date-fin').value = '2026-11-30';
+  document.getElementById('tonte-notes').value = 'Tonte + ramassage des déchets verts';
+  previewTontes();
+  document.getElementById('modal-generer-tontes').classList.remove('hidden');
+}
+
+function previewTontes() {
+  const debut = document.getElementById('tonte-date-debut').value;
+  const fin = document.getElementById('tonte-date-fin').value;
+  if (!debut || !fin) { document.getElementById('tonte-preview').textContent = ''; return; }
+  const pairs = getTonteDates(debut, fin);
+  const total = pairs.reduce((s, p) => s + 1 + (p.vendredi ? 1 : 0), 0);
+  document.getElementById('tonte-preview').textContent =
+    `→ ${pairs.length} sessions (${total} jours) du ${formatDateFR(pairs[0]?.jeudi||debut)} au ${formatDateFR(pairs[pairs.length-1]?.vendredi||pairs[pairs.length-1]?.jeudi||fin)}`;
+}
+
+async function confirmerGenererTontes() {
+  const debut = document.getElementById('tonte-date-debut').value;
+  const fin = document.getElementById('tonte-date-fin').value;
+  const notes = document.getElementById('tonte-notes').value;
+  if (!debut || !fin) { alert('Dates obligatoires.'); return; }
+
+  const pairs = getTonteDates(debut, fin);
+  if (!pairs.length) { alert('Aucune session dans cette période.'); return; }
+
+  const batch = db.batch();
+  const mkTonte = (date) => {
+    const id = uuid();
+    return { id, date, clientId: 'tonte-collective', clientNom: 'Tournée tonte — tous clients',
+      type: 'tonte', chef: 'Timo', membres: ['Timo', 'Matheo'],
+      adresse: '', materiel: 'Tondeuses, souffleur', dechets: null, duree: 8,
+      demandes: notes, remarquesClient: '', statut: 'planifie',
+      remarques: [], heuresParMembre: null, pulve: null, facturee: false };
+  };
+  pairs.forEach(({ jeudi, vendredi }) => {
+    const d1 = mkTonte(jeudi);
+    batch.set(db.collection('interventions').doc(d1.id), d1);
+    if (vendredi) { const d2 = mkTonte(vendredi); batch.set(db.collection('interventions').doc(d2.id), d2); }
+  });
+  await batch.commit();
+  fermerModal('modal-generer-tontes');
+  alert(`✅ ${pairs.length} sessions de tonte générées dans le planning !`);
 }
 
 // =====================================================
