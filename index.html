@@ -1482,7 +1482,6 @@ function initFirestore() {
 
   function onBothReady() {
     showLoading(false);
-    seedIfEmpty();
     renderPlanning();
     updateNotifBadge();
   }
@@ -3308,31 +3307,7 @@ initLoginScreen(); // Construit les boutons de l'écran de connexion
 checkLogin();      // Vérifie si déjà connecté (localStorage)
 initFirestore();   // Lance la connexion Firebase et les listeners temps réel
 
-function seedIfEmpty() {
-  if (appData.clients.length > 0) return; // Données déjà présentes dans Firestore
-  const batch = db.batch();
-
-  const c1 = { id: uuid(), nom: 'Famille Dupont', adresse: '12 rue des Lilas, 69000 Lyon', tel: '06 12 34 56 78', email: '', notes: 'Code portail : 1234', tonte: true, tonteJour: 'jeudi', tonteSemaine: 'A' };
-  const c2 = { id: uuid(), nom: 'M. Martin', adresse: '5 avenue des Roses, 69300 Caluire', tel: '07 98 76 54 32', email: 'martin@email.fr', notes: 'Chien dans le jardin', tonte: true, tonteJour: 'vendredi', tonteSemaine: 'A' };
-  const c3 = { id: uuid(), nom: 'Résidence Les Pins', adresse: '88 bd du Parc, 69100 Villeurbanne', tel: '', email: '', notes: '', tonte: false };
-  const c4 = { id: uuid(), nom: 'Mme Bernard', adresse: '3 chemin des Acacias, 69130 Écully', tel: '06 55 44 33 22', email: '', notes: 'Semaine B tonte', tonte: true, tonteJour: 'jeudi', tonteSemaine: 'B' };
-  [c1,c2,c3,c4].forEach(c => batch.set(db.collection('clients').doc(c.id), c));
-
-  const today = formatDate(new Date());
-  const lundi = getLundiSemaine(0);
-  const mercredi = new Date(lundi); mercredi.setDate(lundi.getDate()+2);
-  const jeudi = new Date(lundi); jeudi.setDate(lundi.getDate()+3);
-  const vendredi = new Date(lundi); vendredi.setDate(lundi.getDate()+4);
-
-  const interventions = [
-    { id: uuid(), clientId: c1.id, date: formatDate(lundi), type: 'entretien', adresse: '', chef: 'Jimi', membres: ['Jimi','Bryan'], materiel: 'Taille-haie, souffleur, sécateur', dechets: 1.5, duree: 3, demandes: 'Taille des haies côté rue à priorité', remarquesClient: 'Client souhaite ajouter une plantation en automne', statut: 'planifie', remarques: [] },
-    { id: uuid(), clientId: c3.id, date: formatDate(mercredi), type: 'entretien', adresse: '', chef: 'Timo', membres: ['Timo','Evann','Matheo'], materiel: 'Tondeuse, souffleur, débroussailleuse', dechets: 3, duree: 5, demandes: 'Désherber les allées, tondre pelouse commune', remarquesClient: '', statut: 'planifie', remarques: [] },
-    { id: uuid(), clientId: c1.id, date: formatDate(jeudi), type: 'tonte', adresse: '', chef: 'Timo', membres: ['Timo','Matheo'], materiel: 'Tondeuse robot + tondeuse manuelle', dechets: 0.5, duree: 1.5, demandes: '', remarquesClient: '', statut: 'planifie', remarques: [{auteur:'Matheo', date: today, texte:'Voir si la haie au fond nécessite une taille aussi'}] },
-    { id: uuid(), clientId: c2.id, date: formatDate(vendredi), type: 'tonte', adresse: '', chef: 'Timo', membres: ['Timo','Matheo'], materiel: 'Tondeuse autoportée', dechets: 0.8, duree: 2, demandes: '', remarquesClient: 'Attention aux nouvelles plantes en bordure', statut: 'planifie', remarques: [] },
-  ];
-  interventions.forEach(iv => batch.set(db.collection('interventions').doc(iv.id), iv));
-  batch.commit().catch(err => console.error('Seed error:', err));
-}
+// seedIfEmpty supprimé — données réelles importées
 </script>
 </body>
 </html>
