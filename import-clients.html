@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vertconcept — Import Clients</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 3rem auto; padding: 1rem; background: #f0faf3; }
+  .card { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  h1 { color: #2d6a4f; margin-bottom: 0.5rem; }
+  .btn { background: #2d6a4f; color: white; border: none; padding: 12px 28px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  .btn:hover { background: #1b4d35; }
+  .btn:disabled { background: #aaa; cursor: default; }
+  .log { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-top: 1rem; font-size: 0.85rem; max-height: 300px; overflow-y: auto; font-family: monospace; }
+  .progress { background: #e9ecef; border-radius: 20px; height: 12px; margin: 1rem 0; overflow: hidden; }
+  .progress-bar { background: #2d6a4f; height: 100%; width: 0; transition: width 0.3s; border-radius: 20px; }
+  .drop-zone { border: 2px dashed #52b788; border-radius: 10px; padding: 2rem; text-align: center; color: #2d6a4f; cursor: pointer; margin: 1rem 0; }
+  .drop-zone:hover { background: #d8f3dc; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🌿 Import Clients — Vertconcept</h1>
+  <p style="color:#6c757d;margin-bottom:1.5rem">Importez votre listing client CSV directement dans Firebase. À utiliser une seule fois.</p>
+
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+    <div style="font-size:2rem">📂</div>
+    <div style="font-weight:600;margin:8px 0">Cliquez ou glissez votre fichier CSV ici</div>
+    <div style="font-size:0.85rem;color:#6c757d">Fichier : 1b604ab4-35ac-43f9-a751-94cfae5a4be9.csv</div>
+  </div>
+  <input type="file" id="csv-input" accept=".csv" style="display:none">
+
+  <div id="preview" style="display:none">
+    <div id="stats" style="font-weight:600;color:#2d6a4f;margin:0.5rem 0"></div>
+    <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+    <button class="btn" id="import-btn" onclick="lancerImport()">⚡ Importer dans Firebase</button>
+  </div>
+
+  <div class="log" id="log" style="display:none"></div>
+</div>
+
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
+  authDomain: "vertconcept---entretien.firebaseapp.com",
+  projectId: "vertconcept---entretien",
+  storageBucket: "vertconcept---entretien.firebasestorage.app",
+  messagingSenderId: "544882864820",
+  appId: "1:544882864820:web:ac1daf787d7512b83d9de1"
+});
+const db = firebase.firestore();
+
+let clientsToImport = [];
+
+function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function parseCsv(text) {
+  const rows = [];
+  let cur = '', inQ = false, row = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') { if (inQ && text[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (c === ',' && !inQ) { row.push(cur); cur = ''; }
+    else if ((c === '\n' || c === '\r') && !inQ) {
+      if (cur || row.length) { row.push(cur); rows.push(row); cur = ''; row = []; }
+      if (c === '\r' && text[i+1] === '\n') i++;
+    } else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+function buildNom(row) {
+  const company = (row[4] || '').trim();
+  const first = (row[2] || '').trim();
+  const last = (row[3] || '').trim();
+  const prefix = (row[22] || '').trim();
+  if (company) return company;
+  if (first && last) return `${prefix ? prefix + ' ' : ''}${first} ${last}`.trim();
+  if (last) return `${prefix ? prefix + ' ' : ''}${last}`.trim();
+  if (first) return first;
+  return '';
+}
+
+function buildAdresse(row) {
+  // Colonne 18 = adresse complète formatée, sinon reconstituer
+  const full = (row[18] || '').trim();
+  if (full) return full;
+  const line1 = (row[10] || '').trim();
+  const city  = (row[11] || '').trim();
+  const cp    = (row[12] || '').trim();
+  const parts = [line1, cp && city ? `${cp} ${city}` : (city || cp)].filter(Boolean);
+  return parts.join(', ');
+}
+
+function buildTel(raw) {
+  const t = (raw || '').trim().replace(/\s/g, '');
+  if (!t || t === '-') return '';
+  // Convertir 32XXXXXXXXX → +32 ou 0XXXXXXXXX
+  if (t.startsWith('32') && t.length >= 10) return '0' + t.slice(2);
+  return t;
+}
+
+function traiterCsv(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) { alert('Fichier vide ou invalide.'); return; }
+  // Ignorer la première ligne (headers)
+  const data = rows.slice(1);
+  const clients = [];
+  const seen = new Set();
+
+  data.forEach(row => {
+    if (!row || row.length < 5) return;
+    if ((row[1] || '').trim() !== 'client') return; // seulement clients
+    const nom = buildNom(row);
+    if (!nom) return;
+    const adresse = buildAdresse(row);
+    const email = (row[8] || '').trim();
+    const tel = buildTel(row[9]);
+    // Dédoublonnage basique sur nom+adresse
+    const key = nom.toLowerCase() + '|' + adresse.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    // Champs séparés
+    const company  = (row[4] || '').trim();
+    const prenom   = (row[2] || '').trim();
+    const nomFam   = (row[3] || '').trim();
+    const rue      = (row[10] || '').trim();
+    const codePostal = (row[12] || '').trim();
+    const ville    = (row[11] || '').trim();
+    const nomFamille = company || nomFam;
+    clients.push({
+      id: uuid(),
+      prenom: company ? '' : prenom,
+      nomFamille,
+      nom,        // nom complet calculé, pour compatibilité
+      rue, codePostal, ville,
+      adresse,    // adresse complète, pour compatibilité
+      tel, email,
+      notes: '', tonte: false, tonteJour: 'jeudi', tonteSemaine: 'A'
+    });
+  });
+
+  clientsToImport = clients;
+  const statsEl = document.getElementById('stats');
+  statsEl.textContent = `✅ ${clients.length} clients prêts à importer (doublons retirés)`;
+  document.getElementById('preview').style.display = '';
+  log(`Fichier lu : ${clients.length} clients valides trouvés.`);
+}
+
+async function lancerImport() {
+  if (!clientsToImport.length) return;
+  document.getElementById('import-btn').disabled = true;
+  document.getElementById('log').style.display = '';
+  log('⏳ Import en cours...');
+
+  const CHUNK = 490; // Limite Firestore = 500 ops/batch
+  let imported = 0;
+  const total = clientsToImport.length;
+
+  for (let i = 0; i < total; i += CHUNK) {
+    const chunk = clientsToImport.slice(i, i + CHUNK);
+    const batch = db.batch();
+    chunk.forEach(c => {
+      // Vérifier que l'id est dans l'objet
+      batch.set(db.collection('clients').doc(c.id), c);
+    });
+    try {
+      await batch.commit();
+      imported += chunk.length;
+      const pct = Math.round(imported / total * 100);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      log(`✅ ${imported}/${total} clients importés (${pct}%)`);
+    } catch(err) {
+      log('❌ Erreur : ' + err.message);
+    }
+  }
+
+  log(`\n🎉 Import terminé ! ${imported} clients ajoutés dans Firebase.`);
+  log('Vous pouvez fermer cette page et ouvrir l\'application principale.');
+  document.getElementById('import-btn').textContent = '✅ Importé !';
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.style.display = '';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+// Gestion fichier
+document.getElementById('csv-input').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => traiterCsv(e.target.result);
+  reader.readAsText(file, 'UTF-8');
+});
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.background = '#d8f3dc'; });
+dz.addEventListener('dragleave', () => dz.style.background = '');
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.style.background = '';
+  const file = e.dataTransfer.files[0];
+  if (file) { const r = new FileReader(); r.onload = ev => traiterCsv(ev.target.result); r.readAsText(file, 'UTF-8'); }
+});
+</script>
+</body>
+</html>

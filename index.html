@@ -1332,21 +1332,37 @@
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Nom / Raison sociale *</label>
-          <input type="text" class="form-control" id="client-nom">
+          <label class="form-label">Prénom</label>
+          <input type="text" class="form-control" id="client-prenom" placeholder="Jean">
         </div>
         <div class="form-group">
-          <label class="form-label">Téléphone</label>
-          <input type="tel" class="form-control" id="client-tel">
+          <label class="form-label">Nom / Raison sociale *</label>
+          <input type="text" class="form-control" id="client-nom" placeholder="Dupont ou SA Exemple">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Adresse *</label>
-        <input type="text" class="form-control" id="client-adresse">
+        <label class="form-label">Rue et numéro</label>
+        <input type="text" class="form-control" id="client-rue" placeholder="Rue des Lilas 12">
       </div>
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input type="email" class="form-control" id="client-email">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Code postal</label>
+          <input type="text" class="form-control" id="client-cp" placeholder="7830">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ville</label>
+          <input type="text" class="form-control" id="client-ville" placeholder="Silly">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Téléphone</label>
+          <input type="tel" class="form-control" id="client-tel" placeholder="0477 12 34 56">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" id="client-email" placeholder="jean@exemple.be">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Notes internes</label>
@@ -2011,17 +2027,23 @@ function renderClients(filtre = '') {
     list.innerHTML = `<div class="empty-state">Aucun client. Cliquez sur "+ Nouveau client" pour commencer.</div>`;
     return;
   }
-  list.innerHTML = filtered.map(c => `
+  list.innerHTML = filtered.map(c => {
+    const adresse = c.adresse || [c.rue, [c.codePostal, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '';
+    return `
     <div class="client-item" onclick="ouvrirFormClient('${c.id}')">
       <div class="client-info">
         <div class="name">${c.nom}</div>
-        <div class="addr">📍 ${c.adresse}${c.tel ? ' · 📞 ' + c.tel : ''}</div>
+        <div class="addr">
+          ${adresse ? `📍 ${adresse}` : ''}
+          ${c.tel ? ` · 📞 ${c.tel}` : ''}
+          ${c.email ? ` · ✉️ ${c.email}` : ''}
+        </div>
       </div>
       <div class="client-tags">
-        ${c.tonte ? `<span class="badge badge-tonte">🌿 Tonte ${c.tonteJour || ''} S.${c.tonteSemaine || ''}</span>` : ''}
+        ${c.tonte ? `<span class="badge badge-tonte">🌿 Tonte</span>` : ''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function filtrerClients(val) {
@@ -2297,11 +2319,14 @@ function ouvrirFormClient(id) {
   document.getElementById('modal-client-titre').textContent = client ? 'Modifier le client' : 'Nouveau client';
   document.getElementById('btn-suppr-client').style.display = client ? '' : 'none';
 
-  document.getElementById('client-nom').value = client ? client.nom : '';
-  document.getElementById('client-tel').value = client ? client.tel || '' : '';
-  document.getElementById('client-adresse').value = client ? client.adresse : '';
-  document.getElementById('client-email').value = client ? client.email || '' : '';
-  document.getElementById('client-notes').value = client ? client.notes || '' : '';
+  document.getElementById('client-prenom').value = client ? (client.prenom || '') : '';
+  document.getElementById('client-nom').value    = client ? (client.nomFamille || client.nom || '') : '';
+  document.getElementById('client-rue').value    = client ? (client.rue || '') : '';
+  document.getElementById('client-cp').value     = client ? (client.codePostal || '') : '';
+  document.getElementById('client-ville').value  = client ? (client.ville || '') : '';
+  document.getElementById('client-tel').value    = client ? (client.tel || '') : '';
+  document.getElementById('client-email').value  = client ? (client.email || '') : '';
+  document.getElementById('client-notes').value  = client ? (client.notes || '') : '';
 
   const hasTonte = client && client.tonte;
   document.getElementById('client-tonte').checked = hasTonte;
@@ -2317,20 +2342,27 @@ function toggleTonteOptions(show) {
 }
 
 function sauvegarderClient() {
-  const nom = document.getElementById('client-nom').value.trim();
-  const adresse = document.getElementById('client-adresse').value.trim();
-  if (!nom || !adresse) { alert('Nom et adresse obligatoires.'); return; }
+  const prenom     = document.getElementById('client-prenom').value.trim();
+  const nomFamille = document.getElementById('client-nom').value.trim();
+  const rue        = document.getElementById('client-rue').value.trim();
+  const codePostal = document.getElementById('client-cp').value.trim();
+  const ville      = document.getElementById('client-ville').value.trim();
 
-  const data = getData();
+  if (!nomFamille) { alert('Le nom / raison sociale est obligatoire.'); return; }
+
+  // Champs combinés pour compatibilité avec le reste de l'app
+  const nom     = prenom ? `${prenom} ${nomFamille}` : nomFamille;
+  const adresse = [rue, [codePostal, ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+
   const client = {
     id: currentClientId || uuid(),
-    nom,
-    adresse,
-    tel: document.getElementById('client-tel').value.trim(),
+    prenom, nomFamille, nom,
+    rue, codePostal, ville, adresse,
+    tel:   document.getElementById('client-tel').value.trim(),
     email: document.getElementById('client-email').value.trim(),
     notes: document.getElementById('client-notes').value.trim(),
     tonte: document.getElementById('client-tonte').checked,
-    tonteJour: document.getElementById('client-tonte-jour').value,
+    tonteJour:    document.getElementById('client-tonte-jour').value,
     tonteSemaine: document.getElementById('client-tonte-semaine').value,
   };
 
