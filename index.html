@@ -302,6 +302,43 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;z-index:8000;background:var(--vert-bg);flex-direction:column;align-items:center;justify-content:center;padding:2rem">
+  <div style="text-align:center;margin-bottom:2rem">
+    <div style="font-size:2rem;font-weight:800;color:var(--vert)">Vert<span style="color:var(--vert-clair)">concept</span></div>
+    <div style="color:var(--gris);font-size:0.9rem;margin-top:4px">Suivi Entretien</div>
+  </div>
+  <div style="background:white;border-radius:16px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,0.10);width:100%;max-width:420px">
+    <div style="font-size:1.1rem;font-weight:700;color:var(--vert);text-align:center;margin-bottom:1.5rem">Qui êtes-vous ?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="login-buttons"></div>
+    <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
+      <div style="font-size:0.8rem;color:var(--gris);text-align:center;margin-bottom:10px">Accès responsable</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="login-admin-buttons"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div class="modal-overlay hidden" id="modal-pin">
+  <div class="modal" style="max-width:320px">
+    <div class="modal-header">
+      <h3 id="pin-titre">Code PIN responsable</h3>
+      <button class="close-btn" onclick="fermerModal('modal-pin')">×</button>
+    </div>
+    <div class="modal-body" style="text-align:center">
+      <div style="font-size:0.85rem;color:var(--gris);margin-bottom:1rem">Entrez le code PIN pour accéder au mode Admin</div>
+      <input type="password" class="form-control" id="pin-input" maxlength="6" placeholder="• • • •"
+             style="text-align:center;font-size:1.5rem;letter-spacing:8px"
+             onkeydown="if(event.key==='Enter')verifierPin()">
+      <div id="pin-error" style="color:var(--rouge);font-size:0.82rem;margin-top:8px;display:none">Code incorrect</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-pin')">Annuler</button>
+      <button class="btn btn-primary" onclick="verifierPin()">Valider</button>
+    </div>
+  </div>
+</div>
+
 <!-- LOADING OVERLAY -->
 <div id="loading-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(45,106,79,0.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;color:white">
   <div style="font-size:2rem;font-weight:800;letter-spacing:1px">Vert<span style="color:#52b788">concept</span></div>
@@ -324,7 +361,11 @@
       ⏳ À valider
       <span class="notif-count" id="notif-count">0</span>
     </button>
-    <div class="mode-badge" onclick="toggleMode()" id="mode-badge">Admin</div>
+    <div class="mode-badge" onclick="toggleMode()" id="mode-badge" style="display:none">Admin</div>
+    <div id="user-badge" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.15);border-radius:20px;padding:4px 12px;font-size:0.82rem;font-weight:600">
+      <span id="user-name-display">—</span>
+      <button onclick="logout()" style="background:rgba(255,255,255,0.2);border:none;color:white;border-radius:10px;padding:2px 8px;font-size:0.75rem;cursor:pointer">Changer</button>
+    </div>
   </div>
 </header>
 
@@ -923,18 +964,117 @@ function showPage(name) {
   if (name === 'facturation') renderFacturation();
 }
 
+// =====================================================
+// CONNEXION / LOGIN
+// =====================================================
+const ADMIN_PIN = '1234'; // Modifiable ici
+let pendingAdminUser = null;
+
+function initLoginScreen() {
+  const ouvriers = ['Mathéo','Bryan','Evann','Lucas'];
+  const chefs    = ['Jimi','Timo'];
+
+  // Boutons ouvriers
+  document.getElementById('login-buttons').innerHTML = ouvriers.map(n => `
+    <button onclick="loginAs('${n}', false)"
+      style="padding:14px;border:2px solid var(--border);border-radius:10px;background:white;
+             font-size:0.95rem;font-weight:700;cursor:pointer;transition:all 0.15s"
+      onmouseover="this.style.borderColor='var(--vert-clair)';this.style.background='var(--vert-pale)'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.background='white'">
+      👷 ${n}
+    </button>`).join('');
+
+  // Boutons chefs (PIN requis)
+  document.getElementById('login-admin-buttons').innerHTML = chefs.map(n => `
+    <button onclick="demanderPin('${n}')"
+      style="padding:14px;border:2px solid var(--vert);border-radius:10px;background:var(--vert-pale);
+             font-size:0.95rem;font-weight:700;cursor:pointer;color:var(--vert);transition:all 0.15s"
+      onmouseover="this.style.background='var(--vert)';this.style.color='white'"
+      onmouseout="this.style.background='var(--vert-pale)';this.style.color='var(--vert)'">
+      👑 ${n}
+    </button>`).join('');
+}
+
+function demanderPin(name) {
+  pendingAdminUser = name;
+  document.getElementById('pin-titre').textContent = `Code PIN — ${name}`;
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').style.display = 'none';
+  document.getElementById('modal-pin').classList.remove('hidden');
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+}
+
+function verifierPin() {
+  const saisi = document.getElementById('pin-input').value;
+  if (saisi === ADMIN_PIN) {
+    fermerModal('modal-pin');
+    loginAs(pendingAdminUser, true);
+  } else {
+    document.getElementById('pin-error').style.display = '';
+    document.getElementById('pin-input').value = '';
+    document.getElementById('pin-input').focus();
+  }
+}
+
+function loginAs(name, isAdmin) {
+  localStorage.setItem('vc_user', JSON.stringify({ name, isAdmin }));
+  applyUser({ name, isAdmin });
+}
+
+function applyUser(user) {
+  modeAdmin = user.isAdmin;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('user-name-display').textContent = (user.isAdmin ? '👑 ' : '👷 ') + user.name;
+
+  // Toggle admin visible seulement pour les chefs
+  const modeBadge = document.getElementById('mode-badge');
+  modeBadge.style.display = user.isAdmin ? '' : 'none';
+  modeBadge.textContent = 'Admin';
+  modeBadge.style.background = '';
+
+  document.getElementById('fab-ouvrier').style.display = 'flex';
+  document.getElementById('btn-nouvelle-interv').style.display = user.isAdmin ? '' : 'none';
+  document.getElementById('nav-facturation').style.display = user.isAdmin ? '' : 'none';
+
+  // Pré-remplir le nom dans les formulaires
+  const auteurSelects = ['fo-auteur', 'remarque-auteur'];
+  auteurSelects.forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) {
+      // Trouver l'option dont la valeur correspond (sans accent)
+      const normalized = user.name.normalize('NFD').replace(/[̀-ͯ]/g,'');
+      for (const opt of sel.options) {
+        const optNorm = opt.value.normalize('NFD').replace(/[̀-ͯ]/g,'');
+        if (optNorm === normalized) { sel.value = opt.value; break; }
+      }
+    }
+  });
+
+  updateNotifBadge();
+}
+
+function logout() {
+  localStorage.removeItem('vc_user');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function checkLogin() {
+  const saved = localStorage.getItem('vc_user');
+  if (saved) {
+    applyUser(JSON.parse(saved));
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+}
+
 function toggleMode() {
   modeAdmin = !modeAdmin;
   const badge = document.getElementById('mode-badge');
   badge.textContent = modeAdmin ? 'Admin' : 'Ouvrier';
   badge.style.background = modeAdmin ? '' : '#fd7e14';
-  // FAB "Créer une fiche" visible dans les deux modes
   document.getElementById('fab-ouvrier').style.display = 'flex';
-  // Bouton "+ Intervention" (admin complet) uniquement en mode admin
   document.getElementById('btn-nouvelle-interv').style.display = modeAdmin ? '' : 'none';
-  // Onglet Facturation masqué pour les ouvriers
   document.getElementById('nav-facturation').style.display = modeAdmin ? '' : 'none';
-  // Si on est sur la page facturation en passant en mode ouvrier → retour planning
   if (!modeAdmin && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
   }
@@ -2089,8 +2229,9 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // INIT
 // =====================================================
 document.getElementById('fiche-date').value = formatDate(new Date());
-document.getElementById('fab-ouvrier').style.display = 'flex';
-initFirestore(); // Lance la connexion Firebase et les listeners temps réel
+initLoginScreen(); // Construit les boutons de l'écran de connexion
+checkLogin();      // Vérifie si déjà connecté (localStorage)
+initFirestore();   // Lance la connexion Firebase et les listeners temps réel
 
 function seedIfEmpty() {
   if (appData.clients.length > 0) return; // Données déjà présentes dans Firestore
