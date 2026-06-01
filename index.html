@@ -1462,24 +1462,27 @@ function getNomClient(iv, clients) {
   return c ? c.nom : 'Client inconnu';
 }
 
-// saveData() compare newData avec le cache et écrit uniquement les différences
+// Écriture directe d'un document (sans diff — sécurisé)
+function saveDoc(col, doc) {
+  return db.collection(col).doc(doc.id)
+    .set(JSON.parse(JSON.stringify(doc)))
+    .catch(err => console.error('saveDoc erreur:', err));
+}
+// Suppression directe d'un document
+function deleteDoc(col, id) {
+  return db.collection(col).doc(id)
+    .delete()
+    .catch(err => console.error('deleteDoc erreur:', err));
+}
+// saveData conservé uniquement pour compatibilité import Excel (ne fait que des ajouts)
 function saveData(newData) {
   const batch = db.batch();
-  ['clients', 'interventions', 'machines', 'pannes', 'achats'].forEach(col => {
-    const newItems = newData[col] || [];
-    const oldItems = appData[col] || [];
-    // Ajouts / modifications
-    newItems.forEach(item => {
-      const old = oldItems.find(o => o.id === item.id);
-      if (!old || JSON.stringify(old) !== JSON.stringify(item)) {
-        batch.set(db.collection(col).doc(item.id),
-          JSON.parse(JSON.stringify(item))); // supprime les undefined
-      }
-    });
-    // Suppressions
-    oldItems.forEach(item => {
-      if (!newItems.find(n => n.id === item.id))
-        batch.delete(db.collection(col).doc(item.id));
+  ['clients','interventions','machines','pannes','achats'].forEach(col => {
+    (newData[col] || []).forEach(item => {
+      const old = (appData[col] || []).find(o => o.id === item.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(item))
+        batch.set(db.collection(col).doc(item.id), JSON.parse(JSON.stringify(item)));
+      // ⚠️ Pas de suppression — uniquement ajouts/modifications
     });
   });
   batch.commit().catch(err => console.error('Firestore erreur:', err));
@@ -2201,12 +2204,7 @@ function sauvegarderIntervention() {
     fermerModal('modal-intervention');
     alert(`✅ ${dates.length} intervention(s) récurrente(s) créées.`);
   } else {
-    if (currentIntervId) {
-      data.interventions = data.interventions.map(i => i.id === currentIntervId ? iv : i);
-    } else {
-      data.interventions.push(iv);
-    }
-    saveData(data);
+    saveDoc('interventions', iv);
     fermerModal('modal-intervention');
   }
   updateNotifBadge();
@@ -2216,12 +2214,9 @@ function sauvegarderIntervention() {
 function supprimerIntervention() {
   if (!currentIntervId) return;
   if (!confirm('Supprimer cette intervention ?')) return;
-  const data = getData();
-  data.interventions = data.interventions.filter(i => i.id !== currentIntervId);
-  saveData(data);
+  deleteDoc('interventions', currentIntervId);
   fermerModal('modal-intervention');
   fermerModal('modal-detail');
-  renderPlanning();
 }
 
 // =====================================================
@@ -2281,7 +2276,7 @@ function sauvegarderRemarque() {
   if (!iv) return;
   if (!iv.remarques) iv.remarques = [];
   iv.remarques.push({ auteur, date: formatDate(new Date()), texte });
-  saveData(data);
+  saveDoc('interventions', iv);
   fermerModal('modal-remarque');
   // Refresh open detail if visible
   if (!document.getElementById('modal-detail').classList.contains('hidden')) {
@@ -2338,26 +2333,17 @@ function sauvegarderClient() {
     tonteSemaine: document.getElementById('client-tonte-semaine').value,
   };
 
-  if (currentClientId) {
-    data.clients = data.clients.map(c => c.id === currentClientId ? client : c);
-  } else {
-    data.clients.push(client);
-  }
-  saveData(data);
+  saveDoc('clients', client);
   fermerModal('modal-client');
-  renderClients();
-  renderTontes();
 }
 
 function supprimerClient() {
   if (!currentClientId) return;
   if (!confirm('Supprimer ce client et toutes ses interventions ?')) return;
-  const data = getData();
-  data.clients = data.clients.filter(c => c.id !== currentClientId);
-  data.interventions = data.interventions.filter(i => i.clientId !== currentClientId);
-  saveData(data);
+  deleteDoc('clients', currentClientId);
+  appData.interventions.filter(i => i.clientId === currentClientId)
+    .forEach(i => deleteDoc('interventions', i.id));
   fermerModal('modal-client');
-  renderClients();
 }
 
 // =====================================================
@@ -2577,9 +2563,8 @@ function ouvrirFicheFacturation(id) {
 
 function marquerFacturee(checked) {
   if (!currentFactuId) return;
-  const data = getData();
-  const iv = data.interventions.find(i => i.id === currentFactuId);
-  if (iv) { iv.facturee = checked; saveData(data); renderFacturation(); }
+  const iv = appData.interventions.find(i => i.id === currentFactuId);
+  if (iv) saveDoc('interventions', { ...iv, facturee: checked });
 }
 
 // =====================================================
@@ -2679,17 +2664,13 @@ function sauvegarderMachine() {
     typeEntretien: document.getElementById('machine-type-entretien').value,
     notes: document.getElementById('machine-notes').value
   };
-  if (currentMachineId) data.machines = data.machines.map(x => x.id === currentMachineId ? machine : x);
-  else data.machines.push(machine);
-  saveData(data);
+  saveDoc('machines', machine);
   fermerModal('modal-machine');
 }
 
 function supprimerMachine() {
   if (!currentMachineId || !confirm('Supprimer cette machine ?')) return;
-  const data = getData();
-  data.machines = data.machines.filter(x => x.id !== currentMachineId);
-  saveData(data);
+  deleteDoc('machines', currentMachineId);
   fermerModal('modal-machine');
 }
 
@@ -2762,17 +2743,13 @@ function sauvegarderPanne() {
     statut: document.getElementById('panne-statut').value,
     resolution: document.getElementById('panne-resolution').value
   };
-  if (currentPanneId) data.pannes = data.pannes.map(x => x.id === currentPanneId ? panne : x);
-  else data.pannes.push(panne);
-  saveData(data);
+  saveDoc('pannes', panne);
   fermerModal('modal-panne');
 }
 
 function supprimerPanne() {
   if (!currentPanneId || !confirm('Supprimer ce signalement ?')) return;
-  const data = getData();
-  data.pannes = data.pannes.filter(x => x.id !== currentPanneId);
-  saveData(data);
+  deleteDoc('pannes', currentPanneId);
   fermerModal('modal-panne');
 }
 
@@ -2807,9 +2784,8 @@ function renderAchats() {
 }
 
 function toggleAchatRecu(id) {
-  const data = getData();
-  const a = data.achats.find(x => x.id === id);
-  if (a) { a.statut = a.statut === 'recu' ? 'a-commander' : 'recu'; saveData(data); }
+  const a = appData.achats.find(x => x.id === id);
+  if (a) saveDoc('achats', { ...a, statut: a.statut === 'recu' ? 'a-commander' : 'recu' });
 }
 
 function ouvrirAchat(id) {
@@ -2836,17 +2812,13 @@ function sauvegarderAchat() {
     notes: document.getElementById('achat-notes').value,
     statut: document.getElementById('achat-statut').value
   };
-  if (currentAchatId) data.achats = data.achats.map(x => x.id === currentAchatId ? achat : x);
-  else data.achats.push(achat);
-  saveData(data);
+  saveDoc('achats', achat);
   fermerModal('modal-achat');
 }
 
 function supprimerAchat() {
   if (!currentAchatId || !confirm('Supprimer cet article ?')) return;
-  const data = getData();
-  data.achats = data.achats.filter(x => x.id !== currentAchatId);
-  saveData(data);
+  deleteDoc('achats', currentAchatId);
   fermerModal('modal-achat');
 }
 
@@ -3077,8 +3049,7 @@ function sauvegarderFicheOuvrier() {
     soumiseDate: formatDate(new Date()),
     remarques: []
   };
-  data.interventions.push(iv);
-  saveData(data);
+  saveDoc('interventions', iv);
   fermerModal('modal-fiche-ouvrier');
   updateNotifBadge();
   renderPlanning();
@@ -3150,11 +3121,8 @@ function approuverFiche(id) {
 
 function refuserFiche(id) {
   if (!confirm('Refuser et supprimer cette fiche ?')) return;
-  const data = getData();
-  data.interventions = data.interventions.filter(i => i.id !== id);
-  saveData(data);
+  deleteDoc('interventions', id);
   updateNotifBadge();
-  renderPlanning();
   renderValidationList();
 }
 
