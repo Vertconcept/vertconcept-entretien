@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vertconcept — Suivi Entretien</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+  :root {
+    --vert: #2d6a4f;
+    --vert-clair: #52b788;
+    --vert-pale: #d8f3dc;
+    --vert-bg: #f0faf3;
+    --gris: #6c757d;
+    --gris-clair: #f8f9fa;
+    --border: #dee2e6;
+    --rouge: #dc3545;
+    --orange: #fd7e14;
+    --bleu: #0d6efd;
+    --blanc: #ffffff;
+    --ombre: 0 2px 8px rgba(0,0,0,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--vert-bg); color: #212529; min-height: 100vh; }
+
+  /* HEADER */
+  header { background: var(--vert); color: white; padding: 0 1rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+  header .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px; }
+  header .logo span { color: var(--vert-clair); }
+  .header-nav { display: flex; gap: 4px; }
+  .header-nav button { background: transparent; border: none; color: rgba(255,255,255,0.8); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+  .header-nav button:hover, .header-nav button.active { background: rgba(255,255,255,0.2); color: white; }
+  .mode-badge { background: var(--vert-clair); border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+
+  /* LAYOUT */
+  main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* CARDS */
+  .card { background: white; border-radius: 12px; box-shadow: var(--ombre); padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 1rem; font-weight: 700; color: var(--vert); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: all 0.2s; }
+  .btn-primary { background: var(--vert); color: white; }
+  .btn-primary:hover { background: #1b4d35; }
+  .btn-secondary { background: var(--gris-clair); color: #333; border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #e9ecef; }
+  .btn-danger { background: var(--rouge); color: white; }
+  .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+  .btn-icon { padding: 6px; border-radius: 6px; background: transparent; border: 1px solid var(--border); cursor: pointer; color: var(--gris); }
+  .btn-icon:hover { background: var(--gris-clair); }
+
+  /* BADGES */
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .badge-jimi { background: #cfe2ff; color: #084298; }
+  .badge-timo { background: #d1e7dd; color: #0a3622; }
+  .badge-tonte { background: #fff3cd; color: #664d03; }
+  .badge-entretien { background: var(--vert-pale); color: var(--vert); }
+  .badge-termine { background: #d3d3d3; color: #555; }
+  .badge-planifie { background: #cfe2ff; color: #084298; }
+  .badge-en-cours { background: #fff3cd; color: #664d03; }
+
+  /* FORMS */
+  .form-group { margin-bottom: 1rem; }
+  .form-label { display: block; font-size: 0.85rem; font-weight: 600; color: #495057; margin-bottom: 4px; }
+  .form-control { width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.9rem; transition: border-color 0.2s; background: white; }
+  .form-control:focus { outline: none; border-color: var(--vert-clair); box-shadow: 0 0 0 3px rgba(82,183,136,0.15); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+
+  /* PLANNING */
+  .semaine-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .semaine-nav h2 { font-size: 1rem; font-weight: 700; flex: 1; text-align: center; }
+  .jours-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  @media (max-width: 700px) { .jours-grid { grid-template-columns: repeat(2, 1fr); } }
+  .jour-col { background: white; border-radius: 10px; overflow: hidden; box-shadow: var(--ombre); }
+  .jour-header { background: var(--vert); color: white; padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 700; }
+  .jour-header.today { background: var(--vert-clair); }
+  .jour-body { padding: 8px; min-height: 80px; }
+  .interv-card { background: var(--vert-pale); border-left: 3px solid var(--vert); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 0.78rem; cursor: pointer; transition: transform 0.1s; }
+  .interv-card:hover { transform: translateX(2px); }
+  .interv-card.tonte { background: #fff3cd; border-left-color: var(--orange); }
+  .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
+  .interv-card .client-name { font-weight: 700; color: #212529; }
+  .interv-card .interv-meta { color: var(--gris); margin-top: 2px; }
+  .add-interv-btn { width: 100%; border: 1.5px dashed var(--border); background: transparent; border-radius: 6px; padding: 6px; font-size: 0.78rem; color: var(--gris); cursor: pointer; margin-top: 4px; }
+  .add-interv-btn:hover { background: var(--gris-clair); }
+
+  /* FICHE JOURNALIÈRE */
+  .fiche-header { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
+  .fiche-equipe-selector { display: flex; gap: 8px; }
+  .fiche-equipe-btn { padding: 8px 20px; border-radius: 20px; border: 2px solid var(--border); background: white; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+  .fiche-equipe-btn.active-jimi { border-color: #084298; background: #cfe2ff; color: #084298; }
+  .fiche-equipe-btn.active-timo { border-color: #0a3622; background: #d1e7dd; color: #0a3622; }
+  .fiche-interv { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
+  .fiche-interv-header { background: var(--vert-pale); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .fiche-interv-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .fiche-interv-body { grid-template-columns: 1fr; } }
+  .fiche-field { }
+  .fiche-field-label { font-size: 0.75rem; font-weight: 700; color: var(--vert); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .fiche-field-value { font-size: 0.9rem; color: #333; }
+  .remarques-list { list-style: none; }
+  .remarques-list li { background: #fff8e1; border-left: 3px solid var(--orange); border-radius: 4px; padding: 6px 10px; margin-bottom: 4px; font-size: 0.85rem; }
+  .remarques-list li .meta { font-size: 0.75rem; color: var(--gris); margin-bottom: 2px; }
+  .print-btn { display: flex; align-items: center; gap: 6px; }
+
+  /* CLIENTS */
+  .client-list { display: grid; gap: 8px; }
+  .client-item { background: white; border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--ombre); cursor: pointer; transition: box-shadow 0.2s; }
+  .client-item:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+  .client-info .name { font-weight: 700; font-size: 0.95rem; }
+  .client-info .addr { font-size: 0.8rem; color: var(--gris); margin-top: 2px; }
+  .client-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-overlay.hidden { display: none; }
+  .modal { background: white; border-radius: 14px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+  .modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 1; }
+  .modal-header h3 { font-size: 1rem; font-weight: 700; color: var(--vert); }
+  .modal-body { padding: 1.25rem; }
+  .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+  .close-btn { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--gris); line-height: 1; }
+
+  /* EQUIPE SELECTOR */
+  .equipe-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
+  .membre-chip { padding: 5px 12px; border-radius: 20px; border: 2px solid var(--border); background: white; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; }
+  .membre-chip.selected { border-color: var(--vert); background: var(--vert-pale); color: var(--vert); }
+  .membre-chip.chef { border-color: var(--vert); }
+
+  /* TONTE SCHEDULE */
+  .tonte-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .tonte-client { background: white; border-radius: 8px; padding: 10px 12px; border-left: 4px solid var(--orange); font-size: 0.85rem; }
+  .tonte-client .name { font-weight: 700; }
+  .tonte-client .info { color: var(--gris); font-size: 0.78rem; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 1.5rem; }
+  .stat-card { background: white; border-radius: 10px; padding: 14px; text-align: center; box-shadow: var(--ombre); }
+  .stat-card .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--vert); }
+  .stat-card .stat-label { font-size: 0.75rem; color: var(--gris); margin-top: 4px; }
+
+  /* PRINT */
+  @media print {
+    header, .header-nav, .semaine-nav .btn, .add-interv-btn, .btn-icon, .print-btn, .fiche-header .btn { display: none !important; }
+    body { background: white; }
+    .card { box-shadow: none; border: 1px solid #ddd; }
+    .fiche-interv { break-inside: avoid; }
+  }
+
+  /* ALERTS */
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; }
+  .alert-info { background: #cfe2ff; color: #084298; }
+  .alert-success { background: #d1e7dd; color: #0a3622; }
+
+  /* SEMAINE BADGE */
+  .semaine-indicator { display: inline-flex; align-items: center; gap: 6px; background: white; border-radius: 20px; padding: 4px 12px; border: 1.5px solid var(--border); font-size: 0.8rem; font-weight: 700; }
+  .semaine-indicator .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-A { background: #0d6efd; }
+  .dot-B { background: #fd7e14; }
+
+  textarea.form-control { resize: vertical; min-height: 80px; }
+  select.form-control { appearance: auto; }
+  .empty-state { text-align: center; color: var(--gris); padding: 2rem; font-size: 0.9rem; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .gap-8 { gap: 8px; }
+  .flex { display: flex; }
+  .mt-1 { margin-top: 0.5rem; }
+  .mb-1 { margin-bottom: 0.5rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+  /* VUE TOGGLE */
+  .vue-toggle { display: flex; background: #e9ecef; border-radius: 8px; padding: 3px; gap: 2px; }
+  .vue-toggle button { border: none; background: transparent; padding: 5px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--gris); transition: all 0.2s; }
+  .vue-toggle button.active { background: white; color: var(--vert); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+  /* VUE MENSUELLE */
+  .mois-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .mois-jour-header { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--gris); padding: 4px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .mois-jour { background: white; border-radius: 8px; min-height: 90px; padding: 6px; box-shadow: var(--ombre); position: relative; transition: box-shadow 0.15s; }
+  .mois-jour.autre-mois { background: #f8f9fa; box-shadow: none; opacity: 0.55; }
+  .mois-jour.today { outline: 2px solid var(--vert-clair); }
+  .mois-jour.weekend { background: #fafafa; }
+  .mois-jour-num { font-size: 0.8rem; font-weight: 700; color: #495057; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .mois-jour-num .add-btn-mois { opacity: 0; font-size: 0.75rem; color: var(--vert); cursor: pointer; background: var(--vert-pale); border: none; border-radius: 4px; padding: 1px 5px; transition: opacity 0.15s; }
+  .mois-jour:hover .add-btn-mois { opacity: 1; }
+  .mois-interv-dot { font-size: 0.72rem; padding: 2px 5px; border-radius: 4px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--vert-pale); border-left: 3px solid var(--vert); }
+  .mois-interv-dot.tonte { background: #fff3cd; border-left-color: var(--orange); }
+  .mois-interv-dot.equipe-timo { border-left-color: var(--vert-clair); }
+  .mois-interv-dot.termine { opacity: 0.55; }
+  .mois-more { font-size: 0.7rem; color: var(--gris); cursor: pointer; text-align: center; }
+  @media (max-width: 700px) {
+    .mois-grid { grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .mois-jour { min-height: 60px; padding: 4px; }
+    .mois-interv-dot { display: none; }
+    .mois-jour-num .add-btn-mois { opacity: 1; }
+  }
+
+  /* IMPORT EXCEL */
+  .drop-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 2rem; text-align: center; color: var(--gris); cursor: pointer; transition: all 0.2s; background: var(--gris-clair); }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--vert-clair); background: var(--vert-pale); color: var(--vert); }
+  .drop-zone .drop-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .mapping-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .mapping-table th { background: var(--gris-clair); padding: 6px 10px; text-align: left; font-size: 0.8rem; }
+  .mapping-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .mapping-table select { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82rem; }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; max-height: 200px; overflow-y: auto; display: block; }
+  .preview-table th { background: var(--vert-pale); padding: 4px 8px; position: sticky; top: 0; }
+  .preview-table td { padding: 3px 8px; border-bottom: 1px solid #eee; }
+  .import-result { padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; margin-top: 1rem; }
+
+  /* STATUTS ÉTENDUS */
+  .badge-en-attente { background: #ffe5d0; color: #a0522d; }
+  .badge-refuse { background: #f8d7da; color: #842029; }
+  .interv-card.en-attente { background: #fff3e0; border-left-color: #e67e22; border-left-width: 4px; }
+  .mois-interv-dot.en-attente { background: #fff3e0; border-left-color: #e67e22; }
+
+  /* NOTIFICATION BADGE */
+  .notif-btn { position: relative; background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 5px; }
+  .notif-btn:hover { background: rgba(255,255,255,0.25); }
+  .notif-count { position: absolute; top: -5px; right: -5px; background: var(--rouge); color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* BOUTON FAB OUVRIER */
+  .fab-ouvrier { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 150; background: var(--vert); color: white; border: none; border-radius: 50px; padding: 14px 22px; font-size: 1rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(45,106,79,0.4); display: none; align-items: center; gap: 8px; transition: transform 0.15s, box-shadow 0.15s; }
+  .fab-ouvrier:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(45,106,79,0.5); }
+
+  /* VALIDATION ADMIN */
+  .validation-list { display: flex; flex-direction: column; gap: 12px; }
+  .validation-item { border: 2px solid #ffe5d0; border-radius: 10px; overflow: hidden; }
+  .validation-item-header { background: #fff3e0; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .validation-item-body { padding: 12px 14px; font-size: 0.85rem; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .validation-item-body .field-lbl { font-size: 0.72rem; font-weight: 700; color: var(--vert); text-transform: uppercase; }
+  .validation-actions { display: flex; gap: 8px; }
+  .btn-approuver { background: #d1e7dd; color: #0a3622; border: none; border-radius: 6px; padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+  .btn-approuver:hover { background: #a3cfbb; }
+  .btn-refuser { background: #f8d7da; color: #842029; border: none; border-radius: 6px; padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+  .btn-refuser:hover { background: #f1aeb5; }
+
+  /* STATUT SELECT COULEURS */
+  .statut-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; cursor: pointer; border: none; }
+
+  /* NOMS ÉQUIPE DANS LES CARTES */
+  .interv-card .equipe-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .equipe-chip-sm { background: rgba(0,0,0,0.07); border-radius: 4px; padding: 1px 5px; font-size: 0.7rem; font-weight: 600; color: #444; }
+
+  /* HEURES PAR MEMBRE */
+  .heures-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .heures-table th { background: var(--vert-pale); padding: 6px 10px; text-align: left; font-size: 0.8rem; }
+  .heures-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .heures-table input[type=number] { width: 80px; padding: 4px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.88rem; }
+  .heures-totaux { background: var(--vert-pale); border-radius: 8px; padding: 10px 14px; font-size: 0.88rem; margin-top: 8px; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .heures-totaux strong { color: var(--vert); }
+
+  /* FACTURATION PAGE */
+  .factu-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .factu-list { display: flex; flex-direction: column; gap: 10px; }
+  .factu-item { background: white; border-radius: 10px; padding: 14px 16px; box-shadow: var(--ombre); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .factu-item .fi-info .fi-client { font-weight: 700; font-size: 1rem; }
+  .factu-item .fi-info .fi-meta { font-size: 0.82rem; color: var(--gris); margin-top: 3px; }
+  .factu-item .fi-stats { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .factu-stat { text-align: center; }
+  .factu-stat .val { font-size: 1.2rem; font-weight: 800; color: var(--vert); }
+  .factu-stat .lbl { font-size: 0.7rem; color: var(--gris); }
+  .factu-item.facturee { opacity: 0.6; }
+
+  /* FICHE FACTURATION MODALE / IMPRESSION */
+  .fiche-factu { font-family: 'Segoe UI', sans-serif; }
+  .fiche-factu .ff-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 3px solid var(--vert); }
+  .fiche-factu .ff-logo { font-size: 1.4rem; font-weight: 800; color: var(--vert); }
+  .fiche-factu .ff-logo span { color: var(--vert-clair); }
+  .fiche-factu .ff-date { font-size: 0.85rem; color: var(--gris); text-align: right; }
+  .fiche-factu h2 { font-size: 1.1rem; color: var(--vert); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+  .fiche-factu .ff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .fiche-factu .ff-field .lbl { font-size: 0.72rem; font-weight: 700; color: var(--vert); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .fiche-factu .ff-field .val { font-size: 0.9rem; }
+  .ff-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.88rem; }
+  .ff-table th { background: var(--vert); color: white; padding: 8px 12px; text-align: left; }
+  .ff-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .ff-table tr:last-child td { border-bottom: none; }
+  .ff-table .total-row td { background: var(--vert-pale); font-weight: 700; }
+  .ff-montant { background: var(--vert); color: white; border-radius: 10px; padding: 16px; text-align: center; margin: 1rem 0; }
+  .ff-montant .montant-val { font-size: 2rem; font-weight: 800; }
+  .ff-montant .montant-lbl { font-size: 0.8rem; opacity: 0.85; }
+  .ff-signature { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+  .ff-signature .sig-box { border: 1.5px solid var(--border); border-radius: 8px; height: 80px; padding: 8px 12px; }
+  .ff-signature .sig-lbl { font-size: 0.75rem; font-weight: 700; color: var(--gris); margin-bottom: 6px; }
+
+  @media print {
+    .modal-overlay { position: static !important; background: none !important; padding: 0 !important; display: block !important; }
+    .modal-overlay.hidden { display: none !important; }
+    .modal { box-shadow: none !important; max-height: none !important; max-width: none !important; border-radius: 0 !important; }
+    .modal-header, .modal-footer { display: none !important; }
+    #modal-factu-print:not(.hidden) { display: block !important; }
+    header, main, .fab-ouvrier { display: none !important; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(45,106,79,0.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;color:white">
+  <div style="font-size:2rem;font-weight:800;letter-spacing:1px">Vert<span style="color:#52b788">concept</span></div>
+  <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <div style="font-size:0.9rem;opacity:0.85">Connexion en cours…</div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<header>
+  <div class="logo">Vert<span>concept</span> — Entretien</div>
+  <div class="header-nav">
+    <button onclick="showPage('planning')" id="nav-planning" class="active">Planning</button>
+    <button onclick="showPage('fiches')" id="nav-fiches">Fiches</button>
+    <button onclick="showPage('clients')" id="nav-clients">Clients</button>
+    <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
+    <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="notif-btn" id="notif-btn" onclick="ouvrirValidation()" title="Fiches en attente de validation" style="display:none">
+      ⏳ À valider
+      <span class="notif-count" id="notif-count">0</span>
+    </button>
+    <div class="mode-badge" onclick="toggleMode()" id="mode-badge">Admin</div>
+  </div>
+</header>
+
+<!-- FAB bouton ouvrier -->
+<button class="fab-ouvrier" id="fab-ouvrier" onclick="ouvrirFicheOuvrier()">
+  ✏️ Créer une fiche
+</button>
+
+<main>
+
+  <!-- ===== PLANNING ===== -->
+  <div class="page active" id="page-planning">
+    <div class="flex-between mb-1">
+      <div class="semaine-nav" style="margin-bottom:0">
+        <button class="btn btn-secondary btn-sm" onclick="navPlanning(-1)">◀</button>
+        <h2 id="semaine-titre" style="min-width:240px;text-align:center"></h2>
+        <button class="btn btn-secondary btn-sm" onclick="navPlanning(1)">▶</button>
+        <button class="btn btn-secondary btn-sm" onclick="allerAujourdhui()">Aujourd'hui</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="vue-toggle">
+          <button id="vue-btn-semaine" class="active" onclick="setVuePlanning('semaine')">Semaine</button>
+          <button id="vue-btn-mois" onclick="setVuePlanning('mois')">Mois</button>
+        </div>
+        <div class="semaine-indicator" id="semaine-ab-badge"><div class="dot dot-A" id="dot-semaine"></div><span id="label-semaine">Semaine A</span></div>
+        <button class="btn btn-primary btn-sm" id="btn-nouvelle-interv" onclick="ouvrirNouvelleIntervention()">+ Intervention</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info" id="tonte-alert" style="display:none"></div>
+
+    <div id="planning-semaine-view">
+      <div class="jours-grid" id="planning-grid"></div>
+    </div>
+    <div id="planning-mois-view" style="display:none">
+      <div class="mois-grid" id="mois-jours-header"></div>
+      <div class="mois-grid" style="margin-top:4px" id="mois-grid"></div>
+    </div>
+  </div>
+
+  <!-- ===== FICHES JOURNALIÈRES ===== -->
+  <div class="page" id="page-fiches">
+    <div class="card">
+      <div class="fiche-header">
+        <div>
+          <div class="form-label">Date</div>
+          <input type="date" class="form-control" id="fiche-date" style="width:180px" oninput="renderFiche()">
+        </div>
+        <div>
+          <div class="form-label">Équipe</div>
+          <div class="fiche-equipe-selector">
+            <button class="fiche-equipe-btn active-jimi" id="fiche-btn-jimi" onclick="selectFicheEquipe('Jimi')">🔵 Jimi</button>
+            <button class="fiche-equipe-btn" id="fiche-btn-timo" onclick="selectFicheEquipe('Timo')">🟢 Timo</button>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimer</button>
+      </div>
+    </div>
+    <div id="fiche-content"></div>
+  </div>
+
+  <!-- ===== CLIENTS ===== -->
+  <div class="page" id="page-clients">
+    <div class="flex-between mb-1">
+      <input type="text" class="form-control" placeholder="🔍 Rechercher un client…" style="max-width:300px" oninput="filtrerClients(this.value)">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="ouvrirImportExcel()">📥 Importer Excel</button>
+        <button class="btn btn-primary" onclick="ouvrirFormClient()">+ Nouveau client</button>
+      </div>
+    </div>
+    <div class="client-list" id="client-list"></div>
+  </div>
+
+  <!-- ===== FACTURATION ===== -->
+  <div class="page" id="page-facturation">
+    <div class="flex-between mb-1">
+      <div class="factu-filters">
+        <input type="month" class="form-control" id="factu-mois" style="width:180px" oninput="renderFacturation()">
+        <select class="form-control" id="factu-client-filter" style="width:200px" onchange="renderFacturation()">
+          <option value="">Tous les clients</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="factu-masquer-facturees" onchange="renderFacturation()"> Masquer facturées
+        </label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div id="factu-stats-mini" style="display:flex;gap:12px;align-items:center"></div>
+      </div>
+    </div>
+    <div class="factu-list" id="factu-list"></div>
+  </div>
+
+  <!-- ===== TONTES ===== -->
+  <div class="page" id="page-tontes">
+    <div class="stats-row" id="stats-tontes"></div>
+    <div class="card">
+      <div class="card-title">🗓️ Prochaines tontes</div>
+      <div class="tonte-grid" id="tontes-a-venir"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🌿 Clients avec tonte programmée</div>
+      <div class="tonte-grid" id="tonte-clients-list"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ===== MODAL FICHE FACTURATION (impression) ===== -->
+<div class="modal-overlay hidden" id="modal-factu-print">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <h3>Fiche à facturer</h3>
+      <button class="close-btn" onclick="fermerModal('modal-factu-print')">×</button>
+    </div>
+    <div class="modal-body" id="factu-print-body"></div>
+    <div class="modal-footer">
+      <div style="margin-right:auto;display:flex;gap:8px;align-items:center">
+        <label style="font-size:0.85rem;font-weight:600">Marquer comme facturée</label>
+        <input type="checkbox" id="factu-marquer-cb" onchange="marquerFacturee(this.checked)">
+      </div>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-factu-print')">Fermer</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimer / PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL FICHE OUVRIER ===== -->
+<div class="modal-overlay hidden" id="modal-fiche-ouvrier">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>✏️ Créer une fiche de travail</h3>
+      <button class="close-btn" onclick="fermerModal('modal-fiche-ouvrier')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:1rem;font-size:0.85rem">
+        Votre fiche sera soumise au responsable pour validation avant d'apparaître dans le planning.
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Votre nom *</label>
+          <select class="form-control" id="fo-auteur">
+            <option value="Jimi">Jimi</option>
+            <option value="Timo">Timo</option>
+            <option value="Matheo">Mathéo</option>
+            <option value="Bryan">Bryan</option>
+            <option value="Evann">Evann</option>
+            <option value="Lucas">Lucas (étudiant)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date souhaitée *</label>
+          <input type="date" class="form-control" id="fo-date">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client *</label>
+        <select class="form-control" id="fo-client"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type de travail *</label>
+        <select class="form-control" id="fo-type">
+          <option value="entretien">Entretien général</option>
+          <option value="tonte">Tonte pelouse</option>
+          <option value="travaux">Travaux spécifiques</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description des travaux / demande client *</label>
+        <textarea class="form-control" id="fo-description" rows="3" placeholder="Décrivez précisément les travaux à effectuer ou la demande du client…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Matériel nécessaire</label>
+        <textarea class="form-control" id="fo-materiel" rows="2" placeholder="Tondeuse, taille-haie, débroussailleuse…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Déchets verts estimés (m³)</label>
+          <input type="number" class="form-control" id="fo-dechets" min="0" step="0.5" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Durée estimée (h)</label>
+          <input type="number" class="form-control" id="fo-duree" min="0.5" step="0.5" placeholder="2">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Remarque ou demande spéciale du client</label>
+        <textarea class="form-control" id="fo-remarque-client" rows="2" placeholder="Ce que le client a demandé en plus…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-fiche-ouvrier')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderFicheOuvrier()">📤 Soumettre pour validation</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL VALIDATION ADMIN ===== -->
+<div class="modal-overlay hidden" id="modal-validation">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3>⏳ Fiches en attente de validation</h3>
+      <button class="close-btn" onclick="fermerModal('modal-validation')">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="validation-list-content"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-validation')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL IMPORT EXCEL ===== -->
+<div class="modal-overlay hidden" id="modal-import">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <h3>Importer des clients depuis Excel</h3>
+      <button class="close-btn" onclick="fermerModal('modal-import')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Étape 1 : fichier -->
+      <div id="import-step-1">
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('excel-file-input').click()">
+          <div class="drop-icon">📊</div>
+          <div style="font-weight:600;margin-bottom:4px">Cliquez ou glissez-déposez votre fichier Excel</div>
+          <div style="font-size:0.8rem">.xlsx, .xls ou .csv acceptés</div>
+        </div>
+        <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="lireExcel(this.files[0])">
+      </div>
+
+      <!-- Étape 2 : mapping colonnes -->
+      <div id="import-step-2" style="display:none">
+        <div class="alert alert-info" id="import-info" style="margin-bottom:1rem"></div>
+        <p style="font-size:0.85rem;margin-bottom:0.75rem;font-weight:600">Associez les colonnes de votre fichier aux champs clients :</p>
+        <table class="mapping-table">
+          <thead><tr><th>Champ application</th><th>Colonne Excel détectée</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Nom *</strong></td><td><select id="map-nom"></select></td></tr>
+            <tr><td>Adresse</td><td><select id="map-adresse"></select></td></tr>
+            <tr><td>Téléphone</td><td><select id="map-tel"></select></td></tr>
+            <tr><td>Email</td><td><select id="map-email"></select></td></tr>
+            <tr><td>Notes / Accès</td><td><select id="map-notes"></select></td></tr>
+          </tbody>
+        </table>
+        <hr>
+        <p style="font-size:0.85rem;margin-bottom:0.5rem;font-weight:600">Aperçu (5 premières lignes) :</p>
+        <div style="overflow-x:auto">
+          <table class="preview-table" id="preview-table"></table>
+        </div>
+        <div id="import-result"></div>
+      </div>
+    </div>
+    <div class="modal-footer" id="import-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-import')">Annuler</button>
+      <button class="btn btn-primary" id="btn-confirmer-import" style="display:none" onclick="confirmerImport()">Importer les clients</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL INTERVENTION ===== -->
+<div class="modal-overlay hidden" id="modal-intervention">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-interv-titre">Nouvelle intervention</h3>
+      <button class="close-btn" onclick="fermerModal('modal-intervention')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Date *</label>
+          <input type="date" class="form-control" id="interv-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type *</label>
+          <select class="form-control" id="interv-type">
+            <option value="entretien">Entretien</option>
+            <option value="tonte">Tonte pelouse</option>
+            <option value="travaux">Travaux</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client *</label>
+        <select class="form-control" id="interv-client"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Adresse (si différente du client)</label>
+        <input type="text" class="form-control" id="interv-adresse" placeholder="Laisser vide pour utiliser l'adresse client">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Chef d'équipe *</label>
+        <select class="form-control" id="interv-chef">
+          <option value="Jimi">Jimi</option>
+          <option value="Timo">Timo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Membres de l'équipe</label>
+        <div class="equipe-toggle" id="equipe-toggle">
+          <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
+          <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
+          <div class="membre-chip" data-membre="Matheo" onclick="toggleMembre(this)">Mathéo</div>
+          <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
+          <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
+          <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Matériel nécessaire</label>
+        <textarea class="form-control" id="interv-materiel" rows="2" placeholder="Tondeuse, taille-haie, souffleur…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Déchets verts (m³)</label>
+          <input type="number" class="form-control" id="interv-dechets" min="0" step="0.5" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Durée estimée (h)</label>
+          <input type="number" class="form-control" id="interv-duree" min="0.5" step="0.5" placeholder="2">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Demandes spécifiques</label>
+        <textarea class="form-control" id="interv-demandes" rows="2" placeholder="Instructions particulières pour cette intervention…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Remarques / demandes client pour prochaine intervention</label>
+        <textarea class="form-control" id="interv-remarques-client" rows="2" placeholder="Ce que le client a demandé pour la prochaine fois…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Statut</label>
+        <select class="form-control" id="interv-statut" onchange="onStatutChange(this.value)">
+          <option value="planifie">📋 Planifié</option>
+          <option value="en-cours">🔧 En cours</option>
+          <option value="termine">✅ Terminé</option>
+          <option value="en-attente">⏳ En attente de validation</option>
+          <option value="refuse">❌ Refusé</option>
+        </select>
+      </div>
+      <!-- Heures réelles par membre — visible quand terminé -->
+      <div id="heures-section" style="display:none">
+        <hr>
+        <div class="form-label" style="margin-bottom:8px">⏱️ Heures réelles par ouvrier</div>
+        <table class="heures-table">
+          <thead><tr><th>Ouvrier</th><th>Heures travaillées</th><th>Taux horaire (€/h)</th></tr></thead>
+          <tbody id="heures-tbody"></tbody>
+        </table>
+        <div class="heures-totaux" id="heures-totaux"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-interv" onclick="supprimerIntervention()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-intervention')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderIntervention()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL CLIENT ===== -->
+<div class="modal-overlay hidden" id="modal-client">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-client-titre">Nouveau client</h3>
+      <button class="close-btn" onclick="fermerModal('modal-client')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nom / Raison sociale *</label>
+          <input type="text" class="form-control" id="client-nom">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Téléphone</label>
+          <input type="tel" class="form-control" id="client-tel">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Adresse *</label>
+        <input type="text" class="form-control" id="client-adresse">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" id="client-email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes internes</label>
+        <textarea class="form-control" id="client-notes" rows="2" placeholder="Accès, code portail, chien, particularités…"></textarea>
+      </div>
+      <hr>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="client-tonte" onchange="toggleTonteOptions(this.checked)" style="width:auto">
+          Ce client a une tonte de pelouse programmée (jeudi/vendredi, semaine alternée)
+        </label>
+      </div>
+      <div id="tonte-options" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Jour de tonte</label>
+            <select class="form-control" id="client-tonte-jour">
+              <option value="jeudi">Jeudi</option>
+              <option value="vendredi">Vendredi</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Semaine de référence</label>
+            <select class="form-control" id="client-tonte-semaine">
+              <option value="A">Semaine A</option>
+              <option value="B">Semaine B</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-client" onclick="supprimerClient()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-client')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderClient()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL REMARQUE OUVRIER ===== -->
+<div class="modal-overlay hidden" id="modal-remarque">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Ajouter une remarque</h3>
+      <button class="close-btn" onclick="fermerModal('modal-remarque')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Votre nom</label>
+        <select class="form-control" id="remarque-auteur">
+          <option value="Jimi">Jimi</option>
+          <option value="Timo">Timo</option>
+          <option value="Matheo">Mathéo</option>
+          <option value="Bryan">Bryan</option>
+          <option value="Evann">Evann</option>
+          <option value="Lucas">Lucas</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Remarque ou nouvelle demande client</label>
+        <textarea class="form-control" id="remarque-texte" rows="4" placeholder="Décrivez la remarque ou la demande du client pour la prochaine intervention…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-remarque')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderRemarque()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL DÉTAIL INTERVENTION ===== -->
+<div class="modal-overlay hidden" id="modal-detail">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="detail-titre">Détail intervention</h3>
+      <button class="close-btn" onclick="fermerModal('modal-detail')">×</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// DATA MODEL & FIRESTORE
+// =====================================================
+const MEMBRES = ['Jimi','Timo','Matheo','Bryan','Evann','Lucas'];
+const CHEFS = ['Jimi','Timo'];
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
+  authDomain: "vertconcept---entretien.firebaseapp.com",
+  projectId: "vertconcept---entretien",
+  storageBucket: "vertconcept---entretien.firebasestorage.app",
+  messagingSenderId: "544882864820",
+  appId: "1:544882864820:web:ac1daf787d7512b83d9de1"
+});
+const db = firebase.firestore();
+
+// Cache mémoire local — mis à jour par onSnapshot
+let appData = { clients: [], interventions: [] };
+
+// getData() retourne une copie profonde pour que les mutations des appelants
+// ne perturbent pas le cache avant saveData()
+function getData() {
+  return JSON.parse(JSON.stringify(appData));
+}
+
+// saveData() compare newData avec le cache et écrit uniquement les différences
+function saveData(newData) {
+  const batch = db.batch();
+  ['clients', 'interventions'].forEach(col => {
+    const newItems = newData[col] || [];
+    const oldItems = appData[col] || [];
+    // Ajouts / modifications
+    newItems.forEach(item => {
+      const old = oldItems.find(o => o.id === item.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(item)) {
+        batch.set(db.collection(col).doc(item.id),
+          JSON.parse(JSON.stringify(item))); // supprime les undefined
+      }
+    });
+    // Suppressions
+    oldItems.forEach(item => {
+      if (!newItems.find(n => n.id === item.id))
+        batch.delete(db.collection(col).doc(item.id));
+    });
+  });
+  batch.commit().catch(err => console.error('Firestore erreur:', err));
+}
+
+function uuid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function showLoading(show) {
+  document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+}
+
+// Re-rend la page active après chaque mise à jour Firestore
+function renderCurrentPage() {
+  const pages = { planning: renderPlanning, fiches: renderFiche,
+    clients: renderClients, tontes: renderTontes, facturation: renderFacturation };
+  for (const [name, fn] of Object.entries(pages)) {
+    if (document.getElementById('page-'+name)?.classList.contains('active')) { fn(); break; }
+  }
+  updateNotifBadge();
+}
+
+function initFirestore() {
+  showLoading(true);
+  let clientsReady = false, intervReady = false;
+
+  function onBothReady() {
+    showLoading(false);
+    seedIfEmpty();
+    renderPlanning();
+    updateNotifBadge();
+  }
+
+  db.collection('clients').onSnapshot(snap => {
+    appData.clients = snap.docs.map(d => d.data());
+    if (!clientsReady) { clientsReady = true; if (intervReady) onBothReady(); }
+    else renderCurrentPage();
+  }, err => { showLoading(false); alert('Erreur Firebase clients : ' + err.message); });
+
+  db.collection('interventions').onSnapshot(snap => {
+    appData.interventions = snap.docs.map(d => d.data());
+    if (!intervReady) { intervReady = true; if (clientsReady) onBothReady(); }
+    else renderCurrentPage();
+  }, err => { showLoading(false); alert('Erreur Firebase interventions : ' + err.message); });
+}
+
+// Semaine de référence : numéro ISO de la semaine 1 de l'année comme base pour A/B
+// Semaine A = numéros de semaine impairs, B = pairs (ou inversé selon préférence)
+function getSemaineAB(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  return weekNum % 2 === 1 ? 'A' : 'B';
+}
+
+// =====================================================
+// APP STATE
+// =====================================================
+let currentWeekOffset = 0;
+let currentMonthOffset = 0;
+let planningVue = 'semaine';
+let modeAdmin = true;
+let ficheEquipe = 'Jimi';
+let currentIntervId = null;
+let currentClientId = null;
+let currentRemarqueIntervId = null;
+let excelRows = [];
+let excelHeaders = [];
+
+// =====================================================
+// NAVIGATION
+// =====================================================
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.header-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'planning') renderPlanning();
+  if (name === 'fiches') renderFiche();
+  if (name === 'clients') renderClients();
+  if (name === 'tontes') renderTontes();
+  if (name === 'facturation') renderFacturation();
+}
+
+function toggleMode() {
+  modeAdmin = !modeAdmin;
+  const badge = document.getElementById('mode-badge');
+  badge.textContent = modeAdmin ? 'Admin' : 'Ouvrier';
+  badge.style.background = modeAdmin ? '' : '#fd7e14';
+  // FAB "Créer une fiche" visible dans les deux modes
+  document.getElementById('fab-ouvrier').style.display = 'flex';
+  // Bouton "+ Intervention" (admin complet) uniquement en mode admin
+  document.getElementById('btn-nouvelle-interv').style.display = modeAdmin ? '' : 'none';
+  // Onglet Facturation masqué pour les ouvriers
+  document.getElementById('nav-facturation').style.display = modeAdmin ? '' : 'none';
+  // Si on est sur la page facturation en passant en mode ouvrier → retour planning
+  if (!modeAdmin && document.getElementById('page-facturation').classList.contains('active')) {
+    showPage('planning');
+  }
+  updateNotifBadge();
+  renderPlanning();
+}
+
+function updateNotifBadge() {
+  const { interventions } = getData();
+  const count = interventions.filter(iv => iv.statut === 'en-attente').length;
+  const btn = document.getElementById('notif-btn');
+  const countEl = document.getElementById('notif-count');
+  btn.style.display = (modeAdmin && count > 0) ? 'flex' : 'none';
+  countEl.textContent = count;
+}
+
+// =====================================================
+// PLANNING
+// =====================================================
+function getLundiSemaine(offset) {
+  const today = new Date();
+  const day = today.getDay() || 7;
+  const lundi = new Date(today);
+  lundi.setDate(today.getDate() - day + 1 + offset * 7);
+  lundi.setHours(0,0,0,0);
+  return lundi;
+}
+
+function formatDate(d) {
+  return d.toISOString().slice(0,10);
+}
+function formatDateFR(str) {
+  const [y,m,d] = str.split('-');
+  return `${d}/${m}/${y}`;
+}
+function formatDateLong(d) {
+  return d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+}
+
+function setVuePlanning(vue) {
+  planningVue = vue;
+  document.getElementById('vue-btn-semaine').classList.toggle('active', vue === 'semaine');
+  document.getElementById('vue-btn-mois').classList.toggle('active', vue === 'mois');
+  document.getElementById('planning-semaine-view').style.display = vue === 'semaine' ? '' : 'none';
+  document.getElementById('planning-mois-view').style.display = vue === 'mois' ? '' : 'none';
+  renderPlanning();
+}
+
+function navPlanning(delta) {
+  if (planningVue === 'semaine') currentWeekOffset += delta;
+  else currentMonthOffset += delta;
+  renderPlanning();
+}
+
+function allerAujourdhui() {
+  currentWeekOffset = 0;
+  currentMonthOffset = 0;
+  renderPlanning();
+}
+
+function renderPlanning() {
+  if (planningVue === 'semaine') renderPlanningSemail();
+  else renderPlanningMois();
+}
+
+function renderPlanningSemail() {
+  const lundi = getLundiSemaine(currentWeekOffset);
+  const today = formatDate(new Date());
+  const semaineAB = getSemaineAB(lundi);
+
+  const vendredi = new Date(lundi); vendredi.setDate(lundi.getDate() + 4);
+  document.getElementById('semaine-titre').textContent =
+    `Semaine du ${lundi.getDate()} au ${vendredi.getDate()} ${vendredi.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}`;
+
+  document.getElementById('label-semaine').textContent = `Semaine ${semaineAB}`;
+  document.getElementById('dot-semaine').className = `dot dot-${semaineAB}`;
+
+  const alertEl = document.getElementById('tonte-alert');
+  const { clients, interventions } = getData();
+  const clientsTonte = clients.filter(c => c.tonte && c.tonteSemaine === semaineAB);
+  if (clientsTonte.length > 0) {
+    alertEl.style.display = '';
+    alertEl.textContent = `🌿 Semaine ${semaineAB} — ${clientsTonte.length} client(s) à tondre (Timo + Mathéo) : ${clientsTonte.map(c=>c.nom).join(', ')}`;
+  } else { alertEl.style.display = 'none'; }
+
+  const joursNoms = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const grid = document.getElementById('planning-grid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < 5; i++) {
+    const jour = new Date(lundi); jour.setDate(lundi.getDate() + i);
+    const dateStr = formatDate(jour);
+    const isToday = dateStr === today;
+
+    const col = document.createElement('div');
+    col.className = 'jour-col';
+
+    const header = document.createElement('div');
+    header.className = 'jour-header' + (isToday ? ' today' : '');
+    header.innerHTML = `<div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth()+1}</div>`;
+
+    const body = document.createElement('div');
+    body.className = 'jour-body';
+
+    interventions.filter(iv => iv.date === dateStr).forEach(iv => {
+      const client = clients.find(c => c.id === iv.clientId);
+      const card = document.createElement('div');
+      card.className = 'interv-card'
+        + (iv.type === 'tonte' ? ' tonte' : '')
+        + (iv.chef === 'Timo' ? ' equipe-timo' : '')
+        + (iv.statut === 'en-attente' ? ' en-attente' : '');
+      const membres = iv.membres || [iv.chef];
+      card.innerHTML = `
+        <div class="client-name">${client ? client.nom : 'Client inconnu'}</div>
+        <div class="interv-meta">${iv.type}</div>
+        <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
+        ${statutBadgeHtml(iv.statut)}
+      `;
+      card.onclick = () => ouvrirDetailIntervention(iv.id);
+      body.appendChild(card);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-interv-btn';
+    if (modeAdmin) {
+      addBtn.textContent = '+ Ajouter';
+      addBtn.onclick = () => ouvrirNouvelleIntervention(dateStr);
+    } else {
+      addBtn.textContent = '✏️ Créer une fiche';
+      addBtn.onclick = () => ouvrirFicheOuvrier(dateStr);
+    }
+    body.appendChild(addBtn);
+
+    col.appendChild(header);
+    col.appendChild(body);
+    grid.appendChild(col);
+  }
+}
+
+function renderPlanningMois() {
+  const now = new Date();
+  const refMois = new Date(now.getFullYear(), now.getMonth() + currentMonthOffset, 1);
+  const annee = refMois.getFullYear();
+  const mois = refMois.getMonth();
+  const today = formatDate(new Date());
+
+  document.getElementById('semaine-titre').textContent =
+    refMois.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+      .replace(/^./, s => s.toUpperCase());
+
+  const semaineAB = getSemaineAB(refMois);
+  document.getElementById('label-semaine').textContent = `Semaine ${semaineAB}`;
+  document.getElementById('dot-semaine').className = `dot dot-${semaineAB}`;
+  document.getElementById('tonte-alert').style.display = 'none';
+
+  // En-têtes jours
+  const headersEl = document.getElementById('mois-jours-header');
+  headersEl.innerHTML = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+    .map(j => `<div class="mois-jour-header">${j}</div>`).join('');
+
+  const { interventions, clients } = getData();
+  const grid = document.getElementById('mois-grid');
+  grid.innerHTML = '';
+
+  // Premier jour du mois, aligné sur lundi
+  const premierJour = new Date(annee, mois, 1);
+  const debutGrille = new Date(premierJour);
+  const jourSemaine = premierJour.getDay() || 7;
+  debutGrille.setDate(premierJour.getDate() - jourSemaine + 1);
+
+  // 6 semaines max
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(debutGrille); d.setDate(debutGrille.getDate() + i);
+    const dateStr = formatDate(d);
+    const autreMois = d.getMonth() !== mois;
+    const isToday = dateStr === today;
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+    const cell = document.createElement('div');
+    cell.className = 'mois-jour' + (autreMois ? ' autre-mois' : '') + (isToday ? ' today' : '') + (isWeekend ? ' weekend' : '');
+
+    const numDiv = document.createElement('div');
+    numDiv.className = 'mois-jour-num';
+    numDiv.innerHTML = `<span>${d.getDate()}</span>`;
+    if (modeAdmin && !isWeekend) {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'add-btn-mois';
+      addBtn.textContent = '+';
+      addBtn.onclick = (e) => { e.stopPropagation(); ouvrirNouvelleIntervention(dateStr); };
+      numDiv.appendChild(addBtn);
+    }
+    cell.appendChild(numDiv);
+
+    const intervsDuJour = interventions.filter(iv => iv.date === dateStr);
+    const MAX_VISIBLE = 3;
+    intervsDuJour.slice(0, MAX_VISIBLE).forEach(iv => {
+      const client = clients.find(c => c.id === iv.clientId);
+      const dot = document.createElement('div');
+      dot.className = 'mois-interv-dot' +
+        (iv.type === 'tonte' ? ' tonte' : '') +
+        (iv.chef === 'Timo' ? ' equipe-timo' : '') +
+        (iv.statut === 'termine' ? ' termine' : '') +
+        (iv.statut === 'en-attente' ? ' en-attente' : '');
+      dot.textContent = (iv.statut === 'en-attente' ? '⏳ ' : '') + (client ? client.nom : '?') + ' · ' + iv.chef;
+      dot.onclick = () => ouvrirDetailIntervention(iv.id);
+      cell.appendChild(dot);
+    });
+    if (intervsDuJour.length > MAX_VISIBLE) {
+      const more = document.createElement('div');
+      more.className = 'mois-more';
+      more.textContent = `+${intervsDuJour.length - MAX_VISIBLE} autre(s)`;
+      more.onclick = () => ouvrirNouvelleIntervention(dateStr);
+      cell.appendChild(more);
+    }
+
+    grid.appendChild(cell);
+  }
+}
+
+// =====================================================
+// FICHE JOURNALIÈRE
+// =====================================================
+function selectFicheEquipe(equipe) {
+  ficheEquipe = equipe;
+  document.getElementById('fiche-btn-jimi').className = 'fiche-equipe-btn' + (equipe === 'Jimi' ? ' active-jimi' : '');
+  document.getElementById('fiche-btn-timo').className = 'fiche-equipe-btn' + (equipe === 'Timo' ? ' active-timo' : '');
+  renderFiche();
+}
+
+function renderFiche() {
+  const dateInput = document.getElementById('fiche-date');
+  if (!dateInput.value) {
+    dateInput.value = formatDate(new Date());
+  }
+  const date = dateInput.value;
+  const { interventions, clients } = getData();
+  const content = document.getElementById('fiche-content');
+
+  const intervsDuJour = interventions.filter(iv => iv.date === date && iv.chef === ficheEquipe);
+
+  if (intervsDuJour.length === 0) {
+    content.innerHTML = `<div class="card"><div class="empty-state">Aucune intervention planifiée pour l'équipe ${ficheEquipe} ce jour.</div></div>`;
+    return;
+  }
+
+  content.innerHTML = intervsDuJour.map(iv => {
+    const client = clients.find(c => c.id === iv.clientId);
+    const adresse = iv.adresse || (client ? client.adresse : '—');
+    const membres = (iv.membres || [iv.chef]).join(', ');
+    const remarques = iv.remarques || [];
+
+    return `
+    <div class="fiche-interv">
+      <div class="fiche-interv-header">
+        <div>
+          <strong>${client ? client.nom : 'Client inconnu'}</strong>
+          <span class="badge badge-${iv.type}" style="margin-left:8px">${iv.type}</span>
+          <span class="badge badge-${iv.statut}" style="margin-left:4px">${iv.statut}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="ouvrirDetailIntervention('${iv.id}')">Voir détail</button>
+          <button class="btn btn-secondary btn-sm" onclick="ouvrirRemarque('${iv.id}')">+ Remarque</button>
+        </div>
+      </div>
+      <div class="fiche-interv-body">
+        <div class="fiche-field">
+          <div class="fiche-field-label">📍 Adresse</div>
+          <div class="fiche-field-value">${adresse}</div>
+        </div>
+        <div class="fiche-field">
+          <div class="fiche-field-label">👷 Équipe</div>
+          <div class="fiche-field-value">${membres}</div>
+        </div>
+        <div class="fiche-field">
+          <div class="fiche-field-label">🔧 Matériel nécessaire</div>
+          <div class="fiche-field-value">${iv.materiel || '—'}</div>
+        </div>
+        <div class="fiche-field">
+          <div class="fiche-field-label">🌿 Déchets verts</div>
+          <div class="fiche-field-value">${iv.dechets ? iv.dechets + ' m³' : '—'}</div>
+        </div>
+        <div class="fiche-field" style="grid-column:1/-1">
+          <div class="fiche-field-label">📋 Demandes spécifiques</div>
+          <div class="fiche-field-value">${iv.demandes || '—'}</div>
+        </div>
+        <div class="fiche-field" style="grid-column:1/-1">
+          <div class="fiche-field-label">💬 Remarques client (prochaine intervention)</div>
+          <div class="fiche-field-value">${iv.remarquesClient || '—'}</div>
+        </div>
+        ${client && client.notes ? `<div class="fiche-field" style="grid-column:1/-1">
+          <div class="fiche-field-label">🔑 Notes accès / particularités</div>
+          <div class="fiche-field-value">${client.notes}</div>
+        </div>` : ''}
+        ${remarques.length > 0 ? `<div class="fiche-field" style="grid-column:1/-1">
+          <div class="fiche-field-label">📝 Remarques ouvriers</div>
+          <ul class="remarques-list">${remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// =====================================================
+// CLIENTS
+// =====================================================
+function renderClients(filtre = '') {
+  const { clients } = getData();
+  const list = document.getElementById('client-list');
+  const filtered = clients.filter(c =>
+    c.nom.toLowerCase().includes(filtre.toLowerCase()) ||
+    c.adresse.toLowerCase().includes(filtre.toLowerCase())
+  );
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state">Aucun client. Cliquez sur "+ Nouveau client" pour commencer.</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(c => `
+    <div class="client-item" onclick="ouvrirFormClient('${c.id}')">
+      <div class="client-info">
+        <div class="name">${c.nom}</div>
+        <div class="addr">📍 ${c.adresse}${c.tel ? ' · 📞 ' + c.tel : ''}</div>
+      </div>
+      <div class="client-tags">
+        ${c.tonte ? `<span class="badge badge-tonte">🌿 Tonte ${c.tonteJour || ''} S.${c.tonteSemaine || ''}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function filtrerClients(val) {
+  renderClients(val);
+}
+
+// =====================================================
+// TONTES
+// =====================================================
+function renderTontes() {
+  const { clients, interventions } = getData();
+  const clientsTonte = clients.filter(c => c.tonte);
+
+  // Stats
+  document.getElementById('stats-tontes').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${clientsTonte.length}</div><div class="stat-label">Clients avec tonte</div></div>
+    <div class="stat-card"><div class="stat-val">${clientsTonte.filter(c=>c.tonteSemaine==='A').length}</div><div class="stat-label">Semaine A</div></div>
+    <div class="stat-card"><div class="stat-val">${clientsTonte.filter(c=>c.tonteSemaine==='B').length}</div><div class="stat-label">Semaine B</div></div>
+  `;
+
+  // Prochaines tontes
+  const today = new Date(); today.setHours(0,0,0,0);
+  const prochaines = [];
+  for (let delta = 0; delta < 30; delta++) {
+    const d = new Date(today); d.setDate(today.getDate() + delta);
+    const nomJour = d.toLocaleDateString('fr-FR',{weekday:'long'}).toLowerCase();
+    if (nomJour !== 'jeudi' && nomJour !== 'vendredi') continue;
+    const ab = getSemaineAB(d);
+    const clientsJour = clientsTonte.filter(c => c.tonteJour === nomJour && c.tonteSemaine === ab);
+    clientsJour.forEach(c => prochaines.push({ client: c, date: new Date(d), ab }));
+  }
+
+  document.getElementById('tontes-a-venir').innerHTML = prochaines.length ? prochaines.slice(0,10).map(p => `
+    <div class="tonte-client">
+      <div class="name">${p.client.nom}</div>
+      <div class="info">📅 ${p.date.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'short'})} · Semaine ${p.ab}</div>
+      <div class="info">📍 ${p.client.adresse}</div>
+    </div>
+  `).join('') : '<div class="empty-state">Aucune tonte dans les 30 prochains jours.</div>';
+
+  // Liste complète
+  document.getElementById('tonte-clients-list').innerHTML = clientsTonte.length ? clientsTonte.map(c => `
+    <div class="tonte-client">
+      <div class="name">${c.nom}</div>
+      <div class="info">📍 ${c.adresse}</div>
+      <div class="info">🗓️ ${c.tonteJour || '—'} · Semaine ${c.tonteSemaine || '—'}</div>
+    </div>
+  `).join('') : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
+}
+
+// =====================================================
+// MODAL INTERVENTION
+// =====================================================
+function ouvrirNouvelleIntervention(dateStr) {
+  currentIntervId = null;
+  document.getElementById('modal-interv-titre').textContent = 'Nouvelle intervention';
+  document.getElementById('btn-suppr-interv').style.display = 'none';
+
+  document.getElementById('interv-date').value = dateStr || formatDate(new Date());
+  document.getElementById('interv-type').value = 'entretien';
+  document.getElementById('interv-adresse').value = '';
+  document.getElementById('interv-chef').value = 'Jimi';
+  document.getElementById('interv-materiel').value = '';
+  document.getElementById('interv-dechets').value = '';
+  document.getElementById('interv-duree').value = '';
+  document.getElementById('interv-demandes').value = '';
+  document.getElementById('interv-remarques-client').value = '';
+  document.getElementById('interv-statut').value = 'planifie';
+  onStatutChange('planifie');
+
+  // Reset membres
+  document.querySelectorAll('.membre-chip').forEach(chip => {
+    chip.classList.remove('selected');
+    if (chip.dataset.membre === 'Jimi') chip.classList.add('selected');
+  });
+
+  // Populate clients
+  const { clients } = getData();
+  const sel = document.getElementById('interv-client');
+  sel.innerHTML = clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
+  if (!clients.length) sel.innerHTML = '<option value="">— Ajouter un client d\'abord —</option>';
+
+  document.getElementById('modal-intervention').classList.remove('hidden');
+}
+
+function ouvrirEditionIntervention(id) {
+  const { interventions, clients } = getData();
+  const iv = interventions.find(i => i.id === id);
+  if (!iv) return;
+  currentIntervId = id;
+
+  document.getElementById('modal-interv-titre').textContent = 'Modifier l\'intervention';
+  document.getElementById('btn-suppr-interv').style.display = '';
+
+  document.getElementById('interv-date').value = iv.date;
+  document.getElementById('interv-type').value = iv.type;
+  document.getElementById('interv-adresse').value = iv.adresse || '';
+  document.getElementById('interv-chef').value = iv.chef;
+  document.getElementById('interv-materiel').value = iv.materiel || '';
+  document.getElementById('interv-dechets').value = iv.dechets || '';
+  document.getElementById('interv-duree').value = iv.duree || '';
+  document.getElementById('interv-demandes').value = iv.demandes || '';
+  document.getElementById('interv-remarques-client').value = iv.remarquesClient || '';
+  document.getElementById('interv-statut').value = iv.statut || 'planifie';
+  onStatutChange(iv.statut || 'planifie');
+  if (iv.statut === 'termine') buildHeuresTable(iv.heuresParMembre);
+
+  const sel = document.getElementById('interv-client');
+  sel.innerHTML = clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
+  sel.value = iv.clientId;
+
+  const membres = iv.membres || [iv.chef];
+  document.querySelectorAll('.membre-chip').forEach(chip => {
+    chip.classList.toggle('selected', membres.includes(chip.dataset.membre));
+  });
+
+  fermerModal('modal-detail');
+  document.getElementById('modal-intervention').classList.remove('hidden');
+}
+
+function toggleMembre(el) {
+  el.classList.toggle('selected');
+  if (document.getElementById('interv-statut').value === 'termine') buildHeuresTable();
+}
+
+function sauvegarderIntervention() {
+  const data = getData();
+  const clientId = document.getElementById('interv-client').value;
+  if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
+  const date = document.getElementById('interv-date').value;
+  if (!date) { alert('Veuillez choisir une date.'); return; }
+
+  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const chef = document.getElementById('interv-chef').value;
+  if (!membres.includes(chef)) membres.unshift(chef);
+
+  const statut = document.getElementById('interv-statut').value;
+  const heuresParMembre = statut === 'termine' ? getHeuresFromForm() : (currentIntervId ? data.interventions.find(i=>i.id===currentIntervId)?.heuresParMembre : null);
+  const prev = currentIntervId ? data.interventions.find(i=>i.id===currentIntervId) : null;
+  const iv = {
+    id: currentIntervId || uuid(),
+    clientId,
+    date,
+    type: document.getElementById('interv-type').value,
+    adresse: document.getElementById('interv-adresse').value,
+    chef,
+    membres,
+    materiel: document.getElementById('interv-materiel').value,
+    dechets: parseFloat(document.getElementById('interv-dechets').value) || null,
+    duree: parseFloat(document.getElementById('interv-duree').value) || null,
+    demandes: document.getElementById('interv-demandes').value,
+    remarquesClient: document.getElementById('interv-remarques-client').value,
+    statut,
+    heuresParMembre: heuresParMembre || null,
+    facturee: prev?.facturee || false,
+    soumisePar: prev?.soumisePar || null,
+    soumiseDate: prev?.soumiseDate || null,
+    remarques: prev?.remarques || []
+  };
+
+  if (currentIntervId) {
+    data.interventions = data.interventions.map(i => i.id === currentIntervId ? iv : i);
+  } else {
+    data.interventions.push(iv);
+  }
+  saveData(data);
+  fermerModal('modal-intervention');
+  updateNotifBadge();
+  renderPlanning();
+}
+
+function supprimerIntervention() {
+  if (!currentIntervId) return;
+  if (!confirm('Supprimer cette intervention ?')) return;
+  const data = getData();
+  data.interventions = data.interventions.filter(i => i.id !== currentIntervId);
+  saveData(data);
+  fermerModal('modal-intervention');
+  fermerModal('modal-detail');
+  renderPlanning();
+}
+
+// =====================================================
+// MODAL DÉTAIL
+// =====================================================
+function ouvrirDetailIntervention(id) {
+  const { interventions, clients } = getData();
+  const iv = interventions.find(i => i.id === id);
+  if (!iv) return;
+  const client = clients.find(c => c.id === iv.clientId);
+  const adresse = iv.adresse || (client ? client.adresse : '—');
+  const membres = (iv.membres || [iv.chef]).join(', ');
+
+  document.getElementById('detail-titre').textContent = client ? client.nom : 'Intervention';
+
+  document.getElementById('detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div><div class="fiche-field-label">📅 Date</div><div>${formatDateFR(iv.date)}</div></div>
+      <div><div class="fiche-field-label">Type / Statut</div><div><span class="badge badge-${iv.type}">${iv.type}</span> ${statutBadgeHtml(iv.statut)}</div></div>
+      ${iv.statut === 'en-attente' ? `<div style="grid-column:1/-1"><div style="background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:8px 12px;font-size:0.85rem">⏳ Fiche soumise par <strong>${iv.soumisePar || '?'}</strong> le ${iv.soumiseDate ? formatDateFR(iv.soumiseDate) : '?'} — en attente de validation admin</div></div>` : ''}
+      <div><div class="fiche-field-label">📍 Adresse</div><div>${adresse}</div></div>
+      <div><div class="fiche-field-label">👷 Équipe</div><div>${membres}</div></div>
+      <div><div class="fiche-field-label">🔧 Matériel</div><div>${iv.materiel || '—'}</div></div>
+      <div><div class="fiche-field-label">🌿 Déchets verts</div><div>${iv.dechets ? iv.dechets + ' m³' : '—'}</div></div>
+      <div style="grid-column:1/-1"><div class="fiche-field-label">📋 Demandes spécifiques</div><div>${iv.demandes || '—'}</div></div>
+      <div style="grid-column:1/-1"><div class="fiche-field-label">💬 Remarques client (prochaine fois)</div><div>${iv.remarquesClient || '—'}</div></div>
+    </div>
+    ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
+  `;
+
+  document.getElementById('detail-footer').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="ouvrirRemarque('${id}')">+ Remarque</button>
+    ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
+    ${modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>` : ''}
+    <button class="btn btn-secondary btn-sm" onclick="fermerModal('modal-detail')">Fermer</button>
+  `;
+
+  document.getElementById('modal-detail').classList.remove('hidden');
+}
+
+// =====================================================
+// MODAL REMARQUE
+// =====================================================
+function ouvrirRemarque(intervId) {
+  currentRemarqueIntervId = intervId;
+  document.getElementById('remarque-texte').value = '';
+  document.getElementById('modal-remarque').classList.remove('hidden');
+}
+
+function sauvegarderRemarque() {
+  const texte = document.getElementById('remarque-texte').value.trim();
+  if (!texte) { alert('Veuillez saisir une remarque.'); return; }
+  const auteur = document.getElementById('remarque-auteur').value;
+  const data = getData();
+  const iv = data.interventions.find(i => i.id === currentRemarqueIntervId);
+  if (!iv) return;
+  if (!iv.remarques) iv.remarques = [];
+  iv.remarques.push({ auteur, date: formatDate(new Date()), texte });
+  saveData(data);
+  fermerModal('modal-remarque');
+  // Refresh open detail if visible
+  if (!document.getElementById('modal-detail').classList.contains('hidden')) {
+    ouvrirDetailIntervention(currentRemarqueIntervId);
+  }
+  renderFiche();
+}
+
+// =====================================================
+// MODAL CLIENT
+// =====================================================
+function ouvrirFormClient(id) {
+  currentClientId = id || null;
+  const data = getData();
+  const client = id ? data.clients.find(c => c.id === id) : null;
+
+  document.getElementById('modal-client-titre').textContent = client ? 'Modifier le client' : 'Nouveau client';
+  document.getElementById('btn-suppr-client').style.display = client ? '' : 'none';
+
+  document.getElementById('client-nom').value = client ? client.nom : '';
+  document.getElementById('client-tel').value = client ? client.tel || '' : '';
+  document.getElementById('client-adresse').value = client ? client.adresse : '';
+  document.getElementById('client-email').value = client ? client.email || '' : '';
+  document.getElementById('client-notes').value = client ? client.notes || '' : '';
+
+  const hasTonte = client && client.tonte;
+  document.getElementById('client-tonte').checked = hasTonte;
+  toggleTonteOptions(hasTonte);
+  document.getElementById('client-tonte-jour').value = client?.tonteJour || 'jeudi';
+  document.getElementById('client-tonte-semaine').value = client?.tonteSemaine || 'A';
+
+  document.getElementById('modal-client').classList.remove('hidden');
+}
+
+function toggleTonteOptions(show) {
+  document.getElementById('tonte-options').style.display = show ? '' : 'none';
+}
+
+function sauvegarderClient() {
+  const nom = document.getElementById('client-nom').value.trim();
+  const adresse = document.getElementById('client-adresse').value.trim();
+  if (!nom || !adresse) { alert('Nom et adresse obligatoires.'); return; }
+
+  const data = getData();
+  const client = {
+    id: currentClientId || uuid(),
+    nom,
+    adresse,
+    tel: document.getElementById('client-tel').value.trim(),
+    email: document.getElementById('client-email').value.trim(),
+    notes: document.getElementById('client-notes').value.trim(),
+    tonte: document.getElementById('client-tonte').checked,
+    tonteJour: document.getElementById('client-tonte-jour').value,
+    tonteSemaine: document.getElementById('client-tonte-semaine').value,
+  };
+
+  if (currentClientId) {
+    data.clients = data.clients.map(c => c.id === currentClientId ? client : c);
+  } else {
+    data.clients.push(client);
+  }
+  saveData(data);
+  fermerModal('modal-client');
+  renderClients();
+  renderTontes();
+}
+
+function supprimerClient() {
+  if (!currentClientId) return;
+  if (!confirm('Supprimer ce client et toutes ses interventions ?')) return;
+  const data = getData();
+  data.clients = data.clients.filter(c => c.id !== currentClientId);
+  data.interventions = data.interventions.filter(i => i.clientId !== currentClientId);
+  saveData(data);
+  fermerModal('modal-client');
+  renderClients();
+}
+
+// =====================================================
+// HEURES PAR MEMBRE
+// =====================================================
+let currentFactuId = null;
+
+function onStatutChange(val) {
+  const show = val === 'termine';
+  document.getElementById('heures-section').style.display = show ? '' : 'none';
+  if (show) buildHeuresTable();
+}
+
+function buildHeuresTable(existing) {
+  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const tbody = document.getElementById('heures-tbody');
+  tbody.innerHTML = membres.map(m => {
+    const h = existing?.[m]?.heures ?? (document.getElementById('interv-duree')?.value || '');
+    const t = existing?.[m]?.taux ?? '';
+    return `<tr>
+      <td><strong>${m}</strong></td>
+      <td><input type="number" class="form-control" min="0" step="0.25" placeholder="0"
+           value="${h}" oninput="recalcTotaux()"
+           id="h-${m}" style="width:90px"></td>
+      <td><input type="number" class="form-control" min="0" step="0.5" placeholder="ex: 35"
+           value="${t}" oninput="recalcTotaux()"
+           id="t-${m}" style="width:90px"> €/h</td>
+    </tr>`;
+  }).join('');
+  recalcTotaux();
+}
+
+function recalcTotaux() {
+  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  let totalH = 0, totalMontant = 0, hasRate = false;
+  membres.forEach(m => {
+    const h = parseFloat(document.getElementById('h-'+m)?.value) || 0;
+    const t = parseFloat(document.getElementById('t-'+m)?.value) || 0;
+    totalH += h;
+    if (t > 0) { totalMontant += h * t; hasRate = true; }
+  });
+  document.getElementById('heures-totaux').innerHTML =
+    `<span>👷 <strong>${membres.length}</strong> ouvrier(s)</span>` +
+    `<span>⏱️ Total : <strong>${totalH.toFixed(2)} h</strong></span>` +
+    (hasRate ? `<span>💶 Montant estimé : <strong>${totalMontant.toFixed(2)} €</strong></span>` : '');
+}
+
+function getHeuresFromForm() {
+  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const result = {};
+  membres.forEach(m => {
+    result[m] = {
+      heures: parseFloat(document.getElementById('h-'+m)?.value) || 0,
+      taux:   parseFloat(document.getElementById('t-'+m)?.value) || 0
+    };
+  });
+  return result;
+}
+
+// =====================================================
+// FACTURATION
+// =====================================================
+function renderFacturation() {
+  const { interventions, clients } = getData();
+  const terminées = interventions.filter(iv => iv.statut === 'termine');
+
+  // Peupler filtre client
+  const selClient = document.getElementById('factu-client-filter');
+  const prevClient = selClient.value;
+  selClient.innerHTML = '<option value="">Tous les clients</option>' +
+    clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('');
+  selClient.value = prevClient;
+
+  // Filtre mois
+  const moisInput = document.getElementById('factu-mois');
+  if (!moisInput.value) {
+    const now = new Date();
+    moisInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const moisRef = moisInput.value; // "YYYY-MM"
+  const masquerFacturees = document.getElementById('factu-masquer-facturees').checked;
+  const clientFilter = selClient.value;
+
+  let filtered = terminées.filter(iv => iv.date.startsWith(moisRef));
+  if (clientFilter) filtered = filtered.filter(iv => iv.clientId === clientFilter);
+  if (masquerFacturees) filtered = filtered.filter(iv => !iv.facturee);
+
+  filtered.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Stats mini
+  const totalH = filtered.reduce((s, iv) => {
+    if (!iv.heuresParMembre) return s + (iv.duree || 0);
+    return s + Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures||0), 0);
+  }, 0);
+  const totalMontant = filtered.reduce((s, iv) => {
+    if (!iv.heuresParMembre) return s;
+    return s + Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures||0)*(v.taux||0), 0);
+  }, 0);
+  document.getElementById('factu-stats-mini').innerHTML =
+    `<div class="factu-stat"><div class="val">${filtered.length}</div><div class="lbl">Interventions</div></div>` +
+    `<div class="factu-stat"><div class="val">${totalH.toFixed(1)}h</div><div class="lbl">Heures totales</div></div>` +
+    (totalMontant > 0 ? `<div class="factu-stat"><div class="val">${totalMontant.toFixed(0)}€</div><div class="lbl">Montant estimé</div></div>` : '');
+
+  const list = document.getElementById('factu-list');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="card"><div class="empty-state">Aucune intervention terminée sur cette période.</div></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(iv => {
+    const client = clients.find(c => c.id === iv.clientId);
+    const membres = iv.membres || [iv.chef];
+    const heures = iv.heuresParMembre
+      ? Object.values(iv.heuresParMembre).reduce((a,v)=>a+(v.heures||0),0)
+      : (iv.duree || 0);
+    const montant = iv.heuresParMembre
+      ? Object.values(iv.heuresParMembre).reduce((a,v)=>a+(v.heures||0)*(v.taux||0),0)
+      : 0;
+    return `
+    <div class="factu-item${iv.facturee ? ' facturee' : ''}">
+      <div class="fi-info">
+        <div class="fi-client">${client ? client.nom : '?'}</div>
+        <div class="fi-meta">📅 ${formatDateFR(iv.date)} · ${iv.type} · ${iv.chef}
+          ${iv.facturee ? '<span class="badge badge-termine" style="margin-left:6px">✓ Facturée</span>' : ''}
+        </div>
+        <div class="equipe-chips" style="margin-top:4px">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
+      </div>
+      <div class="fi-stats">
+        <div class="factu-stat"><div class="val">${membres.length}</div><div class="lbl">ouvriers</div></div>
+        <div class="factu-stat"><div class="val">${heures.toFixed(1)}h</div><div class="lbl">heures</div></div>
+        ${montant > 0 ? `<div class="factu-stat"><div class="val">${montant.toFixed(0)}€</div><div class="lbl">estimé</div></div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="ouvrirFicheFacturation('${iv.id}')">📄 Fiche</button>
+        <button class="btn btn-secondary btn-sm" onclick="ouvrirEditionIntervention('${iv.id}')">✏️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function ouvrirFicheFacturation(id) {
+  const { interventions, clients } = getData();
+  const iv = interventions.find(i => i.id === id);
+  if (!iv) return;
+  currentFactuId = id;
+  const client = clients.find(c => c.id === iv.clientId);
+  const membres = iv.membres || [iv.chef];
+  const hp = iv.heuresParMembre || {};
+
+  let lignes = membres.map(m => {
+    const h = hp[m]?.heures ?? iv.duree ?? 0;
+    const t = hp[m]?.taux ?? 0;
+    return { m, h, t, sous: h * t };
+  });
+  const totalH = lignes.reduce((s,l)=>s+l.h, 0);
+  const totalM = lignes.reduce((s,l)=>s+l.sous, 0);
+
+  document.getElementById('factu-print-body').innerHTML = `
+    <div class="fiche-factu">
+      <div class="ff-header">
+        <div>
+          <div class="ff-logo">Vert<span>concept</span></div>
+          <div style="font-size:0.8rem;color:var(--gris);margin-top:4px">Société d'architecture des jardins</div>
+        </div>
+        <div class="ff-date">
+          <div style="font-weight:700;font-size:1rem">FICHE D'INTERVENTION</div>
+          <div>Date : ${formatDateFR(iv.date)}</div>
+          <div>Réf. : INT-${id.slice(-6).toUpperCase()}</div>
+        </div>
+      </div>
+
+      <div class="ff-grid">
+        <div class="ff-field"><div class="lbl">Client</div><div class="val"><strong>${client?.nom || '—'}</strong></div></div>
+        <div class="ff-field"><div class="lbl">Adresse</div><div class="val">${iv.adresse || client?.adresse || '—'}</div></div>
+        <div class="ff-field"><div class="lbl">Type d'intervention</div><div class="val">${iv.type}</div></div>
+        <div class="ff-field"><div class="lbl">Chef d'équipe</div><div class="val">${iv.chef}</div></div>
+        ${iv.materiel ? `<div class="ff-field" style="grid-column:1/-1"><div class="lbl">Matériel utilisé</div><div class="val">${iv.materiel}</div></div>` : ''}
+        ${iv.dechets ? `<div class="ff-field"><div class="lbl">Déchets verts évacués</div><div class="val">${iv.dechets} m³</div></div>` : ''}
+        ${iv.demandes ? `<div class="ff-field" style="grid-column:1/-1"><div class="lbl">Travaux effectués</div><div class="val">${iv.demandes}</div></div>` : ''}
+        ${iv.remarquesClient ? `<div class="ff-field" style="grid-column:1/-1"><div class="lbl">Remarques / demandes client</div><div class="val">${iv.remarquesClient}</div></div>` : ''}
+      </div>
+
+      <h2>Détail main d'œuvre</h2>
+      <table class="ff-table">
+        <thead><tr><th>Ouvrier</th><th>Heures</th><th>Taux (€/h)</th><th>Sous-total</th></tr></thead>
+        <tbody>
+          ${lignes.map(l=>`<tr>
+            <td>${l.m}</td>
+            <td>${l.h.toFixed(2)} h</td>
+            <td>${l.t > 0 ? l.t.toFixed(2)+' €' : '—'}</td>
+            <td>${l.sous > 0 ? l.sous.toFixed(2)+' €' : '—'}</td>
+          </tr>`).join('')}
+          <tr class="total-row">
+            <td><strong>TOTAL (${membres.length} ouvrier${membres.length>1?'s':''})</strong></td>
+            <td><strong>${totalH.toFixed(2)} h</strong></td>
+            <td>—</td>
+            <td><strong>${totalM > 0 ? totalM.toFixed(2)+' €' : '—'}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      ${totalM > 0 ? `<div class="ff-montant">
+        <div class="montant-lbl">MONTANT TOTAL MAIN D'ŒUVRE</div>
+        <div class="montant-val">${totalM.toFixed(2)} €</div>
+        <div class="montant-lbl" style="margin-top:4px;font-size:0.75rem">HT · hors matériaux et déchets verts</div>
+      </div>` : ''}
+
+      <div class="ff-signature">
+        <div class="sig-box"><div class="sig-lbl">Signature chef d'équipe</div></div>
+        <div class="sig-box"><div class="sig-lbl">Signature client (bon pour accord)</div></div>
+      </div>
+    </div>`;
+
+  document.getElementById('factu-marquer-cb').checked = !!iv.facturee;
+  document.getElementById('modal-factu-print').classList.remove('hidden');
+}
+
+function marquerFacturee(checked) {
+  if (!currentFactuId) return;
+  const data = getData();
+  const iv = data.interventions.find(i => i.id === currentFactuId);
+  if (iv) { iv.facturee = checked; saveData(data); renderFacturation(); }
+}
+
+// =====================================================
+// FICHE OUVRIER
+// =====================================================
+function ouvrirFicheOuvrier(dateStr) {
+  const { clients } = getData();
+  const sel = document.getElementById('fo-client');
+  sel.innerHTML = clients.length
+    ? clients.map(c => `<option value="${c.id}">${c.nom}</option>`).join('')
+    : '<option value="">— Ajouter un client d\'abord —</option>';
+  document.getElementById('fo-date').value = dateStr || formatDate(new Date());
+  document.getElementById('fo-description').value = '';
+  document.getElementById('fo-materiel').value = '';
+  document.getElementById('fo-dechets').value = '';
+  document.getElementById('fo-duree').value = '';
+  document.getElementById('fo-remarque-client').value = '';
+  document.getElementById('modal-fiche-ouvrier').classList.remove('hidden');
+}
+
+function sauvegarderFicheOuvrier() {
+  const clientId = document.getElementById('fo-client').value;
+  const date     = document.getElementById('fo-date').value;
+  const desc     = document.getElementById('fo-description').value.trim();
+  if (!clientId || !date || !desc) {
+    alert('Veuillez remplir les champs obligatoires (client, date, description).');
+    return;
+  }
+  const auteur = document.getElementById('fo-auteur').value;
+  const data = getData();
+  const iv = {
+    id: uuid(),
+    clientId,
+    date,
+    type: document.getElementById('fo-type').value,
+    adresse: '',
+    chef: CHEFS.includes(auteur) ? auteur : 'Jimi',
+    membres: [auteur],
+    materiel: document.getElementById('fo-materiel').value,
+    dechets: parseFloat(document.getElementById('fo-dechets').value) || null,
+    duree: parseFloat(document.getElementById('fo-duree').value) || null,
+    demandes: desc,
+    remarquesClient: document.getElementById('fo-remarque-client').value,
+    statut: 'en-attente',
+    soumisePar: auteur,
+    soumiseDate: formatDate(new Date()),
+    remarques: []
+  };
+  data.interventions.push(iv);
+  saveData(data);
+  fermerModal('modal-fiche-ouvrier');
+  updateNotifBadge();
+  renderPlanning();
+  alert(`✅ Fiche soumise par ${auteur}. En attente de validation par le responsable.`);
+}
+
+// =====================================================
+// VALIDATION ADMIN
+// =====================================================
+function ouvrirValidation() {
+  renderValidationList();
+  document.getElementById('modal-validation').classList.remove('hidden');
+}
+
+function renderValidationList() {
+  const { interventions, clients } = getData();
+  const pending = interventions.filter(iv => iv.statut === 'en-attente');
+  const container = document.getElementById('validation-list-content');
+
+  if (pending.length === 0) {
+    container.innerHTML = '<div class="empty-state">✅ Aucune fiche en attente de validation.</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="validation-list">' + pending.map(iv => {
+    const client = clients.find(c => c.id === iv.clientId);
+    return `
+    <div class="validation-item" id="vi-${iv.id}">
+      <div class="validation-item-header">
+        <div>
+          <strong>${client ? client.nom : 'Client inconnu'}</strong>
+          <span class="badge badge-${iv.type}" style="margin-left:6px">${iv.type}</span>
+        </div>
+        <div style="font-size:0.8rem;color:var(--gris)">
+          Soumis par <strong>${iv.soumisePar || '?'}</strong> le ${iv.soumiseDate ? formatDateFR(iv.soumiseDate) : '?'}
+          — Pour le <strong>${formatDateFR(iv.date)}</strong>
+        </div>
+        <div class="validation-actions">
+          <button class="btn-approuver" onclick="approuverFiche('${iv.id}')">✅ Approuver</button>
+          <button class="btn-refuser" onclick="refuserFiche('${iv.id}')">❌ Refuser</button>
+          <button class="btn btn-secondary btn-sm" onclick="ouvrirEditionIntervention('${iv.id}')">✏️ Modifier</button>
+        </div>
+      </div>
+      <div class="validation-item-body">
+        <div><div class="field-lbl">📍 Adresse</div>${client ? client.adresse : '—'}</div>
+        <div><div class="field-lbl">🔧 Matériel</div>${iv.materiel || '—'}</div>
+        <div><div class="field-lbl">🌿 Déchets verts</div>${iv.dechets ? iv.dechets + ' m³' : '—'}</div>
+        <div><div class="field-lbl">⏱️ Durée estimée</div>${iv.duree ? iv.duree + ' h' : '—'}</div>
+        <div style="grid-column:1/-1"><div class="field-lbl">📋 Description</div>${iv.demandes || '—'}</div>
+        ${iv.remarquesClient ? `<div style="grid-column:1/-1"><div class="field-lbl">💬 Demande client</div>${iv.remarquesClient}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function approuverFiche(id) {
+  const data = getData();
+  const iv = data.interventions.find(i => i.id === id);
+  if (!iv) return;
+
+  // Ouvrir le formulaire complet pré-rempli pour que l'admin complète l'équipe/chef
+  ouvrirEditionIntervention(id);
+  // Pré-sélectionner statut planifié
+  setTimeout(() => {
+    document.getElementById('interv-statut').value = 'planifie';
+  }, 50);
+  fermerModal('modal-validation');
+}
+
+function refuserFiche(id) {
+  if (!confirm('Refuser et supprimer cette fiche ?')) return;
+  const data = getData();
+  data.interventions = data.interventions.filter(i => i.id !== id);
+  saveData(data);
+  updateNotifBadge();
+  renderPlanning();
+  renderValidationList();
+}
+
+// =====================================================
+// IMPORT EXCEL
+// =====================================================
+function ouvrirImportExcel() {
+  excelRows = []; excelHeaders = [];
+  document.getElementById('import-step-1').style.display = '';
+  document.getElementById('import-step-2').style.display = 'none';
+  document.getElementById('btn-confirmer-import').style.display = 'none';
+  document.getElementById('import-result').innerHTML = '';
+  document.getElementById('excel-file-input').value = '';
+  document.getElementById('modal-import').classList.remove('hidden');
+}
+
+function lireExcel(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') {
+    alert("La bibliothèque de lecture Excel n'est pas chargée. Vérifiez votre connexion internet.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (data.length < 2) { alert('Le fichier semble vide ou sans données.'); return; }
+
+      excelHeaders = data[0].map(String);
+      excelRows = data.slice(1).filter(row => row.some(cell => String(cell).trim() !== ''));
+
+      document.getElementById('import-info').textContent =
+        `✅ Fichier lu : ${excelRows.length} ligne(s) détectée(s) dans "${wb.SheetNames[0]}"`;
+
+      // Peupler les selects de mapping
+      const AUCUN = '<option value="">— Ne pas importer —</option>';
+      const opts = excelHeaders.map((h, i) => `<option value="${i}">${h || 'Colonne ' + (i+1)}</option>`).join('');
+      ['map-nom','map-adresse','map-tel','map-email','map-notes'].forEach(id => {
+        document.getElementById(id).innerHTML = AUCUN + opts;
+      });
+
+      // Auto-détection intelligente des colonnes
+      const mappings = { 'map-nom': ['nom','name','client','raison','société','societe','prenom','prénom'],
+        'map-adresse': ['adresse','address','rue','voie','localisation'],
+        'map-tel': ['tel','téléphone','telephone','mobile','portable','phone'],
+        'map-email': ['email','mail','courriel','e-mail'],
+        'map-notes': ['note','notes','remarque','remarques','commentaire','info','accès','acces'] };
+      for (const [selectId, keywords] of Object.entries(mappings)) {
+        const idx = excelHeaders.findIndex(h =>
+          keywords.some(kw => h.toLowerCase().includes(kw)));
+        if (idx >= 0) document.getElementById(selectId).value = String(idx);
+      }
+
+      // Aperçu
+      const preview = document.getElementById('preview-table');
+      preview.innerHTML = `<thead><tr>${excelHeaders.map(h=>`<th>${h||'—'}</th>`).join('')}</tr></thead>
+        <tbody>${excelRows.slice(0,5).map(row =>
+          `<tr>${excelHeaders.map((_,i)=>`<td>${row[i]??''}</td>`).join('')}</tr>`
+        ).join('')}</tbody>`;
+
+      document.getElementById('import-step-1').style.display = 'none';
+      document.getElementById('import-step-2').style.display = '';
+      document.getElementById('btn-confirmer-import').style.display = '';
+    } catch(err) {
+      alert('Erreur de lecture : ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function confirmerImport() {
+  const nomCol   = document.getElementById('map-nom').value;
+  const addrCol  = document.getElementById('map-adresse').value;
+  const telCol   = document.getElementById('map-tel').value;
+  const emailCol = document.getElementById('map-email').value;
+  const notesCol = document.getElementById('map-notes').value;
+
+  if (nomCol === '') { alert('Veuillez au minimum associer la colonne "Nom".'); return; }
+
+  const data = getData();
+  let importes = 0, ignores = 0;
+
+  excelRows.forEach(row => {
+    const nom = String(row[parseInt(nomCol)] ?? '').trim();
+    if (!nom) { ignores++; return; }
+
+    // Éviter les doublons (même nom exact)
+    if (data.clients.some(c => c.nom.toLowerCase() === nom.toLowerCase())) { ignores++; return; }
+
+    data.clients.push({
+      id: uuid(),
+      nom,
+      adresse: addrCol !== '' ? String(row[parseInt(addrCol)] ?? '').trim() : '',
+      tel:     telCol  !== '' ? String(row[parseInt(telCol)]  ?? '').trim() : '',
+      email:   emailCol !== '' ? String(row[parseInt(emailCol)] ?? '').trim() : '',
+      notes:   notesCol !== '' ? String(row[parseInt(notesCol)] ?? '').trim() : '',
+      tonte: false, tonteJour: 'jeudi', tonteSemaine: 'A'
+    });
+    importes++;
+  });
+
+  saveData(data);
+  document.getElementById('import-result').innerHTML =
+    `<div class="import-result alert-success">✅ ${importes} client(s) importé(s) avec succès. ${ignores > 0 ? `${ignores} ligne(s) ignorée(s) (vide ou doublon).` : ''}</div>`;
+  document.getElementById('btn-confirmer-import').style.display = 'none';
+  renderClients();
+}
+
+// Drag & drop sur la zone
+document.addEventListener('DOMContentLoaded', () => {
+  const dz = document.getElementById('drop-zone');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) lireExcel(file);
+  });
+});
+
+// =====================================================
+// UTILS
+// =====================================================
+function fermerModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+const STATUT_LABELS = {
+  'planifie':    { icon: '📋', label: 'Planifié',       cls: 'planifie' },
+  'en-cours':    { icon: '🔧', label: 'En cours',        cls: 'en-cours' },
+  'termine':     { icon: '✅', label: 'Terminé',         cls: 'termine' },
+  'en-attente':  { icon: '⏳', label: 'En attente',      cls: 'en-attente' },
+  'refuse':      { icon: '❌', label: 'Refusé',          cls: 'refuse' },
+};
+
+function statutBadgeHtml(statut) {
+  const s = STATUT_LABELS[statut] || { icon: '?', label: statut, cls: '' };
+  return `<span class="badge badge-${s.cls}" style="margin-top:2px">${s.icon} ${s.label}</span>`;
+}
+
+// Update chef selection to auto-select in membres
+document.getElementById('interv-chef').addEventListener('change', function() {
+  document.querySelectorAll('.membre-chip').forEach(chip => {
+    if (CHEFS.includes(chip.dataset.membre)) chip.classList.remove('selected');
+    if (chip.dataset.membre === this.value) chip.classList.add('selected');
+  });
+});
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) {
+      this.classList.add('hidden');
+    }
+  });
+});
+
+// =====================================================
+// INIT
+// =====================================================
+document.getElementById('fiche-date').value = formatDate(new Date());
+document.getElementById('fab-ouvrier').style.display = 'flex';
+initFirestore(); // Lance la connexion Firebase et les listeners temps réel
+
+function seedIfEmpty() {
+  if (appData.clients.length > 0) return; // Données déjà présentes dans Firestore
+  const batch = db.batch();
+
+  const c1 = { id: uuid(), nom: 'Famille Dupont', adresse: '12 rue des Lilas, 69000 Lyon', tel: '06 12 34 56 78', email: '', notes: 'Code portail : 1234', tonte: true, tonteJour: 'jeudi', tonteSemaine: 'A' };
+  const c2 = { id: uuid(), nom: 'M. Martin', adresse: '5 avenue des Roses, 69300 Caluire', tel: '07 98 76 54 32', email: 'martin@email.fr', notes: 'Chien dans le jardin', tonte: true, tonteJour: 'vendredi', tonteSemaine: 'A' };
+  const c3 = { id: uuid(), nom: 'Résidence Les Pins', adresse: '88 bd du Parc, 69100 Villeurbanne', tel: '', email: '', notes: '', tonte: false };
+  const c4 = { id: uuid(), nom: 'Mme Bernard', adresse: '3 chemin des Acacias, 69130 Écully', tel: '06 55 44 33 22', email: '', notes: 'Semaine B tonte', tonte: true, tonteJour: 'jeudi', tonteSemaine: 'B' };
+  [c1,c2,c3,c4].forEach(c => batch.set(db.collection('clients').doc(c.id), c));
+
+  const today = formatDate(new Date());
+  const lundi = getLundiSemaine(0);
+  const mercredi = new Date(lundi); mercredi.setDate(lundi.getDate()+2);
+  const jeudi = new Date(lundi); jeudi.setDate(lundi.getDate()+3);
+  const vendredi = new Date(lundi); vendredi.setDate(lundi.getDate()+4);
+
+  const interventions = [
+    { id: uuid(), clientId: c1.id, date: formatDate(lundi), type: 'entretien', adresse: '', chef: 'Jimi', membres: ['Jimi','Bryan'], materiel: 'Taille-haie, souffleur, sécateur', dechets: 1.5, duree: 3, demandes: 'Taille des haies côté rue à priorité', remarquesClient: 'Client souhaite ajouter une plantation en automne', statut: 'planifie', remarques: [] },
+    { id: uuid(), clientId: c3.id, date: formatDate(mercredi), type: 'entretien', adresse: '', chef: 'Timo', membres: ['Timo','Evann','Matheo'], materiel: 'Tondeuse, souffleur, débroussailleuse', dechets: 3, duree: 5, demandes: 'Désherber les allées, tondre pelouse commune', remarquesClient: '', statut: 'planifie', remarques: [] },
+    { id: uuid(), clientId: c1.id, date: formatDate(jeudi), type: 'tonte', adresse: '', chef: 'Timo', membres: ['Timo','Matheo'], materiel: 'Tondeuse robot + tondeuse manuelle', dechets: 0.5, duree: 1.5, demandes: '', remarquesClient: '', statut: 'planifie', remarques: [{auteur:'Matheo', date: today, texte:'Voir si la haie au fond nécessite une taille aussi'}] },
+    { id: uuid(), clientId: c2.id, date: formatDate(vendredi), type: 'tonte', adresse: '', chef: 'Timo', membres: ['Timo','Matheo'], materiel: 'Tondeuse autoportée', dechets: 0.8, duree: 2, demandes: '', remarquesClient: 'Attention aux nouvelles plantes en bordure', statut: 'planifie', remarques: [] },
+  ];
+  interventions.forEach(iv => batch.set(db.collection('interventions').doc(iv.id), iv));
+  batch.commit().catch(err => console.error('Seed error:', err));
+}
+</script>
+</body>
+</html>
