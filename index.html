@@ -712,7 +712,8 @@
   <div class="page" id="page-tontes">
     <div class="flex-between mb-1">
       <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mateo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
-      <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:8px;white-space:nowrap">🌱 Tonte ponctuelle</button>
+      <button class="btn btn-secondary btn-sm" id="btn-geo-tontes" onclick="geolocaliserClients()" style="margin-left:8px;white-space:nowrap">📍 Géolocaliser</button>
+      <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:4px;white-space:nowrap">🌱 Tonte ponctuelle</button>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
       <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
     </div>
@@ -722,7 +723,7 @@
       <div class="tonte-grid" id="tontes-a-venir"></div>
     </div>
     <div class="card">
-      <div class="card-title">🗺️ Tournée optimisée — ordre de passage (par code postal)</div>
+      <div class="card-title">🗺️ Tournée optimisée — ordre de passage</div>
       <div id="tonte-tournee"></div>
     </div>
     <div class="card">
@@ -2172,19 +2173,30 @@ function renderTontes() {
       </div>`).join('')
     : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
 
-  // --- Tournée optimisée : tri par code postal puis ville/rue ---
-  const tournee = [...clientsTonte].sort(comparerTonteAdresse);
-  document.getElementById('tonte-tournee').innerHTML = tournee.length
-    ? `<ol style="margin:0;padding-left:1.5rem;line-height:1.9">` + tournee.map(c => {
-        const cp = c.codePostal || '';
-        const ville = c.ville || '';
-        const rue = c.rue || c.adresse || '';
-        const lieu = [rue, [cp, ville].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || '📍 adresse manquante';
-        const montant = estMarco && c.tontePrix ? ` <span style="color:var(--vert);font-weight:700">· 💶 ${eur(c.tontePrix)}</span>` : '';
-        return `<li style="margin-bottom:2px"><strong>${c.nom}</strong> <span style="color:var(--gris)">— ${lieu}</span>${montant}</li>`;
-      }).join('') + `</ol>
-      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">Ordre indicatif regroupé par code postal. Ajustez sur le terrain si besoin.</div>`
-    : '<div class="empty-state">Aucun client tonte à ordonner.</div>';
+  // --- Tournée optimisée : itinéraire au plus proche (GPS), repli tri code postal ---
+  const ligneClient = c => {
+    const cp = c.codePostal || ''; const ville = c.ville || ''; const rue = c.rue || c.adresse || '';
+    const lieu = [rue, [cp, ville].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || '📍 adresse manquante';
+    const montant = estMarco && c.tontePrix ? ` <span style="color:var(--vert);font-weight:700">· 💶 ${eur(c.tontePrix)}</span>` : '';
+    return `<li style="margin-bottom:2px"><strong>${c.nom}</strong> <span style="color:var(--gris)">— ${lieu}</span>${montant}</li>`;
+  };
+  const ttEl = document.getElementById('tonte-tournee');
+  if (!clientsTonte.length) {
+    ttEl.innerHTML = '<div class="empty-state">Aucun client tonte à ordonner.</div>';
+  } else {
+    const { ordre, sansGeo } = ordonnerTournee(clientsTonte, getDepotGeo());
+    const modeGeo = ordre.length > 0;
+    const liste = modeGeo ? ordre : [...clientsTonte].sort(comparerTonteAdresse);
+    ttEl.innerHTML = `
+      <div id="tonte-geo-status" style="font-size:0.82rem;margin-bottom:8px;color:${modeGeo ? 'var(--vert)' : 'var(--orange)'}">
+        ${modeGeo
+          ? `🧭 Itinéraire au plus proche depuis le dépôt (${DEPOT_TONTE})`
+          : `⚠️ Adresses pas encore géolocalisées — ordre provisoire par code postal. Cliquez « 📍 Géolocaliser » pour un vrai itinéraire.`}
+      </div>
+      <ol style="margin:0;padding-left:1.5rem;line-height:1.9">${liste.map(ligneClient).join('')}</ol>
+      ${sansGeo.length ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">📍 ${sansGeo.length} client(s) sans coordonnées (hors itinéraire) : ${sansGeo.map(c=>c.nom).join(', ')}. Relancez « 📍 Géolocaliser ».</div>` : ''}
+      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">Ordre indicatif. Ajustez sur le terrain si besoin.</div>`;
+  }
 
   // --- Rentabilité (Marco uniquement) ---
   const cardRenta = document.getElementById('card-rentabilite');
@@ -2225,6 +2237,8 @@ function renderTontes() {
   // Afficher/masquer bouton générer selon le mode
   const btnGen = document.getElementById('btn-generer-tontes');
   if (btnGen) btnGen.style.display = modeAdmin ? '' : 'none';
+  const btnGeo = document.getElementById('btn-geo-tontes');
+  if (btnGeo) btnGeo.style.display = modeAdmin ? '' : 'none';
 }
 
 // Comparateur d'adresses pour la tournée (code postal, puis ville, puis rue, puis nom)
@@ -2249,6 +2263,85 @@ function nbPassagesAn(client, saison) {
   const debut = (client.tonteDebut && client.tonteDebut > saison.debut) ? client.tonteDebut : saison.debut;
   if (debut > saison.fin) return 0;
   return getTonteDates(debut, saison.fin).length;
+}
+
+// =====================================================
+// ITINÉRAIRE INTELLIGENT (géocodage OpenStreetMap + plus proche voisin)
+// =====================================================
+const DEPOT_TONTE = 'Rue de Grammont 37, 7830 Bassilly';
+
+// Coordonnées du dépôt (mises en cache localement après géocodage)
+function getDepotGeo() {
+  try { const d = JSON.parse(localStorage.getItem('vc_depot_geo') || 'null'); return (d && typeof d.lat === 'number') ? d : null; }
+  catch (e) { return null; }
+}
+
+// Distance approchée (équirectangulaire) — suffisant pour ordonner dans une petite région
+function distGeo(a, b) {
+  const k = Math.cos(a.lat * Math.PI / 180);
+  const dx = a.lat - b.lat, dy = (a.lng - b.lng) * k;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Ordonne les clients géolocalisés au plus proche depuis le dépôt (ou, sans dépôt, du plus au nord-ouest)
+function ordonnerTournee(clients, depot) {
+  const aCoord = c => typeof c.lat === 'number' && typeof c.lng === 'number';
+  const reste = clients.filter(aCoord);
+  const sansGeo = clients.filter(c => !aCoord(c));
+  if (!reste.length) return { ordre: [], sansGeo };
+  const ordre = [];
+  let current = depot;
+  if (!current) {
+    reste.sort((a, b) => (b.lat - a.lat) || (a.lng - b.lng));
+    current = reste.shift(); ordre.push(current);
+  }
+  while (reste.length) {
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < reste.length; i++) { const d = distGeo(current, reste[i]); if (d < bd) { bd = d; bi = i; } }
+    current = reste.splice(bi, 1)[0]; ordre.push(current);
+  }
+  return { ordre, sansGeo };
+}
+
+// Géocode une adresse via Nominatim (OpenStreetMap). Renvoie {lat,lng} ou null.
+function geocoderAdresse(adresse) {
+  const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=be&q=' + encodeURIComponent(adresse);
+  return fetch(url, { headers: { 'Accept': 'application/json' } })
+    .then(r => r.json())
+    .then(d => (Array.isArray(d) && d.length) ? { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) } : null)
+    .catch(() => null);
+}
+
+// Géolocalise les clients tonte (et le dépôt) — appels limités à ~1/seconde (politique Nominatim)
+async function geolocaliserClients() {
+  const clientsTonte = appData.clients.filter(c => c.tonte);
+  if (!clientsTonte.length) { alert('Aucun client tonte à géolocaliser.'); return; }
+  const aGeo = clientsTonte.filter(c => !(typeof c.lat === 'number') || c.geoAddr !== c.adresse);
+  const depotManque = !getDepotGeo();
+  if (!aGeo.length && !depotManque) { alert('✅ Tous les clients tonte sont déjà géolocalisés.'); return; }
+  if (!confirm(`Géolocaliser ${aGeo.length} client(s)${depotManque ? ' + le dépôt' : ''} via OpenStreetMap ?\n(~1 seconde par adresse, à faire une seule fois)`)) return;
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const setStatus = t => { const el = document.getElementById('tonte-geo-status'); if (el) { el.textContent = t; el.style.color = 'var(--vert)'; } };
+
+  if (depotManque) {
+    setStatus('📍 Géolocalisation du dépôt…');
+    const g = await geocoderAdresse(DEPOT_TONTE + ', Belgique');
+    if (g) localStorage.setItem('vc_depot_geo', JSON.stringify({ ...g, adresse: DEPOT_TONTE }));
+    await sleep(1100);
+  }
+  let ok = 0, fail = 0, manquants = [];
+  for (let i = 0; i < aGeo.length; i++) {
+    const c = aGeo[i];
+    setStatus(`📍 Géolocalisation ${i + 1}/${aGeo.length} : ${c.nom}…`);
+    const adr = (c.adresse || [c.rue, c.codePostal, c.ville].filter(Boolean).join(', '));
+    const g = await geocoderAdresse(adr + ', Belgique');
+    if (g) { saveDoc('clients', { ...c, lat: g.lat, lng: g.lng, geoAddr: c.adresse }); ok++; }
+    else { fail++; manquants.push(c.nom); }
+    await sleep(1100);
+  }
+  alert(`✅ Géolocalisation terminée : ${ok} OK${fail ? `, ${fail} introuvable(s) : ${manquants.join(', ')}` : ''}.`);
+  renderTontes();
 }
 
 // =====================================================
