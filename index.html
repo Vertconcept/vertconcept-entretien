@@ -2675,6 +2675,32 @@ function supprimerIntervention() {
 // =====================================================
 // MODAL DÉTAIL
 // =====================================================
+// Formate un numéro belge au format international wa.me (chiffres, sans +, avec 32)
+function telWhatsApp(raw) {
+  let t = (raw || '').replace(/[^\d+]/g, '');
+  if (!t) return null;
+  if (t.startsWith('+')) t = t.slice(1);
+  else if (t.startsWith('00')) t = t.slice(2);
+  else if (t.startsWith('0')) t = '32' + t.slice(1);
+  else if (!t.startsWith('32')) t = '32' + t;
+  return t.length >= 10 ? t : null;
+}
+
+// Ouvre WhatsApp avec un message de prévenance pré-rempli (envoi manuel par l'utilisateur)
+function prevenirWhatsApp(id) {
+  const { interventions, clients } = getData();
+  const iv = interventions.find(i => i.id === id);
+  if (!iv) return;
+  const client = clients.find(c => c.id === iv.clientId);
+  const num = telWhatsApp(client && client.tel);
+  if (!num) { alert('Ce client n’a pas de numéro de téléphone valide dans sa fiche.'); return; }
+  const dateLong = new Date(iv.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const quoi = { entretien: "l'entretien de votre jardin", tonte: "la tonte de votre pelouse", pulverisation: "un traitement" }[iv.type] || "une intervention";
+  const prenom = client.prenom ? ' ' + client.prenom : '';
+  const msg = `Bonjour${prenom}, Vertconcept passera chez vous le ${dateLong} pour ${quoi}. Belle journée ! 🌿`;
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
 function ouvrirDetailIntervention(id) {
   const { interventions, clients } = getData();
   const iv = interventions.find(i => i.id === id);
@@ -2720,6 +2746,7 @@ function ouvrirDetailIntervention(id) {
   document.getElementById('detail-footer').innerHTML = `
     ${btnsStatut}
     <button class="btn btn-secondary btn-sm" onclick="ouvrirRemarque('${id}')">+ Remarque</button>
+    ${client && client.tel ? `<button class="btn btn-sm" style="background:#25D366;color:white;border:none" onclick="prevenirWhatsApp('${id}')">📲 Prévenir WhatsApp</button>` : ''}
     ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
     ${modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>` : ''}
     <button class="btn btn-secondary btn-sm" onclick="fermerModal('modal-detail')">Fermer</button>
