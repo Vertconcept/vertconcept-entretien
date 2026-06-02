@@ -1637,7 +1637,12 @@ let excelRows = [];
 let excelHeaders = [];
 let currentUser = null; // { name, isAdmin } — connecté actuellement
 // Frais de fonctionnement des tontes (éditable par Marco, stocké dans Firestore config/fraisTontes)
-const FRAIS_TONTES_DEFAUT = { leasingTracteur: 230, camionnette: 0, carburant: 0, coutHoraireOuvrier: 0, heuresParJour: 8, nbOuvriers: 2 };
+const FRAIS_TONTES_DEFAUT = {
+  leasingTracteur: 230,
+  camionnetteLeasing: 900, camionnetteJoursTonte: 4, camionnetteJoursOuvrables: 20,
+  consoLitres100: 13, prixCarburant: 1.75, fraisDiversParTournee: 50,
+  coutHoraireOuvrier: 0, heuresParJour: 8, nbOuvriers: 2
+};
 let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
 
 // =====================================================
@@ -2245,8 +2250,12 @@ function renderTontes() {
       <div style="font-weight:800;margin-bottom:8px">💸 Frais de fonctionnement & marge nette <span style="font-size:0.75rem;font-weight:600;color:var(--gris)">— frais fixes sur 12 mois</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
         <label style="font-size:0.8rem;display:block">🚜 Leasing tracteur (€/mois)<input type="number" step="0.01" min="0" id="frais-tracteur" class="form-control" style="margin-top:3px" value="${fraisTontes.leasingTracteur}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
-        <label style="font-size:0.8rem;display:block">🚐 Camionnette (€/mois)<input type="number" step="0.01" min="0" id="frais-camionnette" class="form-control" style="margin-top:3px" value="${fraisTontes.camionnette}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
-        <label style="font-size:0.8rem;display:block">⛽ Carburant (€/mois)<input type="number" step="0.01" min="0" id="frais-carburant" class="form-control" style="margin-top:3px" value="${fraisTontes.carburant}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">🚐 Leasing camionnette (€/mois)<input type="number" step="0.01" min="0" id="frais-camionnette" class="form-control" style="margin-top:3px" value="${fraisTontes.camionnetteLeasing}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">🚐 Jours tonte / mois<input type="number" step="0.5" min="0" id="frais-van-jours" class="form-control" style="margin-top:3px" value="${fraisTontes.camionnetteJoursTonte}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">🚐 Jours ouvrables / mois<input type="number" step="0.5" min="1" id="frais-van-ouvrables" class="form-control" style="margin-top:3px" value="${fraisTontes.camionnetteJoursOuvrables}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">⛽ Consommation (L/100km)<input type="number" step="0.1" min="0" id="frais-conso" class="form-control" style="margin-top:3px" value="${fraisTontes.consoLitres100}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">⛽ Prix carburant (€/L)<input type="number" step="0.01" min="0" id="frais-prix-carb" class="form-control" style="margin-top:3px" value="${fraisTontes.prixCarburant}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">🧰 Frais divers / tournée (€)<input type="number" step="0.01" min="0" id="frais-divers" class="form-control" style="margin-top:3px" value="${fraisTontes.fraisDiversParTournee}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
         <label style="font-size:0.8rem;display:block">👷 Coût horaire / ouvrier (€/h)<input type="number" step="0.01" min="0" id="frais-cout-horaire" class="form-control" style="margin-top:3px" value="${fraisTontes.coutHoraireOuvrier}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
         <label style="font-size:0.8rem;display:block">⏱️ Heures par jour de tonte<input type="number" step="0.5" min="0" id="frais-heures-jour" class="form-control" style="margin-top:3px" value="${fraisTontes.heuresParJour}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
         <label style="font-size:0.8rem;display:block">👥 Nombre d'ouvriers<input type="number" step="1" min="1" id="frais-nb-ouvriers" class="form-control" style="margin-top:3px" value="${fraisTontes.nbOuvriers}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
@@ -2291,7 +2300,27 @@ function nbJoursTonteAn(saison) {
   return jours || (getTonteDates(saison.debut, saison.fin).length * 2);
 }
 
-// Calcule recettes / frais / marge nette des tontes (frais fixes sur 12 mois, main-d'œuvre = h × coût horaire)
+// Distance réelle entre deux points GPS (km)
+function haversineKm(a, b) {
+  const R = 6371, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// Longueur de la boucle complète : dépôt → tous les clients (dans l'ordre) → dépôt (≈ trajet routier ×1,3)
+function distanceBoucleTontesKm() {
+  const depot = getDepotGeo();
+  if (!depot) return 0;
+  const { ordre } = ordonnerTournee(appData.clients.filter(c => c.tonte), depot);
+  if (!ordre.length) return 0;
+  let km = 0, prev = depot;
+  for (const c of ordre) { km += haversineKm(prev, c); prev = c; }
+  km += haversineKm(prev, depot);
+  return km * 1.3;
+}
+
+// Calcule recettes / frais / marge nette des tontes
 function calculerRentabiliteTontes(f) {
   f = f || fraisTontes;
   const saison = saisonTonte();
@@ -2301,50 +2330,66 @@ function calculerRentabiliteTontes(f) {
   const ponctuelles = appData.interventions.filter(iv => iv.tontePonctuelle && iv.tontePrix && (iv.date || '').startsWith(annee));
   const recettes = recRotation + ponctuelles.reduce((s, iv) => s + (iv.tontePrix || 0), 0);
 
-  const fraisFixesAn = ((f.leasingTracteur || 0) + (f.camionnette || 0) + (f.carburant || 0)) * 12;
   const nbJours = nbJoursTonteAn(saison);
+  const nbTournees = getTonteDates(saison.debut, saison.fin).length || Math.ceil(nbJours / 2);
+  const loopKm = distanceBoucleTontesKm();
+
+  const coutTracteur = (f.leasingTracteur || 0) * 12;
+  const ratioVan = (f.camionnetteJoursOuvrables > 0) ? ((f.camionnetteJoursTonte || 0) / f.camionnetteJoursOuvrables) : 0;
+  const coutCamionnette = (f.camionnetteLeasing || 0) * ratioVan * 12;
+  const coutCarburant = loopKm * ((f.consoLitres100 || 0) / 100) * (f.prixCarburant || 0) * nbTournees;
+  const coutDivers = (f.fraisDiversParTournee || 0) * nbTournees;
   const heures = nbJours * (f.heuresParJour || 8) * (f.nbOuvriers || 2);
   const mainOeuvre = heures * (f.coutHoraireOuvrier || 0);
-  const fraisTotal = fraisFixesAn + mainOeuvre;
+  const fraisTotal = coutTracteur + coutCamionnette + coutCarburant + coutDivers + mainOeuvre;
   const marge = recettes - fraisTotal;
   const margePct = recettes ? (marge / recettes * 100) : 0;
-  // Pour 30 % de marge : recettes cibles et hausse de tarifs nécessaire
   const cible = fraisTotal / (1 - 0.30);
   const haussePct = recettes ? Math.max(0, (cible / recettes - 1) * 100) : 0;
-  return { recettes, fraisFixesAn, nbJours, heures, mainOeuvre, fraisTotal, marge, margePct, haussePct };
+  return { recettes, coutTracteur, coutCamionnette, coutCarburant, coutDivers, mainOeuvre, heures, nbJours, nbTournees, loopKm, ratioVan, fraisTotal, marge, margePct, haussePct };
 }
 
 // Construit le bloc résultat (recettes − frais = marge nette)
 function renderMargeResult(r) {
   const eur = n => n.toFixed(2).replace('.', ',') + ' €';
   const coulMarge = r.marge >= 0 ? 'var(--vert)' : '#c0392b';
+  const ligne = (lbl, val) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">${lbl}</td><td style="padding:5px 4px;text-align:right;color:#c0392b">− ${eur(val)}</td></tr>`;
   return `
-    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:10px">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:10px">
       <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">💶 Recettes annuelles</td><td style="padding:5px 4px;text-align:right;font-weight:700">${eur(r.recettes)}</td></tr>
-      <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">🏷️ Frais fixes (tracteur + camionnette + carburant) × 12</td><td style="padding:5px 4px;text-align:right;color:#c0392b">− ${eur(r.fraisFixesAn)}</td></tr>
-      <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">👷 Main-d'œuvre (${r.nbJours} j × ${(fraisTontes.heuresParJour||8)} h × ${(fraisTontes.nbOuvriers||2)} ouvriers = ${r.heures} h)</td><td style="padding:5px 4px;text-align:right;color:#c0392b">− ${eur(r.mainOeuvre)}</td></tr>
+      ${ligne('🚜 Leasing tracteur (×12)', r.coutTracteur)}
+      ${ligne(`🚐 Camionnette (${(r.ratioVan * 100).toFixed(0)} % d'usage × 12)`, r.coutCamionnette)}
+      ${ligne(`⛽ Carburant (${r.loopKm.toFixed(0)} km × ${r.nbTournees} tournées)`, r.coutCarburant)}
+      ${ligne(`🧰 Frais divers (${r.nbTournees} tournées)`, r.coutDivers)}
+      ${ligne(`👷 Main-d'œuvre (${r.heures} h)`, r.mainOeuvre)}
       <tr style="border-top:2px solid var(--vert)"><td style="padding:8px 4px;font-weight:800">📊 Marge nette</td><td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.05rem;color:${coulMarge}">${eur(r.marge)} (${r.margePct.toFixed(0)} %)</td></tr>
     </table>
     ${r.haussePct > 0.5
-      ? `<div style="font-size:0.82rem;color:var(--orange);margin-top:8px">💡 Pour atteindre 30 % de marge, il faudrait augmenter les tarifs de tonte d'environ <strong>+${r.haussePct.toFixed(0)} %</strong>.</div>`
-      : `<div style="font-size:0.82rem;color:var(--vert);margin-top:8px">✅ Marge ≥ 30 % — tarification saine.</div>`}`;
+      ? `<div style="font-size:0.82rem;color:var(--orange);margin-top:8px">💡 Pour atteindre 30 % de marge, augmentez les tarifs de tonte d'environ <strong>+${r.haussePct.toFixed(0)} %</strong>.</div>`
+      : `<div style="font-size:0.82rem;color:var(--vert);margin-top:8px">✅ Marge ≥ 30 % — tarification saine.</div>`}
+    <div style="font-size:0.74rem;color:var(--gris);margin-top:4px">Carburant estimé sur la boucle complète dépôt → clients → dépôt (≈ trajet routier).</div>`;
+}
+
+// Lit les valeurs du formulaire de frais
+function lireFraisForm() {
+  const v = id => parseFloat(document.getElementById(id).value) || 0;
+  return {
+    leasingTracteur: v('frais-tracteur'),
+    camionnetteLeasing: v('frais-camionnette'), camionnetteJoursTonte: v('frais-van-jours'), camionnetteJoursOuvrables: v('frais-van-ouvrables') || 20,
+    consoLitres100: v('frais-conso') || 13, prixCarburant: v('frais-prix-carb'), fraisDiversParTournee: v('frais-divers'),
+    coutHoraireOuvrier: v('frais-cout-horaire'), heuresParJour: v('frais-heures-jour') || 8, nbOuvriers: v('frais-nb-ouvriers') || 2
+  };
 }
 
 // Recalcule l'affichage de la marge en direct (sans recharger la page)
 function recalcMargeTontes() {
-  const v = id => parseFloat(document.getElementById(id).value) || 0;
-  const f = { leasingTracteur: v('frais-tracteur'), camionnette: v('frais-camionnette'), carburant: v('frais-carburant'),
-    coutHoraireOuvrier: v('frais-cout-horaire'), heuresParJour: v('frais-heures-jour') || 8, nbOuvriers: v('frais-nb-ouvriers') || 2 };
   const el = document.getElementById('tonte-marge-result');
-  if (el) el.innerHTML = renderMargeResult(calculerRentabiliteTontes(f));
+  if (el) el.innerHTML = renderMargeResult(calculerRentabiliteTontes(lireFraisForm()));
 }
 
 // Enregistre les frais dans Firestore
 function saveFraisTontes() {
-  const v = id => parseFloat(document.getElementById(id).value) || 0;
-  const data = { leasingTracteur: v('frais-tracteur'), camionnette: v('frais-camionnette'), carburant: v('frais-carburant'),
-    coutHoraireOuvrier: v('frais-cout-horaire'), heuresParJour: v('frais-heures-jour') || 8, nbOuvriers: v('frais-nb-ouvriers') || 2 };
-  db.collection('config').doc('fraisTontes').set(data).catch(e => console.error('saveFraisTontes', e));
+  db.collection('config').doc('fraisTontes').set(lireFraisForm()).catch(e => console.error('saveFraisTontes', e));
 }
 
 // =====================================================
