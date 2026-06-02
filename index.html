@@ -2190,7 +2190,7 @@ function renderTontes() {
     ttEl.innerHTML = `
       <div id="tonte-geo-status" style="font-size:0.82rem;margin-bottom:8px;color:${modeGeo ? 'var(--vert)' : 'var(--orange)'}">
         ${modeGeo
-          ? `🧭 Itinéraire au plus proche depuis le dépôt (${DEPOT_TONTE})`
+          ? `🧭 Itinéraire au plus proche depuis le dépôt (${DEPOT_TONTE.adresse})`
           : `⚠️ Adresses pas encore géolocalisées — ordre provisoire par code postal. Cliquez « 📍 Géolocaliser » pour un vrai itinéraire.`}
       </div>
       <ol style="margin:0;padding-left:1.5rem;line-height:1.9">${liste.map(ligneClient).join('')}</ol>
@@ -2268,13 +2268,9 @@ function nbPassagesAn(client, saison) {
 // =====================================================
 // ITINÉRAIRE INTELLIGENT (géocodage OpenStreetMap + plus proche voisin)
 // =====================================================
-const DEPOT_TONTE = 'Rue de Grammont 37, 7830 Bassilly';
-
-// Coordonnées du dépôt (mises en cache localement après géocodage)
-function getDepotGeo() {
-  try { const d = JSON.parse(localStorage.getItem('vc_depot_geo') || 'null'); return (d && typeof d.lat === 'number') ? d : null; }
-  catch (e) { return null; }
-}
+// Dépôt / point de départ de la tournée (coordonnées fixes — géocodées une fois)
+const DEPOT_TONTE = { adresse: 'Rue de Grammont 37, 7830 Bassilly', lat: 50.6895117, lng: 3.9272252 };
+function getDepotGeo() { return DEPOT_TONTE; }
 
 // Distance approchée (équirectangulaire) — suffisant pour ordonner dans une petite région
 function distGeo(a, b) {
@@ -2317,19 +2313,12 @@ async function geolocaliserClients() {
   const clientsTonte = appData.clients.filter(c => c.tonte);
   if (!clientsTonte.length) { alert('Aucun client tonte à géolocaliser.'); return; }
   const aGeo = clientsTonte.filter(c => !(typeof c.lat === 'number') || c.geoAddr !== c.adresse);
-  const depotManque = !getDepotGeo();
-  if (!aGeo.length && !depotManque) { alert('✅ Tous les clients tonte sont déjà géolocalisés.'); return; }
-  if (!confirm(`Géolocaliser ${aGeo.length} client(s)${depotManque ? ' + le dépôt' : ''} via OpenStreetMap ?\n(~1 seconde par adresse, à faire une seule fois)`)) return;
+  if (!aGeo.length) { alert('✅ Tous les clients tonte sont déjà géolocalisés.'); return; }
+  if (!confirm(`Géolocaliser ${aGeo.length} client(s) via OpenStreetMap ?\n(~1 seconde par adresse, à faire une seule fois)`)) return;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const setStatus = t => { const el = document.getElementById('tonte-geo-status'); if (el) { el.textContent = t; el.style.color = 'var(--vert)'; } };
 
-  if (depotManque) {
-    setStatus('📍 Géolocalisation du dépôt…');
-    const g = await geocoderAdresse(DEPOT_TONTE + ', Belgique');
-    if (g) localStorage.setItem('vc_depot_geo', JSON.stringify({ ...g, adresse: DEPOT_TONTE }));
-    await sleep(1100);
-  }
   let ok = 0, fail = 0, manquants = [];
   for (let i = 0; i < aGeo.length; i++) {
     const c = aGeo[i];
