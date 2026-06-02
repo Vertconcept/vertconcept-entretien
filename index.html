@@ -711,7 +711,7 @@
   <!-- ===== TONTES ===== -->
   <div class="page" id="page-tontes">
     <div class="flex-between mb-1">
-      <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mathéo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
+      <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mateo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
       <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:8px;white-space:nowrap">🌱 Tonte ponctuelle</button>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
       <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
@@ -746,7 +746,7 @@
     </div>
     <div class="modal-body">
       <div class="alert alert-info" style="margin-bottom:1rem">
-        Crée automatiquement une intervention <strong>Tonte - Tournée complète</strong> chaque jeudi et vendredi, toutes les 2 semaines, pour <strong>Timo + Mathéo</strong>.
+        Crée automatiquement une intervention <strong>Tonte - Tournée complète</strong> chaque jeudi et vendredi, toutes les 2 semaines, pour <strong>Timo + Mateo</strong>.
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -890,7 +890,7 @@
             <option value="Jimi">Jimi</option>
             <option value="Timo">Timo</option>
             <option value="Justin">Justin</option>
-            <option value="Matheo">Mathéo</option>
+            <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
             <option value="Evann">Evann</option>
             <option value="Lucas">Lucas (étudiant)</option>
@@ -1011,7 +1011,7 @@
             <option value="Jimi">Jimi</option>
             <option value="Timo">Timo</option>
             <option value="Justin">Justin</option>
-            <option value="Matheo">Mathéo</option>
+            <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
             <option value="Evann">Evann</option>
             <option value="Lucas">Lucas (étudiant)</option>
@@ -1233,7 +1233,7 @@
         <div class="equipe-toggle" id="equipe-toggle">
           <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
           <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
-          <div class="membre-chip" data-membre="Matheo" onclick="toggleMembre(this)">Mathéo</div>
+          <div class="membre-chip" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
           <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
           <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
@@ -1487,7 +1487,7 @@
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
-          <option value="Matheo">Mathéo</option>
+          <option value="Mateo">Mateo</option>
           <option value="Bryan">Bryan</option>
           <option value="Evann">Evann</option>
           <option value="Lucas">Lucas</option>
@@ -1521,7 +1521,7 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Marco','Jimi','Timo','Justin','Matheo','Bryan','Evann','Lucas'];
+const MEMBRES = ['Marco','Jimi','Timo','Justin','Mateo','Bryan','Evann','Lucas'];
 const CHEFS = ['Marco','Jimi','Timo'];
 
 firebase.initializeApp({
@@ -1665,7 +1665,7 @@ let pendingAdminUser = null;
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Timo','Mathéo','Bryan','Evann','Lucas'];
+  const tous = ['Marco','Justin','Jimi','Timo','Mateo','Bryan','Evann','Lucas'];
   const bureau = ['Marco','Justin'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
@@ -3221,7 +3221,7 @@ async function confirmerGenererTontes() {
   const mkTonte = (date) => {
     const id = uuid();
     return { id, date, clientId: 'tonte-collective', clientNom: 'Tournée tonte — tous clients',
-      type: 'tonte', chef: 'Timo', membres: ['Timo', 'Matheo'],
+      type: 'tonte', chef: 'Timo', membres: ['Timo', 'Mateo'],
       adresse: '', materiel: 'Tondeuses, souffleur', dechets: null, duree: 8,
       demandes: notes, remarquesClient: '', statut: 'planifie',
       remarques: [], heuresParMembre: null, pulve: null, facturee: false };
@@ -3253,7 +3253,7 @@ function confirmerTontePonctuelle() {
   const client = (getData().clients).find(c => c.id === clientId);
   const iv = {
     id: uuid(), clientId, date, type: 'tonte',
-    chef: 'Timo', membres: ['Timo', 'Matheo'],
+    chef: 'Timo', membres: ['Timo', 'Mateo'],
     adresse: client?.adresse || '', materiel: 'Tondeuses, souffleur',
     dechets: null, duree: null,
     demandes: document.getElementById('tp-notes').value, remarquesClient: '',
