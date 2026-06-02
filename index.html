@@ -1441,22 +1441,13 @@
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="client-tonte" onchange="toggleTonteOptions(this.checked)" style="width:auto">
-          Ce client a une tonte de pelouse programmée (tous les 15 jours, jeudi/vendredi)
+          Ce client a une tonte de pelouse programmée (tous les 15 jours)
         </label>
       </div>
       <div id="tonte-options" style="display:none">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Jour de tonte</label>
-            <select class="form-control" id="client-tonte-jour">
-              <option value="jeudi">Jeudi</option>
-              <option value="vendredi">Vendredi</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Prix par tonte (€)</label>
-            <input type="number" step="0.01" min="0" class="form-control" id="client-tonte-prix" placeholder="ex : 45">
-          </div>
+        <div class="form-group">
+          <label class="form-label">Prix par tonte (€)</label>
+          <input type="number" step="0.01" min="0" class="form-control" id="client-tonte-prix" placeholder="ex : 45">
         </div>
         <div class="form-group">
           <label class="form-label">Dans le circuit tonte depuis le</label>
@@ -2518,7 +2509,6 @@ function ouvrirFormClient(id) {
   const hasTonte = client && client.tonte;
   document.getElementById('client-tonte').checked = hasTonte;
   toggleTonteOptions(hasTonte);
-  document.getElementById('client-tonte-jour').value = client?.tonteJour || 'jeudi';
   document.getElementById('client-tonte-prix').value = (client?.tontePrix ?? '') === null ? '' : (client?.tontePrix ?? '');
   document.getElementById('client-tonte-debut').value = client?.tonteDebut || '';
 
@@ -2550,7 +2540,6 @@ function sauvegarderClient() {
     email: document.getElementById('client-email').value.trim(),
     notes: document.getElementById('client-notes').value.trim(),
     tonte: document.getElementById('client-tonte').checked,
-    tonteJour:    document.getElementById('client-tonte-jour').value,
     tontePrix:    parseFloat(document.getElementById('client-tonte-prix').value) || null,
     tonteDebut:   document.getElementById('client-tonte-debut').value || '',
   };
@@ -3493,7 +3482,7 @@ function traiterVertuoza(rows) {
     const email = (row[8] || '').trim().toLowerCase();
 
     const docId = csvId ? `vc_${csvId}` : uuid();
-    clients.push({ id: docId, prenom: company?'':prenom, nomFamille, nom, rue, codePostal, ville, adresse, tel, email, notes:'', tonte:false, tonteJour:'jeudi' });
+    clients.push({ id: docId, prenom: company?'':prenom, nomFamille, nom, rue, codePostal, ville, adresse, tel, email, notes:'', tonte:false });
   });
 
   excelRows = clients; // stocker pour confirmerImport
@@ -3585,7 +3574,7 @@ async function confirmerImport() {
       tel:     telCol  !== '' ? String(row[parseInt(telCol)]  ?? '').trim() : '',
       email:   emailCol !== '' ? String(row[parseInt(emailCol)] ?? '').trim() : '',
       notes:   notesCol !== '' ? String(row[parseInt(notesCol)] ?? '').trim() : '',
-      tonte: false, tonteJour: 'jeudi'
+      tonte: false
     });
     importes++;
   });
