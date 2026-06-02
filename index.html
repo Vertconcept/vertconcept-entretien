@@ -2190,7 +2190,7 @@ function renderTontes() {
     ttEl.innerHTML = `
       <div id="tonte-geo-status" style="font-size:0.82rem;margin-bottom:8px;color:${modeGeo ? 'var(--vert)' : 'var(--orange)'}">
         ${modeGeo
-          ? `🧭 Itinéraire au plus proche depuis le dépôt (${DEPOT_TONTE.adresse})`
+          ? `🧭 Des plus éloignées (grosses tontes) vers le dépôt — on termine par Silly / Bassilly`
           : `⚠️ Adresses pas encore géolocalisées — ordre provisoire par code postal. Cliquez « 📍 Géolocaliser » pour un vrai itinéraire.`}
       </div>
       <ol style="margin:0;padding-left:1.5rem;line-height:1.9">${liste.map(ligneClient).join('')}</ol>
@@ -2296,6 +2296,10 @@ function ordonnerTournee(clients, depot) {
     for (let i = 0; i < reste.length; i++) { const d = distGeo(current, reste[i]); if (d < bd) { bd = d; bi = i; } }
     current = reste.splice(bi, 1)[0]; ordre.push(current);
   }
+  // On parcourt le chemin optimisé en sens inverse : on commence par les
+  // tontes les plus éloignées (= les plus grosses) et on termine près du
+  // dépôt (Silly / Bassilly), le vendredi.
+  ordre.reverse();
   return { ordre, sansGeo };
 }
 
