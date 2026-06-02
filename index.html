@@ -638,6 +638,10 @@
       </div>
     </div>
     <div id="fiche-content"></div>
+    <div class="card" id="card-remarques-clients" style="display:none">
+      <div class="card-title">💬 Remarques clients à prendre en compte</div>
+      <div id="fiches-remarques-recap"></div>
+    </div>
   </div>
 
   <!-- ===== CLIENTS ===== -->
@@ -1216,6 +1220,7 @@
           <input type="hidden" id="interv-client-id">
           <div class="client-search-dropdown" id="interv-client-dropdown"></div>
         </div>
+        <div id="interv-rappel-remarque" style="display:none;margin-top:6px;background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:7px 10px;font-size:0.82rem;color:#664d03"></div>
       </div>
       <div class="form-group">
         <label class="form-label">Adresse (si différente du client)</label>
@@ -1456,6 +1461,7 @@
           <div style="font-size:0.78rem;color:var(--gris);margin-top:3px">Laisser vide = depuis le début de saison. À renseigner si le client a signé en cours d'année.</div>
         </div>
       </div>
+      <div id="client-remarques-hist"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger btn-sm" id="btn-suppr-client" onclick="supprimerClient()" style="margin-right:auto;display:none">Supprimer</button>
@@ -2018,7 +2024,63 @@ function selectFicheEquipe(equipe) {
   renderFiche();
 }
 
+// =====================================================
+// REMARQUES CLIENTS (à prendre en compte)
+// =====================================================
+// Récapitulatif sur la page Fiches (admins uniquement)
+function renderRemarquesClients() {
+  const card = document.getElementById('card-remarques-clients');
+  if (!card) return;
+  if (!modeAdmin) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const { interventions, clients } = getData();
+  const liste = interventions
+    .filter(iv => (iv.remarquesClient || '').trim())
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 50);
+  const cont = document.getElementById('fiches-remarques-recap');
+  if (!liste.length) { cont.innerHTML = '<div class="empty-state">Aucune remarque client encodée pour l’instant.</div>'; return; }
+  cont.innerHTML = liste.map(iv => {
+    const c = clients.find(x => x.id === iv.clientId);
+    const auteur = iv.soumisePar || iv.chef || '?';
+    return `<div onclick="ouvrirDetailIntervention('${iv.id}')" style="cursor:pointer;border-left:4px solid #e67e22;background:#fffaf3;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+      <div style="font-weight:700">${c ? c.nom : (iv.clientNom || 'Client')} <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— ${formatDateFR(iv.date)} · ${auteur}</span></div>
+      <div style="color:#664d03;font-size:0.9rem;margin-top:2px">💬 ${iv.remarquesClient}</div>
+    </div>`;
+  }).join('');
+}
+
+// Dernière remarque connue d'un client (hors intervention en cours d'édition)
+function derniereRemarqueClient(clientId, excludeId) {
+  return appData.interventions
+    .filter(iv => iv.clientId === clientId && iv.id !== excludeId && (iv.remarquesClient || '').trim())
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+}
+
+// Rappel dans le modal intervention quand un client est sélectionné
+function majRappelRemarque(clientId, excludeId) {
+  const el = document.getElementById('interv-rappel-remarque');
+  if (!el) return;
+  const iv = clientId ? derniereRemarqueClient(clientId, excludeId) : null;
+  if (!iv) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  el.innerHTML = `💬 <strong>Remarque de la dernière fois</strong> (${formatDateFR(iv.date)}) : ${iv.remarquesClient}`;
+}
+
+// Historique des remarques d'un client dans sa fiche
+function renderHistoriqueRemarquesClient(clientId) {
+  const el = document.getElementById('client-remarques-hist');
+  if (!el) return;
+  const liste = clientId ? appData.interventions
+    .filter(iv => iv.clientId === clientId && (iv.remarquesClient || '').trim())
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
+  if (!liste.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<hr style="margin:14px 0"><div class="form-label">💬 Remarques clients passées</div>` +
+    liste.slice(0, 10).map(iv => `<div style="font-size:0.85rem;margin-bottom:5px;color:#664d03;background:#fffaf3;border-left:3px solid #e67e22;border-radius:6px;padding:5px 8px"><span style="color:var(--gris);font-size:0.78rem">${formatDateFR(iv.date)} · ${iv.soumisePar || iv.chef || '?'}</span><br>${iv.remarquesClient}</div>`).join('');
+}
+
 function renderFiche() {
+  renderRemarquesClients();
   const dateInput = document.getElementById('fiche-date');
   if (!dateInput.value) {
     dateInput.value = formatDate(new Date());
@@ -2489,6 +2551,7 @@ function ouvrirNouvelleIntervention(dateStr) {
   document.getElementById('interv-recurrent').checked = false;
   document.getElementById('recurrence-section').style.display = 'none';
   resetClientSearch('interv');
+  majRappelRemarque(null);
 
   // Reset membres
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -2526,6 +2589,7 @@ function ouvrirEditionIntervention(id) {
   if (isPulve) resetPulveFields(iv.pulve || {});
 
   setClientSearch('interv', iv.clientId);
+  majRappelRemarque(iv.clientId, iv.id);
 
   const membres = iv.membres || [iv.chef];
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -2724,6 +2788,7 @@ function ouvrirFormClient(id) {
   toggleTonteOptions(hasTonte);
   document.getElementById('client-tonte-prix').value = (client?.tontePrix ?? '') === null ? '' : (client?.tontePrix ?? '');
   document.getElementById('client-tonte-debut').value = client?.tonteDebut || '';
+  renderHistoriqueRemarquesClient(id);
 
   document.getElementById('modal-client').classList.remove('hidden');
 }
@@ -3861,6 +3926,7 @@ function selectionnerClient(prefix, id, el) {
   document.getElementById(prefix + '-client-id').value = id;
   document.getElementById(prefix + '-client-search').value = el.querySelector('div').textContent;
   document.getElementById(prefix + '-client-dropdown').classList.remove('open');
+  if (prefix === 'interv') majRappelRemarque(id, currentIntervId);
 }
 
 function setClientSearch(prefix, clientId) {
