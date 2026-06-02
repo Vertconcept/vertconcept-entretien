@@ -1041,6 +1041,7 @@
           <input type="hidden" id="fo-client-id">
           <div class="client-search-dropdown" id="fo-client-dropdown"></div>
         </div>
+        <div id="fo-rappel-remarque" style="display:none;margin-top:6px;background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:7px 10px;font-size:0.82rem;color:#664d03"></div>
       </div>
       <div class="form-group">
         <label class="form-label">Type de travail *</label>
@@ -2031,7 +2032,6 @@ function selectFicheEquipe(equipe) {
 function renderRemarquesClients() {
   const card = document.getElementById('card-remarques-clients');
   if (!card) return;
-  if (!modeAdmin) { card.style.display = 'none'; return; }
   card.style.display = '';
   const { interventions, clients } = getData();
   const liste = interventions
@@ -2057,14 +2057,14 @@ function derniereRemarqueClient(clientId, excludeId) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
 }
 
-// Rappel dans le modal intervention quand un client est sélectionné
-function majRappelRemarque(clientId, excludeId) {
-  const el = document.getElementById('interv-rappel-remarque');
+// Rappel (modal intervention ou fiche ouvrier) quand un client est sélectionné
+function majRappelRemarque(prefix, clientId, excludeId) {
+  const el = document.getElementById(prefix + '-rappel-remarque');
   if (!el) return;
   const iv = clientId ? derniereRemarqueClient(clientId, excludeId) : null;
   if (!iv) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = '';
-  el.innerHTML = `💬 <strong>Remarque de la dernière fois</strong> (${formatDateFR(iv.date)}) : ${iv.remarquesClient}`;
+  el.innerHTML = `💬 <strong>À prendre en compte ce passage</strong> — demande du client le ${formatDateFR(iv.date)} : ${iv.remarquesClient}`;
 }
 
 // Historique des remarques d'un client dans sa fiche
@@ -2551,7 +2551,7 @@ function ouvrirNouvelleIntervention(dateStr) {
   document.getElementById('interv-recurrent').checked = false;
   document.getElementById('recurrence-section').style.display = 'none';
   resetClientSearch('interv');
-  majRappelRemarque(null);
+  majRappelRemarque('interv', null);
 
   // Reset membres
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -2589,7 +2589,7 @@ function ouvrirEditionIntervention(id) {
   if (isPulve) resetPulveFields(iv.pulve || {});
 
   setClientSearch('interv', iv.clientId);
-  majRappelRemarque(iv.clientId, iv.id);
+  majRappelRemarque('interv', iv.clientId, iv.id);
 
   const membres = iv.membres || [iv.chef];
   document.querySelectorAll('.membre-chip').forEach(chip => {
@@ -3539,6 +3539,7 @@ function confirmerTontePonctuelle() {
 // =====================================================
 function ouvrirFicheOuvrier(dateStr) {
   resetClientSearch('fo');
+  majRappelRemarque('fo', null);
   document.getElementById('fo-date').value = dateStr || formatDate(new Date());
   document.getElementById('fo-description').value = '';
   document.getElementById('fo-materiel').value = '';
@@ -3926,7 +3927,8 @@ function selectionnerClient(prefix, id, el) {
   document.getElementById(prefix + '-client-id').value = id;
   document.getElementById(prefix + '-client-search').value = el.querySelector('div').textContent;
   document.getElementById(prefix + '-client-dropdown').classList.remove('open');
-  if (prefix === 'interv') majRappelRemarque(id, currentIntervId);
+  if (prefix === 'interv') majRappelRemarque('interv', id, currentIntervId);
+  else if (prefix === 'fo') majRappelRemarque('fo', id);
 }
 
 function setClientSearch(prefix, clientId) {
