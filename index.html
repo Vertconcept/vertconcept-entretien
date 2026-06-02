@@ -1614,6 +1614,12 @@ function initFirestore() {
       if (clientsReady && intervReady) renderCurrentPage();
     });
   });
+
+  // Frais de fonctionnement des tontes (doc unique)
+  db.collection('config').doc('fraisTontes').onSnapshot(snap => {
+    fraisTontes = { ...FRAIS_TONTES_DEFAUT, ...(snap.exists ? snap.data() : {}) };
+    if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
+  });
 }
 
 // =====================================================
@@ -1630,6 +1636,9 @@ let currentRemarqueIntervId = null;
 let excelRows = [];
 let excelHeaders = [];
 let currentUser = null; // { name, isAdmin } — connecté actuellement
+// Frais de fonctionnement des tontes (éditable par Marco, stocké dans Firestore config/fraisTontes)
+const FRAIS_TONTES_DEFAUT = { leasingTracteur: 230, camionnette: 0, carburant: 0, coutHoraireOuvrier: 0, heuresParJour: 8, nbOuvriers: 2 };
+let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
 
 // =====================================================
 // NAVIGATION
@@ -2231,7 +2240,18 @@ function renderTontes() {
           <td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.05rem;color:var(--vert)">${eur(budgetAnnuel)}</td>
         </tr></tfoot>
       </table>
-      ${sansPrix ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">⚠️ ${sansPrix} client(s) tonte sans prix défini — complétez leur fiche pour un budget exact.</div>` : ''}`;
+      ${sansPrix ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">⚠️ ${sansPrix} client(s) tonte sans prix défini — complétez leur fiche pour un budget exact.</div>` : ''}
+      <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+      <div style="font-weight:800;margin-bottom:8px">💸 Frais de fonctionnement & marge nette <span style="font-size:0.75rem;font-weight:600;color:var(--gris)">— frais fixes sur 12 mois</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
+        <label style="font-size:0.8rem;display:block">🚜 Leasing tracteur (€/mois)<input type="number" step="0.01" min="0" id="frais-tracteur" class="form-control" style="margin-top:3px" value="${fraisTontes.leasingTracteur}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">🚐 Camionnette (€/mois)<input type="number" step="0.01" min="0" id="frais-camionnette" class="form-control" style="margin-top:3px" value="${fraisTontes.camionnette}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">⛽ Carburant (€/mois)<input type="number" step="0.01" min="0" id="frais-carburant" class="form-control" style="margin-top:3px" value="${fraisTontes.carburant}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">👷 Coût horaire / ouvrier (€/h)<input type="number" step="0.01" min="0" id="frais-cout-horaire" class="form-control" style="margin-top:3px" value="${fraisTontes.coutHoraireOuvrier}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">⏱️ Heures par jour de tonte<input type="number" step="0.5" min="0" id="frais-heures-jour" class="form-control" style="margin-top:3px" value="${fraisTontes.heuresParJour}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+        <label style="font-size:0.8rem;display:block">👥 Nombre d'ouvriers<input type="number" step="1" min="1" id="frais-nb-ouvriers" class="form-control" style="margin-top:3px" value="${fraisTontes.nbOuvriers}" oninput="recalcMargeTontes()" onchange="saveFraisTontes()"></label>
+      </div>
+      <div id="tonte-marge-result">${renderMargeResult(calculerRentabiliteTontes())}</div>`;
   }
 
   // Afficher/masquer bouton générer selon le mode
@@ -2263,6 +2283,68 @@ function nbPassagesAn(client, saison) {
   const debut = (client.tonteDebut && client.tonteDebut > saison.debut) ? client.tonteDebut : saison.debut;
   if (debut > saison.fin) return 0;
   return getTonteDates(debut, saison.fin).length;
+}
+
+// Nombre de jours de tonte sur la saison (jeudi + vendredi de chaque cycle)
+function nbJoursTonteAn(saison) {
+  const jours = appData.interventions.filter(iv => iv.clientId === 'tonte-collective' && iv.date >= saison.debut && iv.date <= saison.fin).length;
+  return jours || (getTonteDates(saison.debut, saison.fin).length * 2);
+}
+
+// Calcule recettes / frais / marge nette des tontes (frais fixes sur 12 mois, main-d'œuvre = h × coût horaire)
+function calculerRentabiliteTontes(f) {
+  f = f || fraisTontes;
+  const saison = saisonTonte();
+  const annee = String(new Date().getFullYear());
+  const clientsTonte = appData.clients.filter(c => c.tonte);
+  const recRotation = clientsTonte.reduce((s, c) => s + (c.tontePrix || 0) * nbPassagesAn(c, saison), 0);
+  const ponctuelles = appData.interventions.filter(iv => iv.tontePonctuelle && iv.tontePrix && (iv.date || '').startsWith(annee));
+  const recettes = recRotation + ponctuelles.reduce((s, iv) => s + (iv.tontePrix || 0), 0);
+
+  const fraisFixesAn = ((f.leasingTracteur || 0) + (f.camionnette || 0) + (f.carburant || 0)) * 12;
+  const nbJours = nbJoursTonteAn(saison);
+  const heures = nbJours * (f.heuresParJour || 8) * (f.nbOuvriers || 2);
+  const mainOeuvre = heures * (f.coutHoraireOuvrier || 0);
+  const fraisTotal = fraisFixesAn + mainOeuvre;
+  const marge = recettes - fraisTotal;
+  const margePct = recettes ? (marge / recettes * 100) : 0;
+  // Pour 30 % de marge : recettes cibles et hausse de tarifs nécessaire
+  const cible = fraisTotal / (1 - 0.30);
+  const haussePct = recettes ? Math.max(0, (cible / recettes - 1) * 100) : 0;
+  return { recettes, fraisFixesAn, nbJours, heures, mainOeuvre, fraisTotal, marge, margePct, haussePct };
+}
+
+// Construit le bloc résultat (recettes − frais = marge nette)
+function renderMargeResult(r) {
+  const eur = n => n.toFixed(2).replace('.', ',') + ' €';
+  const coulMarge = r.marge >= 0 ? 'var(--vert)' : '#c0392b';
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:10px">
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">💶 Recettes annuelles</td><td style="padding:5px 4px;text-align:right;font-weight:700">${eur(r.recettes)}</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">🏷️ Frais fixes (tracteur + camionnette + carburant) × 12</td><td style="padding:5px 4px;text-align:right;color:#c0392b">− ${eur(r.fraisFixesAn)}</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">👷 Main-d'œuvre (${r.nbJours} j × ${(fraisTontes.heuresParJour||8)} h × ${(fraisTontes.nbOuvriers||2)} ouvriers = ${r.heures} h)</td><td style="padding:5px 4px;text-align:right;color:#c0392b">− ${eur(r.mainOeuvre)}</td></tr>
+      <tr style="border-top:2px solid var(--vert)"><td style="padding:8px 4px;font-weight:800">📊 Marge nette</td><td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.05rem;color:${coulMarge}">${eur(r.marge)} (${r.margePct.toFixed(0)} %)</td></tr>
+    </table>
+    ${r.haussePct > 0.5
+      ? `<div style="font-size:0.82rem;color:var(--orange);margin-top:8px">💡 Pour atteindre 30 % de marge, il faudrait augmenter les tarifs de tonte d'environ <strong>+${r.haussePct.toFixed(0)} %</strong>.</div>`
+      : `<div style="font-size:0.82rem;color:var(--vert);margin-top:8px">✅ Marge ≥ 30 % — tarification saine.</div>`}`;
+}
+
+// Recalcule l'affichage de la marge en direct (sans recharger la page)
+function recalcMargeTontes() {
+  const v = id => parseFloat(document.getElementById(id).value) || 0;
+  const f = { leasingTracteur: v('frais-tracteur'), camionnette: v('frais-camionnette'), carburant: v('frais-carburant'),
+    coutHoraireOuvrier: v('frais-cout-horaire'), heuresParJour: v('frais-heures-jour') || 8, nbOuvriers: v('frais-nb-ouvriers') || 2 };
+  const el = document.getElementById('tonte-marge-result');
+  if (el) el.innerHTML = renderMargeResult(calculerRentabiliteTontes(f));
+}
+
+// Enregistre les frais dans Firestore
+function saveFraisTontes() {
+  const v = id => parseFloat(document.getElementById(id).value) || 0;
+  const data = { leasingTracteur: v('frais-tracteur'), camionnette: v('frais-camionnette'), carburant: v('frais-carburant'),
+    coutHoraireOuvrier: v('frais-cout-horaire'), heuresParJour: v('frais-heures-jour') || 8, nbOuvriers: v('frais-nb-ouvriers') || 2 };
+  db.collection('config').doc('fraisTontes').set(data).catch(e => console.error('saveFraisTontes', e));
 }
 
 // =====================================================
