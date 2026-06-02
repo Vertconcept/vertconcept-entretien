@@ -712,7 +712,8 @@
   <div class="page" id="page-tontes">
     <div class="flex-between mb-1">
       <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mathéo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
-      <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:8px;white-space:nowrap">⚡ Générer planning</button>
+      <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:8px;white-space:nowrap">🌱 Tonte ponctuelle</button>
+      <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
       <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
     </div>
     <div class="stats-row" id="stats-tontes" style="margin-top:0.75rem"></div>
@@ -721,8 +722,16 @@
       <div class="tonte-grid" id="tontes-a-venir"></div>
     </div>
     <div class="card">
+      <div class="card-title">🗺️ Tournée optimisée — ordre de passage (par code postal)</div>
+      <div id="tonte-tournee"></div>
+    </div>
+    <div class="card">
       <div class="card-title">🌿 Clients avec tonte programmée</div>
       <div class="tonte-grid" id="tonte-clients-list"></div>
+    </div>
+    <div class="card" id="card-rentabilite" style="display:none">
+      <div class="card-title">💶 Rentabilité des tontes <span style="font-size:0.75rem;font-weight:600;color:var(--gris)">— visible par Marco uniquement</span></div>
+      <div id="tonte-rentabilite"></div>
     </div>
   </div>
 
@@ -758,6 +767,52 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fermerModal('modal-generer-tontes')">Annuler</button>
       <button class="btn btn-primary" onclick="confirmerGenererTontes()">⚡ Générer les sessions</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL TONTE PONCTUELLE ===== -->
+<div class="modal-overlay hidden" id="modal-tonte-ponctuelle">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>🌱 Tonte ponctuelle</h3>
+      <button class="close-btn" onclick="fermerModal('modal-tonte-ponctuelle')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:1rem">
+        Une tonte <strong>unique</strong> pour un client (hors rotation des 15 jours). Apparaît au planning et compte dans le budget.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client *</label>
+        <div class="client-search-wrap" id="tp-client-wrap">
+          <input type="text" class="client-search-input" id="tp-client-search"
+            placeholder="🔍 Rechercher un client…" autocomplete="off"
+            oninput="filtrerClientSearch('tp')" onfocus="ouvrirClientSearch('tp')" onblur="fermerClientSearch('tp', 300)">
+          <input type="hidden" id="tp-client-id">
+          <div class="client-search-dropdown" id="tp-client-dropdown"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Date *</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" class="form-control" id="tp-date" style="flex:1">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('tp-date').value=formatDate(new Date())" style="white-space:nowrap">Auj.</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prix (€)</label>
+          <input type="number" step="0.01" min="0" class="form-control" id="tp-prix" placeholder="ex : 60">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="tp-notes" rows="2" placeholder="Ex : première tonte après signature"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-tonte-ponctuelle')">Annuler</button>
+      <button class="btn btn-primary" onclick="confirmerTontePonctuelle()">🌱 Ajouter au planning</button>
     </div>
   </div>
 </div>
@@ -1386,7 +1441,7 @@
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="client-tonte" onchange="toggleTonteOptions(this.checked)" style="width:auto">
-          Ce client a une tonte de pelouse programmée (jeudi/vendredi, semaine alternée)
+          Ce client a une tonte de pelouse programmée (tous les 15 jours, jeudi/vendredi)
         </label>
       </div>
       <div id="tonte-options" style="display:none">
@@ -1398,6 +1453,15 @@
               <option value="vendredi">Vendredi</option>
             </select>
           </div>
+          <div class="form-group">
+            <label class="form-label">Prix par tonte (€)</label>
+            <input type="number" step="0.01" min="0" class="form-control" id="client-tonte-prix" placeholder="ex : 45">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dans le circuit tonte depuis le</label>
+          <input type="date" class="form-control" id="client-tonte-debut">
+          <div style="font-size:0.78rem;color:var(--gris);margin-top:3px">Laisser vide = depuis le début de saison. À renseigner si le client a signé en cours d'année.</div>
         </div>
       </div>
     </div>
@@ -1573,6 +1637,7 @@ let currentClientId = null;
 let currentRemarqueIntervId = null;
 let excelRows = [];
 let excelHeaders = [];
+let currentUser = null; // { name, isAdmin } — connecté actuellement
 
 // =====================================================
 // NAVIGATION
@@ -1652,6 +1717,7 @@ function loginAs(name, isAdmin) {
 }
 
 function applyUser(user) {
+  currentUser = user;
   modeAdmin = user.isAdmin;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('user-name-display').textContent = (user.isAdmin ? '👑 ' : '👷 ') + user.name;
@@ -2065,6 +2131,17 @@ function renderTontes() {
   const clientsTonte = clients.filter(c => c.tonte);
   const today = formatDate(new Date());
 
+  // Budget / montants (réservé à Marco)
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const saison = saisonTonte();
+  const anneeCourante = String(new Date().getFullYear());
+  const eur = n => n.toFixed(2).replace('.', ',') + ' €';
+  const montantClient = c => (c.tontePrix || 0) * nbPassagesAn(c, saison);
+  const totalRotation = clientsTonte.reduce((s, c) => s + montantClient(c), 0);
+  const ponctuelles = interventions.filter(iv => iv.tontePonctuelle && iv.tontePrix && (iv.date || '').startsWith(anneeCourante));
+  const totalPonctuel = ponctuelles.reduce((s, iv) => s + (iv.tontePrix || 0), 0);
+  const budgetAnnuel = totalRotation + totalPonctuel;
+
   // Sessions de tonte dans le planning (à venir)
   const sessionsPlanning = interventions
     .filter(iv => iv.type === 'tonte' && iv.date >= today)
@@ -2077,6 +2154,7 @@ function renderTontes() {
     <div class="stat-card"><div class="stat-val">${clientsTonte.length}</div><div class="stat-label">Clients tonte</div></div>
     <div class="stat-card"><div class="stat-val">${totalSessions}</div><div class="stat-label">Sessions planifiées</div></div>
     ${prochaine ? `<div class="stat-card"><div class="stat-val" style="font-size:1rem">${formatDateFR(prochaine.date)}</div><div class="stat-label">Prochaine session</div></div>` : ''}
+    ${estMarco ? `<div class="stat-card" style="background:var(--vert-pale);border:1px solid var(--vert-clair)"><div class="stat-val" style="color:var(--vert)">${eur(budgetAnnuel)}</div><div class="stat-label">💶 Budget annuel</div></div>` : ''}
   `;
 
   // Prochaines sessions depuis le planning
@@ -2098,13 +2176,88 @@ function renderTontes() {
     ? clientsTonte.map(c => `
       <div class="tonte-client">
         <div class="name">${c.nom}</div>
-        <div class="info">📍 ${c.adresse}</div>
+        <div class="info">📍 ${c.adresse || '—'}</div>
+        ${estMarco ? `<div class="info" style="color:var(--vert);font-weight:700">${c.tontePrix ? `💶 ${eur(c.tontePrix)}/tonte · ${eur(montantClient(c))}/an` : '💶 prix à définir'}</div>` : ''}
       </div>`).join('')
     : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
+
+  // --- Tournée optimisée : tri par code postal puis ville/rue ---
+  const tournee = [...clientsTonte].sort(comparerTonteAdresse);
+  document.getElementById('tonte-tournee').innerHTML = tournee.length
+    ? `<ol style="margin:0;padding-left:1.5rem;line-height:1.9">` + tournee.map(c => {
+        const cp = c.codePostal || '';
+        const ville = c.ville || '';
+        const rue = c.rue || c.adresse || '';
+        const lieu = [rue, [cp, ville].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || '📍 adresse manquante';
+        const montant = estMarco && c.tontePrix ? ` <span style="color:var(--vert);font-weight:700">· 💶 ${eur(c.tontePrix)}</span>` : '';
+        return `<li style="margin-bottom:2px"><strong>${c.nom}</strong> <span style="color:var(--gris)">— ${lieu}</span>${montant}</li>`;
+      }).join('') + `</ol>
+      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">Ordre indicatif regroupé par code postal. Ajustez sur le terrain si besoin.</div>`
+    : '<div class="empty-state">Aucun client tonte à ordonner.</div>';
+
+  // --- Rentabilité (Marco uniquement) ---
+  const cardRenta = document.getElementById('card-rentabilite');
+  cardRenta.style.display = estMarco ? '' : 'none';
+  if (estMarco) {
+    const lignes = clientsTonte
+      .map(c => ({ nom: c.nom, prix: c.tontePrix || 0, nb: nbPassagesAn(c, saison), total: montantClient(c) }))
+      .sort((a, b) => b.total - a.total);
+    const sansPrix = clientsTonte.filter(c => !c.tontePrix).length;
+
+    cardRenta.querySelector('#tonte-rentabilite').innerHTML = `
+      <div style="font-size:0.82rem;color:var(--gris);margin-bottom:8px">Saison de référence : ${formatDateFR(saison.debut)} → ${formatDateFR(saison.fin)} · ${getTonteDates(saison.debut, saison.fin).length} passages max</div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+          <th style="padding:6px 4px">Client</th><th style="padding:6px 4px;text-align:right">Prix/tonte</th>
+          <th style="padding:6px 4px;text-align:right">Nb/an</th><th style="padding:6px 4px;text-align:right">Total annuel</th>
+        </tr></thead>
+        <tbody>
+          ${lignes.map(l => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">${l.nom}</td>
+            <td style="padding:6px 4px;text-align:right">${l.prix ? eur(l.prix) : '<span style="color:var(--orange)">à définir</span>'}</td>
+            <td style="padding:6px 4px;text-align:right">${l.nb}</td>
+            <td style="padding:6px 4px;text-align:right;font-weight:700">${eur(l.total)}</td>
+          </tr>`).join('')}
+          ${totalPonctuel ? `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">🌱 Tontes ponctuelles (${ponctuelles.length}) — ${anneeCourante}</td>
+            <td style="padding:6px 4px;text-align:right">—</td><td style="padding:6px 4px;text-align:right">${ponctuelles.length}</td>
+            <td style="padding:6px 4px;text-align:right;font-weight:700">${eur(totalPonctuel)}</td></tr>` : ''}
+        </tbody>
+        <tfoot><tr style="border-top:2px solid var(--vert)">
+          <td colspan="3" style="padding:8px 4px;font-weight:800">💶 Budget annuel total</td>
+          <td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.05rem;color:var(--vert)">${eur(budgetAnnuel)}</td>
+        </tr></tfoot>
+      </table>
+      ${sansPrix ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">⚠️ ${sansPrix} client(s) tonte sans prix défini — complétez leur fiche pour un budget exact.</div>` : ''}`;
+  }
 
   // Afficher/masquer bouton générer selon le mode
   const btnGen = document.getElementById('btn-generer-tontes');
   if (btnGen) btnGen.style.display = modeAdmin ? '' : 'none';
+}
+
+// Comparateur d'adresses pour la tournée (code postal, puis ville, puis rue, puis nom)
+function comparerTonteAdresse(a, b) {
+  const key = c => [(c.codePostal || '999999'), (c.ville || ''), (c.rue || c.adresse || ''), (c.nom || '')]
+    .join('|').toLowerCase();
+  return key(a).localeCompare(key(b), 'fr', { numeric: true });
+}
+
+// Saison de tonte : déduite des sessions collectives générées, sinon avril→novembre de l'année courante
+function saisonTonte() {
+  const dates = appData.interventions
+    .filter(iv => iv.clientId === 'tonte-collective')
+    .map(iv => iv.date).filter(Boolean).sort();
+  if (dates.length) return { debut: dates[0], fin: dates[dates.length - 1] };
+  const y = new Date().getFullYear();
+  return { debut: `${y}-04-01`, fin: `${y}-11-30` };
+}
+
+// Nombre de passages dans la saison (rotation 15 j), en tenant compte de la date d'entrée du client
+function nbPassagesAn(client, saison) {
+  const debut = (client.tonteDebut && client.tonteDebut > saison.debut) ? client.tonteDebut : saison.debut;
+  if (debut > saison.fin) return 0;
+  return getTonteDates(debut, saison.fin).length;
 }
 
 // =====================================================
@@ -2366,6 +2519,8 @@ function ouvrirFormClient(id) {
   document.getElementById('client-tonte').checked = hasTonte;
   toggleTonteOptions(hasTonte);
   document.getElementById('client-tonte-jour').value = client?.tonteJour || 'jeudi';
+  document.getElementById('client-tonte-prix').value = (client?.tontePrix ?? '') === null ? '' : (client?.tontePrix ?? '');
+  document.getElementById('client-tonte-debut').value = client?.tonteDebut || '';
 
   document.getElementById('modal-client').classList.remove('hidden');
 }
@@ -2396,6 +2551,8 @@ function sauvegarderClient() {
     notes: document.getElementById('client-notes').value.trim(),
     tonte: document.getElementById('client-tonte').checked,
     tonteJour:    document.getElementById('client-tonte-jour').value,
+    tontePrix:    parseFloat(document.getElementById('client-tonte-prix').value) || null,
+    tonteDebut:   document.getElementById('client-tonte-debut').value || '',
   };
 
   saveDoc('clients', client);
@@ -3077,6 +3234,37 @@ async function confirmerGenererTontes() {
   await batch.commit();
   fermerModal('modal-generer-tontes');
   alert(`✅ ${pairs.length} sessions de tonte générées dans le planning !`);
+}
+
+// --- Tonte ponctuelle (one-shot) ---
+function ouvrirTontePonctuelle() {
+  resetClientSearch('tp');
+  document.getElementById('tp-date').value = formatDate(new Date());
+  document.getElementById('tp-prix').value = '';
+  document.getElementById('tp-notes').value = '';
+  document.getElementById('modal-tonte-ponctuelle').classList.remove('hidden');
+}
+
+function confirmerTontePonctuelle() {
+  const clientId = document.getElementById('tp-client-id').value;
+  const date = document.getElementById('tp-date').value;
+  if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
+  if (!date) { alert('Veuillez choisir une date.'); return; }
+  const client = (getData().clients).find(c => c.id === clientId);
+  const iv = {
+    id: uuid(), clientId, date, type: 'tonte',
+    chef: 'Timo', membres: ['Timo', 'Matheo'],
+    adresse: client?.adresse || '', materiel: 'Tondeuses, souffleur',
+    dechets: null, duree: null,
+    demandes: document.getElementById('tp-notes').value, remarquesClient: '',
+    statut: 'planifie', tontePonctuelle: true,
+    tontePrix: parseFloat(document.getElementById('tp-prix').value) || null,
+    remarques: [], heuresParMembre: null, pulve: null, facturee: false
+  };
+  saveDoc('interventions', iv);
+  fermerModal('modal-tonte-ponctuelle');
+  renderPlanning();
+  alert(`🌱 Tonte ponctuelle ajoutée pour ${client?.nom || 'le client'} le ${formatDateFR(date)}.`);
 }
 
 // =====================================================
