@@ -1523,6 +1523,31 @@
   </div>
 </div>
 
+<!-- ===== MODAL CONTINUER (prolonger une intervention) ===== -->
+<div class="modal-overlay hidden" id="modal-continuer" style="z-index:9000">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>📅 Continuer un autre jour</h3>
+      <button class="close-btn" onclick="fermerModal('modal-continuer')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:1rem" id="continuer-info">L'intervention passe en « En cours » et une suite est créée au jour choisi.</div>
+      <div class="form-group">
+        <label class="form-label">Reprendre le…</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="date" class="form-control" id="continuer-date" style="flex:1" oninput="majContinuerDateConfirm()">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('continuer-date').value=formatDate(new Date());majContinuerDateConfirm()" style="white-space:nowrap">Auj.</button>
+        </div>
+        <div id="continuer-date-confirm" style="margin-top:4px;font-size:0.82rem;color:var(--vert);font-weight:600"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-continuer')">Annuler</button>
+      <button class="btn btn-primary" onclick="confirmerContinuer()">📅 Créer la suite</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // =====================================================
 // DATA MODEL & FIRESTORE
@@ -2789,6 +2814,7 @@ function ouvrirDetailIntervention(id) {
   document.getElementById('detail-footer').innerHTML = `
     ${btnsStatut}
     <button class="btn btn-secondary btn-sm" onclick="ouvrirRemarque('${id}')">+ Remarque</button>
+    ${iv.clientId !== 'tonte-collective' ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirContinuer('${id}')">📅 Continuer un autre jour</button>` : ''}
     ${client && client.tel ? `<button class="btn btn-sm" style="background:#25D366;color:white;border:none" onclick="prevenirWhatsApp('${id}')">📲 Prévenir WhatsApp</button>` : ''}
     ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
     ${modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>` : ''}
@@ -2804,6 +2830,61 @@ function changerStatutRapide(id, statut) {
   saveDoc('interventions', { ...iv, statut });
   // Rafraîchir le détail
   setTimeout(() => ouvrirDetailIntervention(id), 300);
+}
+
+// --- Continuer / prolonger une intervention un autre jour ---
+let currentContinuerId = null;
+function prochainJourOuvrable(dateStr) {
+  const d = new Date((dateStr || formatDate(new Date())) + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1); // saute dim/sam
+  return formatDate(d);
+}
+function majContinuerDateConfirm() {
+  const el = document.getElementById('continuer-date-confirm');
+  if (!el) return;
+  const v = document.getElementById('continuer-date').value;
+  if (!v) { el.textContent = ''; return; }
+  const txt = new Date(v + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  el.textContent = '📅 ' + txt.charAt(0).toUpperCase() + txt.slice(1);
+}
+function ouvrirContinuer(id) {
+  const iv = appData.interventions.find(i => i.id === id);
+  if (!iv) return;
+  currentContinuerId = id;
+  const client = appData.clients.find(c => c.id === iv.clientId);
+  document.getElementById('continuer-info').innerHTML =
+    `Suite du chantier chez <strong>${client ? client.nom : (iv.clientNom || 'client')}</strong>.<br>L'intervention du ${formatDateFR(iv.date)} passe en « En cours » et une suite est créée au jour choisi.`;
+  document.getElementById('continuer-date').value = prochainJourOuvrable(iv.date);
+  majContinuerDateConfirm();
+  fermerModal('modal-detail');
+  document.getElementById('modal-continuer').classList.remove('hidden');
+}
+function confirmerContinuer() {
+  const iv = appData.interventions.find(i => i.id === currentContinuerId);
+  if (!iv) return;
+  const date = document.getElementById('continuer-date').value;
+  if (!date) { alert('Choisissez une date.'); return; }
+  // 1) l'intervention d'origine passe « En cours » (sauf si déjà terminée)
+  if (iv.statut !== 'termine') saveDoc('interventions', { ...iv, statut: 'en-cours' });
+  // 2) créer la suite (copie) au jour choisi
+  const suite = {
+    ...JSON.parse(JSON.stringify(iv)),
+    id: uuid(),
+    date,
+    statut: 'planifie',
+    suiteDe: iv.id,
+    demandes: '🔁 Suite de l\'intervention du ' + formatDateFR(iv.date) + (iv.demandes ? ' — ' + iv.demandes : ''),
+    heuresParMembre: null,
+    facturee: false,
+    remarques: [],
+    soumisePar: null,
+    soumiseDate: null
+  };
+  saveDoc('interventions', suite);
+  fermerModal('modal-continuer');
+  renderPlanning();
+  alert('📅 Suite créée le ' + formatDateFR(date) + '.\nL\'intervention initiale est passée en « En cours ».');
 }
 
 // =====================================================
