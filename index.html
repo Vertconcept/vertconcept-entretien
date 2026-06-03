@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
   :root {
     --vert: #2d6a4f;
@@ -512,19 +513,19 @@
 <div class="modal-overlay hidden" id="modal-pin" style="z-index:9000">
   <div class="modal" style="max-width:320px">
     <div class="modal-header">
-      <h3 id="pin-titre">Code PIN responsable</h3>
+      <h3 id="pin-titre">Mot de passe</h3>
       <button class="close-btn" onclick="fermerModal('modal-pin')">×</button>
     </div>
     <div class="modal-body" style="text-align:center">
-      <div style="font-size:0.85rem;color:var(--gris);margin-bottom:1rem">Entrez le code PIN pour accéder au mode Admin</div>
-      <input type="password" class="form-control" id="pin-input" maxlength="6" placeholder="• • • •"
-             style="text-align:center;font-size:1.5rem;letter-spacing:8px"
-             onkeydown="if(event.key==='Enter')verifierPin()">
-      <div id="pin-error" style="color:var(--rouge);font-size:0.82rem;margin-top:8px;display:none">Code incorrect</div>
+      <div style="font-size:0.85rem;color:var(--gris);margin-bottom:1rem">Entrez votre mot de passe</div>
+      <input type="password" class="form-control" id="pin-input" placeholder="Mot de passe" autocomplete="current-password"
+             style="text-align:center;font-size:1.1rem"
+             onkeydown="if(event.key==='Enter')verifierMotDePasse()">
+      <div id="pin-error" style="color:var(--rouge);font-size:0.82rem;margin-top:8px;display:none">Mot de passe incorrect</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fermerModal('modal-pin')">Annuler</button>
-      <button class="btn btn-primary" onclick="verifierPin()">Valider</button>
+      <button class="btn btn-primary" id="btn-pin-valider" onclick="verifierMotDePasse()">Se connecter</button>
     </div>
   </div>
 </div>
@@ -1534,6 +1535,17 @@ firebase.initializeApp({
   appId: "1:544882864820:web:ac1daf787d7512b83d9de1"
 });
 const db = firebase.firestore();
+const auth = firebase.auth();
+const ADMINS = ['Marco', 'Jimi', 'Timo', 'Justin']; // comptes avec accès admin
+// Identifiant e-mail (fictif) ↔ prénom
+function nameToEmail(name) {
+  return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() + '@vertconcept.app';
+}
+function emailToName(email) {
+  const prefix = (email || '').split('@')[0];
+  const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return MEMBRES.find(m => norm(m) === prefix) || (prefix.charAt(0).toUpperCase() + prefix.slice(1));
+}
 
 // Cache mémoire local — mis à jour par onSnapshot
 let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [] };
@@ -1705,40 +1717,43 @@ function initLoginScreen() {
 }
 
 function clicLogin(name) {
-  // Si la personne a un PIN → demander le PIN pour accès admin
-  // Sinon → accès direct en mode ouvrier
-  const normalise = n => n.normalize('NFD').replace(/[̀-ͯ]/g,'');
-  const pinKey = Object.keys(ADMIN_PINS).find(k => normalise(k) === normalise(name));
-  if (pinKey) {
-    demanderPin(pinKey);
-  } else {
-    loginAs(name, false);
-  }
+  // Tout le monde se connecte avec son mot de passe (Firebase Auth)
+  demanderMotDePasse(name);
 }
 
-function demanderPin(name) {
+function demanderMotDePasse(name) {
   pendingAdminUser = name;
-  document.getElementById('pin-titre').textContent = `Code PIN — ${name}`;
+  document.getElementById('pin-titre').textContent = `Mot de passe — ${name}`;
   document.getElementById('pin-input').value = '';
   document.getElementById('pin-error').style.display = 'none';
   document.getElementById('modal-pin').classList.remove('hidden');
   setTimeout(() => document.getElementById('pin-input').focus(), 100);
 }
 
-function verifierPin() {
-  const saisi = document.getElementById('pin-input').value;
-  if (saisi === ADMIN_PINS[pendingAdminUser]) {
-    fermerModal('modal-pin');
-    loginAs(pendingAdminUser, true);
-  } else {
-    document.getElementById('pin-error').style.display = '';
-    document.getElementById('pin-input').value = '';
-    document.getElementById('pin-input').focus();
-  }
+function verifierMotDePasse() {
+  const pw = document.getElementById('pin-input').value;
+  const errEl = document.getElementById('pin-error');
+  const btn = document.getElementById('btn-pin-valider');
+  if (!pw) return;
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Connexion…';
+  auth.signInWithEmailAndPassword(nameToEmail(pendingAdminUser), pw)
+    .then(() => { fermerModal('modal-pin'); }) // onAuthStateChanged applique l'utilisateur
+    .catch(err => {
+      const code = err.code || '';
+      errEl.textContent = (code === 'auth/user-not-found') ? 'Compte pas encore créé pour cette personne.'
+        : (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') ? 'Mot de passe incorrect.'
+        : (code === 'auth/too-many-requests') ? 'Trop de tentatives, réessayez plus tard.'
+        : 'Erreur de connexion : ' + (err.message || code);
+      errEl.style.display = '';
+      document.getElementById('pin-input').value = '';
+      document.getElementById('pin-input').focus();
+    })
+    .finally(() => { btn.disabled = false; btn.textContent = 'Se connecter'; });
 }
 
+// Conservé pour les tests/preview : applique un utilisateur sans passer par Firebase
 function loginAs(name, isAdmin) {
-  localStorage.setItem('vc_user', JSON.stringify({ name, isAdmin }));
   applyUser({ name, isAdmin });
 }
 
@@ -1778,8 +1793,8 @@ function applyUser(user) {
 }
 
 function logout() {
-  localStorage.removeItem('vc_user');
-  document.getElementById('login-screen').style.display = 'flex';
+  auth.signOut().catch(() => {});
+  // onAuthStateChanged affichera l'écran de connexion
 }
 
 function checkLogin() {
@@ -4148,8 +4163,21 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // =====================================================
 document.getElementById('fiche-date').value = formatDate(new Date());
 initLoginScreen(); // Construit les boutons de l'écran de connexion
-checkLogin();      // Vérifie si déjà connecté (localStorage)
-initFirestore();   // Lance la connexion Firebase et les listeners temps réel
+
+// Connexion gérée par Firebase Auth : la session persiste, et les données ne
+// se chargent qu'une fois authentifié (cohérent avec les règles de sécurité).
+let firestoreStarted = false;
+auth.onAuthStateChanged(user => {
+  if (user) {
+    const name = emailToName(user.email);
+    applyUser({ name, isAdmin: ADMINS.includes(name) });
+    if (!firestoreStarted) { firestoreStarted = true; initFirestore(); }
+  } else {
+    currentUser = null;
+    modeAdmin = false;
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+});
 
 // seedIfEmpty supprimé — données réelles importées
 </script>
