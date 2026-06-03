@@ -531,6 +531,10 @@
 </div>
 
 <!-- LOADING OVERLAY -->
+<div id="update-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:10000;background:#2d6a4f;color:white;padding:11px 16px;text-align:center;font-weight:600;font-size:0.92rem;box-shadow:0 2px 10px rgba(0,0,0,0.25)">
+  🔄 Nouvelle version disponible
+  <button onclick="location.reload()" style="margin-left:12px;background:white;color:#2d6a4f;border:none;border-radius:6px;padding:5px 16px;font-weight:700;cursor:pointer">Mettre à jour</button>
+</div>
 <div id="loading-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(45,106,79,0.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;color:white">
   <div style="font-size:2rem;font-weight:800;letter-spacing:1px">Vert<span style="color:#52b788">concept</span></div>
   <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite"></div>
@@ -4188,6 +4192,21 @@ auth.onAuthStateChanged(user => {
     document.getElementById('login-screen').style.display = 'flex';
   }
 });
+
+// --- Détection automatique de nouvelle version (bandeau « Mettre à jour ») ---
+let versionTagActuel = null;
+async function verifierMaj() {
+  try {
+    const res = await fetch('index.html?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const tag = res.headers.get('etag') || res.headers.get('last-modified') || res.headers.get('content-length');
+    if (!tag) return;
+    if (versionTagActuel === null) { versionTagActuel = tag; return; } // référence au 1er chargement
+    if (tag !== versionTagActuel) document.getElementById('update-banner').style.display = 'block';
+  } catch (e) { /* hors ligne : on ignore */ }
+}
+verifierMaj();
+setInterval(verifierMaj, 180000); // vérifie toutes les 3 min
+document.addEventListener('visibilitychange', () => { if (!document.hidden) verifierMaj(); }); // et au retour sur l'app
 
 // seedIfEmpty supprimé — données réelles importées
 </script>
