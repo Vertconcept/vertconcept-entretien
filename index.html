@@ -863,6 +863,14 @@
           </select>
         </div>
       </div>
+      <div class="form-group">
+        <label class="form-label">État de la machine</label>
+        <select class="form-control" id="machine-statut">
+          <option value="ok">✔️ En ordre de marche</option>
+          <option value="entretien">🔧 À l'entretien chez Vertitec (à récupérer)</option>
+          <option value="hs">⛔ Hors service / en panne</option>
+        </select>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Dernier entretien</label>
@@ -3411,6 +3419,13 @@ function statEntretien(prochainDate) {
   return { cls: 'badge-ok', label: '✅ OK' };
 }
 
+// État opérationnel d'une machine (par défaut : en ordre de marche)
+function statutMachine(statut) {
+  if (statut === 'entretien') return { label: '🔧 À récupérer chez Vertitec', color: '#8a4b08', bg: '#fff3e0', bord: '#e67e22' };
+  if (statut === 'hs')        return { label: '⛔ Hors service', color: '#922b21', bg: '#fdecea', bord: '#c0392b' };
+  return { label: '✔️ En ordre de marche', color: '#1e5631', bg: '#d8f3dc', bord: 'var(--vert-clair)' };
+}
+
 function renderMachines() {
   const list = document.getElementById('machines-list');
   const { machines } = getData();
@@ -3421,10 +3436,12 @@ function renderMachines() {
   machines.sort((a,b) => a.nom.localeCompare(b.nom));
   list.innerHTML = machines.map(m => {
     const st = statEntretien(m.prochainEntretien);
+    const sm = statutMachine(m.statut);
     return `<div class="machine-card">
       <div class="mc-info">
         <div class="mc-nom">${m.nom}</div>
         <div class="mc-type">${m.type}${m.typeEntretien ? ' · ' + m.typeEntretien : ''}</div>
+        <div style="margin-top:4px"><span style="background:${sm.bg};color:${sm.color};border:1px solid ${sm.bord};font-size:0.75rem;font-weight:700;padding:2px 9px;border-radius:20px">${sm.label}</span></div>
         ${m.notes ? `<div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${m.notes}</div>` : ''}
       </div>
       <div class="mc-entretien">
@@ -3444,6 +3461,7 @@ function ouvrirMachine(id) {
   document.getElementById('btn-suppr-machine').style.display = m ? '' : 'none';
   document.getElementById('machine-nom').value = m?.nom || '';
   document.getElementById('machine-type').value = m?.type || 'tondeuse';
+  document.getElementById('machine-statut').value = m?.statut || 'ok';
   document.getElementById('machine-dernier-entretien').value = m?.dernierEntretien || '';
   document.getElementById('machine-prochain-entretien').value = m?.prochainEntretien || '';
   document.getElementById('machine-type-entretien').value = m?.typeEntretien || '';
@@ -3458,6 +3476,7 @@ function sauvegarderMachine() {
   const machine = {
     id: currentMachineId || uuid(), nom,
     type: document.getElementById('machine-type').value,
+    statut: document.getElementById('machine-statut').value,
     dernierEntretien: document.getElementById('machine-dernier-entretien').value || null,
     prochainEntretien: document.getElementById('machine-prochain-entretien').value || null,
     typeEntretien: document.getElementById('machine-type-entretien').value,
