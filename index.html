@@ -1756,7 +1756,7 @@ function applyUser(user) {
 
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = user.isAdmin ? '' : 'none';
-  const voitFactu = user.isAdmin && user.name !== 'Justin';
+  const voitFactu = user.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
 
@@ -1798,7 +1798,7 @@ function toggleMode() {
   badge.style.background = modeAdmin ? '' : '#fd7e14';
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = modeAdmin ? '' : 'none';
-  const voitFactu = modeAdmin && currentUser && currentUser.name !== 'Justin';
+  const voitFactu = currentUser && currentUser.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
   if (!voitFactu && document.getElementById('page-facturation').classList.contains('active')) {
