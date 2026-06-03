@@ -489,6 +489,7 @@
     .modal-header, .modal-footer { display: none !important; }
     #modal-factu-print:not(.hidden) { display: block !important; }
     header, main, .fab-ouvrier { display: none !important; }
+    .no-print { display: none !important; }
     body { background: white; }
   }
 </style>
@@ -986,6 +987,7 @@
       <button class="close-btn" onclick="fermerModal('modal-factu-print')">×</button>
     </div>
     <div class="modal-body" id="factu-print-body"></div>
+    <div class="no-print" id="factu-cout-panel" style="padding:0 1.5rem 1rem"></div>
     <div class="modal-footer">
       <div style="margin-right:auto;display:flex;gap:8px;align-items:center">
         <label style="font-size:0.85rem;font-weight:600">Marquer comme facturée</label>
@@ -1627,6 +1629,10 @@ function initFirestore() {
     fraisTontes = { ...FRAIS_TONTES_DEFAUT, ...(snap.exists ? snap.data() : {}) };
     if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
   });
+  // Tarifs pour le calcul du prix à facturer (doc unique)
+  db.collection('config').doc('fraisFacturation').onSnapshot(snap => {
+    fraisFactu = { ...FRAIS_FACTU_DEFAUT, ...(snap.exists ? snap.data() : {}) };
+  });
 }
 
 // =====================================================
@@ -1651,6 +1657,13 @@ const FRAIS_TONTES_DEFAUT = {
   coutHoraireOuvrier: 16.80, heuresParJour: 8, nbOuvriers: 2
 };
 let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
+// Frais/tarifs pour le calcul du prix à facturer (Marco/chefs, stocké dans config/fraisFacturation)
+const FRAIS_FACTU_DEFAUT = {
+  dechetsBase: 75, dechetsIncrement: 50, dechetsTranche: 3,
+  coutHoraireOuvrier: 25, prixCarburant: 1.95, consoLitres100: 13,
+  vehiculeEuroKm: 0.35, contributionOutils: 3, margeCible: 30
+};
+let fraisFactu = { ...FRAIS_FACTU_DEFAUT };
 
 // =====================================================
 // NAVIGATION
@@ -1743,8 +1756,9 @@ function applyUser(user) {
 
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = user.isAdmin ? '' : 'none';
-  document.getElementById('nav-facturation').style.display = user.isAdmin ? '' : 'none';
-  document.getElementById('bnav-facturation').style.display = user.isAdmin ? '' : 'none';
+  const voitFactu = user.isAdmin && user.name !== 'Justin';
+  document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
+  document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
 
   // Pré-remplir le nom dans les formulaires
   const auteurSelects = ['fo-auteur', 'remarque-auteur'];
@@ -1784,9 +1798,10 @@ function toggleMode() {
   badge.style.background = modeAdmin ? '' : '#fd7e14';
   document.getElementById('fab-ouvrier').style.display = 'flex';
   document.getElementById('btn-nouvelle-interv').style.display = modeAdmin ? '' : 'none';
-  document.getElementById('nav-facturation').style.display = modeAdmin ? '' : 'none';
-  document.getElementById('bnav-facturation').style.display = modeAdmin ? '' : 'none';
-  if (!modeAdmin && document.getElementById('page-facturation').classList.contains('active')) {
+  const voitFactu = modeAdmin && currentUser && currentUser.name !== 'Justin';
+  document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
+  document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
+  if (!voitFactu && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
   }
   updateNotifBadge();
@@ -3000,6 +3015,118 @@ function renderFacturation() {
   }).join('');
 }
 
+// =====================================================
+// PRIX DE REVIENT & PRIX À FACTURER (interne, Marco/chefs)
+// =====================================================
+// Forfait d'évacuation des déchets par tranche de m³
+function forfaitDechets(m3, cfg) {
+  cfg = cfg || fraisFactu;
+  if (!(m3 > 0)) return 0;
+  const tranche = Math.ceil(m3 / (cfg.dechetsTranche || 3));
+  return (cfg.dechetsBase || 0) + (cfg.dechetsIncrement || 0) * (tranche - 1);
+}
+
+// Calcule le coût de revient d'une intervention + le prix à facturer conseillé
+function calculerCoutFacturation(iv, client, cfg) {
+  cfg = cfg || fraisFactu;
+  const m3 = parseFloat(iv.dechets) || 0;
+  const dechets = forfaitDechets(m3, cfg);
+  const distKm = (client && typeof client.lat === 'number') ? haversineKm(getDepotGeo(), client) * 1.3 : 0;
+  const ar = distKm * 2; // aller-retour
+  const carburant = ar * ((cfg.consoLitres100 || 0) / 100) * (cfg.prixCarburant || 0);
+  const vehicule = ar * (cfg.vehiculeEuroKm || 0);
+  const membres = iv.membres || [iv.chef];
+  const hp = iv.heuresParMembre || {};
+  let manHours = membres.reduce((s, m) => s + (hp[m]?.heures ?? 0), 0);
+  if (!manHours) manHours = (parseFloat(iv.duree) || 0) * membres.length;
+  const mainOeuvre = manHours * (cfg.coutHoraireOuvrier || 0);
+  const outils = manHours * (cfg.contributionOutils || 0);
+  const total = dechets + carburant + vehicule + mainOeuvre + outils;
+  const marge = (cfg.margeCible || 0) / 100;
+  const prixConseille = marge < 1 ? total / (1 - marge) : total;
+  return { m3, dechets, distKm, ar, carburant, vehicule, manHours, mainOeuvre, outils, total, prixConseille, margeCible: cfg.margeCible || 0 };
+}
+
+function renderCoutFactuResult(r) {
+  const eur = n => n.toFixed(2).replace('.', ',') + ' €';
+  const ligne = (lbl, val) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">${lbl}</td><td style="padding:5px 4px;text-align:right">${eur(val)}</td></tr>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:0.86rem">
+      ${ligne(`🗑️ Évacuation déchets (${r.m3 || 0} m³)`, r.dechets)}
+      ${ligne(`⛽ Déplacement carburant (${r.ar.toFixed(1)} km A/R)`, r.carburant)}
+      ${ligne('🚐 Véhicule (amortissement)', r.vehicule)}
+      ${ligne(`👷 Main-d'œuvre (${r.manHours.toFixed(1)} h)`, r.mainOeuvre)}
+      ${ligne('🧰 Consommables + outils thermiques', r.outils)}
+      <tr style="border-top:2px solid var(--gris)"><td style="padding:7px 4px;font-weight:800">Coût de revient</td><td style="padding:7px 4px;text-align:right;font-weight:800">${eur(r.total)}</td></tr>
+      <tr style="border-top:2px solid var(--vert)"><td style="padding:8px 4px;font-weight:800;color:var(--vert)">💰 Prix à facturer conseillé (marge ${r.margeCible} %)</td><td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.1rem;color:var(--vert)">${eur(r.prixConseille)} HTVA</td></tr>
+    </table>
+    ${r.distKm === 0 ? '<div style="font-size:0.76rem;color:var(--orange);margin-top:5px">📍 Distance non calculée (client non géolocalisé ou adresse manquante).</div>' : ''}`;
+}
+
+function champFactu(id, label, val) {
+  return `<label style="font-size:0.78rem;display:block">${label}<input type="number" step="0.01" min="0" id="${id}" class="form-control" style="margin-top:3px" value="${val}" oninput="recalcCoutFactu()" onchange="saveFraisFactu()"></label>`;
+}
+
+function renderCoutFacturationPanel(iv, client) {
+  const el = document.getElementById('factu-cout-panel');
+  if (!el) return;
+  const f = fraisFactu;
+  el.innerHTML = `
+    <div class="card" style="border:2px solid var(--vert)">
+      <div class="card-title">💶 Prix de revient & prix à facturer <span style="font-size:0.72rem;font-weight:600;color:var(--gris)">— interne, non imprimé</span></div>
+      <div id="factu-cout-result">${renderCoutFactuResult(calculerCoutFacturation(iv, client))}</div>
+      <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
+      <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px">Paramètres (modifiables, partagés)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
+        ${champFactu('fx-cout-horaire', "👷 Coût horaire chargé/ouvrier (€/h)", f.coutHoraireOuvrier)}
+        ${champFactu('fx-outils', '🧰 Consommables + outils (€/h)', f.contributionOutils)}
+        ${champFactu('fx-vehicule', '🚐 Véhicule amortissement (€/km)', f.vehiculeEuroKm)}
+        ${champFactu('fx-carb', '⛽ Prix carburant (€/L)', f.prixCarburant)}
+        ${champFactu('fx-conso', '⛽ Consommation (L/100km)', f.consoLitres100)}
+        ${champFactu('fx-marge', '🎯 Marge cible (%)', f.margeCible)}
+        ${champFactu('fx-dechets-base', '🗑️ Déchets : base (€)', f.dechetsBase)}
+        ${champFactu('fx-dechets-inc', '🗑️ Déchets : +€ / tranche', f.dechetsIncrement)}
+        ${champFactu('fx-dechets-tranche', '🗑️ Tranche déchets (m³)', f.dechetsTranche)}
+      </div>
+    </div>`;
+}
+
+// Géolocalise le client si besoin, puis affiche le panneau
+function renderCoutFacturation(iv, client) {
+  const el = document.getElementById('factu-cout-panel');
+  if (!el) return;
+  if (client && !(typeof client.lat === 'number') && client.adresse) {
+    el.innerHTML = '<div class="card" style="border:2px solid var(--vert)"><div class="empty-state">📍 Géolocalisation du client en cours…</div></div>';
+    geocoderAdresse(client.adresse + ', Belgique').then(g => {
+      if (g) saveDoc('clients', { ...client, lat: g.lat, lng: g.lng, geoAddr: client.adresse });
+      renderCoutFacturationPanel(iv, g ? { ...client, lat: g.lat, lng: g.lng } : client);
+    });
+    return;
+  }
+  renderCoutFacturationPanel(iv, client);
+}
+
+function recalcCoutFactu() {
+  const v = id => parseFloat(document.getElementById(id).value) || 0;
+  const cfg = { ...fraisFactu,
+    coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vehiculeEuroKm: v('fx-vehicule'),
+    prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
+    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
+  const { interventions, clients } = getData();
+  const iv = interventions.find(i => i.id === currentFactuId);
+  if (!iv) return;
+  const client = clients.find(c => c.id === iv.clientId);
+  const el = document.getElementById('factu-cout-result');
+  if (el) el.innerHTML = renderCoutFactuResult(calculerCoutFacturation(iv, client, cfg));
+}
+
+function saveFraisFactu() {
+  const v = id => parseFloat(document.getElementById(id).value) || 0;
+  const data = { coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vehiculeEuroKm: v('fx-vehicule'),
+    prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
+    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
+  db.collection('config').doc('fraisFacturation').set(data).catch(e => console.error('saveFraisFactu', e));
+}
+
 function ouvrirFicheFacturation(id) {
   const { interventions, clients } = getData();
   const iv = interventions.find(i => i.id === id);
@@ -3074,6 +3201,7 @@ function ouvrirFicheFacturation(id) {
     </div>`;
 
   document.getElementById('factu-marquer-cb').checked = !!iv.facturee;
+  renderCoutFacturation(iv, client);
   document.getElementById('modal-factu-print').classList.remove('hidden');
 }
 
