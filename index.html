@@ -1661,7 +1661,7 @@ let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
 const FRAIS_FACTU_DEFAUT = {
   dechetsBase: 75, dechetsIncrement: 50, dechetsTranche: 3,
   coutHoraireOuvrier: 25, prixCarburant: 1.95, consoLitres100: 13,
-  vehiculeEuroKm: 0.35, contributionOutils: 3, margeCible: 30
+  vanMensuel: 1250, vanJoursMois: 20, vanHeuresJour: 8, contributionOutils: 3, margeCible: 30
 };
 let fraisFactu = { ...FRAIS_FACTU_DEFAUT };
 
@@ -3034,17 +3034,21 @@ function calculerCoutFacturation(iv, client, cfg) {
   const distKm = (client && typeof client.lat === 'number') ? haversineKm(getDepotGeo(), client) * 1.3 : 0;
   const ar = distKm * 2; // aller-retour
   const carburant = ar * ((cfg.consoLitres100 || 0) / 100) * (cfg.prixCarburant || 0);
-  const vehicule = ar * (cfg.vehiculeEuroKm || 0);
   const membres = iv.membres || [iv.chef];
+  const nbOuv = membres.length || 1;
   const hp = iv.heuresParMembre || {};
   let manHours = membres.reduce((s, m) => s + (hp[m]?.heures ?? 0), 0);
-  if (!manHours) manHours = (parseFloat(iv.duree) || 0) * membres.length;
+  if (!manHours) manHours = (parseFloat(iv.duree) || 0) * nbOuv;
+  // Heures d'immobilisation de la camionnette sur place (durée du chantier)
+  const elapsed = (parseFloat(iv.duree) || 0) || (manHours / nbOuv);
+  const coutVanJour = (cfg.vanMensuel || 0) / (cfg.vanJoursMois || 20);
+  const vehicule = coutVanJour * (elapsed / (cfg.vanHeuresJour || 8));
   const mainOeuvre = manHours * (cfg.coutHoraireOuvrier || 0);
   const outils = manHours * (cfg.contributionOutils || 0);
   const total = dechets + carburant + vehicule + mainOeuvre + outils;
   const marge = (cfg.margeCible || 0) / 100;
   const prixConseille = marge < 1 ? total / (1 - marge) : total;
-  return { m3, dechets, distKm, ar, carburant, vehicule, manHours, mainOeuvre, outils, total, prixConseille, margeCible: cfg.margeCible || 0 };
+  return { m3, dechets, distKm, ar, carburant, vehicule, elapsed, manHours, mainOeuvre, outils, total, prixConseille, margeCible: cfg.margeCible || 0 };
 }
 
 function renderCoutFactuResult(r) {
@@ -3053,7 +3057,7 @@ function renderCoutFactuResult(r) {
   return `<table style="width:100%;border-collapse:collapse;font-size:0.86rem">
       ${ligne(`🗑️ Évacuation déchets (${r.m3 || 0} m³)`, r.dechets)}
       ${ligne(`⛽ Déplacement carburant (${r.ar.toFixed(1)} km A/R)`, r.carburant)}
-      ${ligne('🚐 Véhicule (amortissement)', r.vehicule)}
+      ${ligne(`🚐 Camionnette (immobilisée ${r.elapsed.toFixed(1)} h sur place)`, r.vehicule)}
       ${ligne(`👷 Main-d'œuvre (${r.manHours.toFixed(1)} h)`, r.mainOeuvre)}
       ${ligne('🧰 Consommables + outils thermiques', r.outils)}
       <tr style="border-top:2px solid var(--gris)"><td style="padding:7px 4px;font-weight:800">Coût de revient</td><td style="padding:7px 4px;text-align:right;font-weight:800">${eur(r.total)}</td></tr>
@@ -3079,7 +3083,9 @@ function renderCoutFacturationPanel(iv, client) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
         ${champFactu('fx-cout-horaire', "👷 Coût horaire chargé/ouvrier (€/h)", f.coutHoraireOuvrier)}
         ${champFactu('fx-outils', '🧰 Consommables + outils (€/h)', f.contributionOutils)}
-        ${champFactu('fx-vehicule', '🚐 Véhicule amortissement (€/km)', f.vehiculeEuroKm)}
+        ${champFactu('fx-van-mois', '🚐 Camionnette (€/mois, assur. comprise)', f.vanMensuel)}
+        ${champFactu('fx-van-jours', '🚐 Jours ouvrables / mois', f.vanJoursMois)}
+        ${champFactu('fx-van-heures', '🚐 Heures / jour', f.vanHeuresJour)}
         ${champFactu('fx-carb', '⛽ Prix carburant (€/L)', f.prixCarburant)}
         ${champFactu('fx-conso', '⛽ Consommation (L/100km)', f.consoLitres100)}
         ${champFactu('fx-marge', '🎯 Marge cible (%)', f.margeCible)}
@@ -3108,7 +3114,7 @@ function renderCoutFacturation(iv, client) {
 function recalcCoutFactu() {
   const v = id => parseFloat(document.getElementById(id).value) || 0;
   const cfg = { ...fraisFactu,
-    coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vehiculeEuroKm: v('fx-vehicule'),
+    coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vanMensuel: v('fx-van-mois'), vanJoursMois: v('fx-van-jours') || 20, vanHeuresJour: v('fx-van-heures') || 8,
     prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
     dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
   const { interventions, clients } = getData();
@@ -3121,7 +3127,7 @@ function recalcCoutFactu() {
 
 function saveFraisFactu() {
   const v = id => parseFloat(document.getElementById(id).value) || 0;
-  const data = { coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vehiculeEuroKm: v('fx-vehicule'),
+  const data = { coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vanMensuel: v('fx-van-mois'), vanJoursMois: v('fx-van-jours') || 20, vanHeuresJour: v('fx-van-heures') || 8,
     prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
     dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
   db.collection('config').doc('fraisFacturation').set(data).catch(e => console.error('saveFraisFactu', e));
