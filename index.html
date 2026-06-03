@@ -4184,6 +4184,7 @@ auth.onAuthStateChanged(user => {
   } else {
     currentUser = null;
     modeAdmin = false;
+    showLoading(false); // cacher le voile pour rendre l'écran de connexion cliquable
     document.getElementById('login-screen').style.display = 'flex';
   }
 });
