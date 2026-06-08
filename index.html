@@ -1457,7 +1457,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="modal-client-titre">Nouveau client</h3>
-      <button class="close-btn" onclick="fermerModal('modal-client')">×</button>
+      <button class="close-btn" onclick="fermerFormClient()">×</button>
     </div>
     <div class="modal-body">
       <div class="form-row">
@@ -1520,7 +1520,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger btn-sm" id="btn-suppr-client" onclick="supprimerClient()" style="margin-right:auto;display:none">Supprimer</button>
-      <button class="btn btn-secondary" onclick="fermerModal('modal-client')">Annuler</button>
+      <button class="btn btn-secondary" onclick="fermerFormClient()">Annuler</button>
       <button class="btn btn-primary" onclick="sauvegarderClient()">Enregistrer</button>
     </div>
   </div>
@@ -3096,6 +3096,7 @@ function ouvrirFormClient(id) {
   document.getElementById('client-tonte-debut').value = client?.tonteDebut || '';
   renderHistoriqueRemarquesClient(id);
 
+  document.getElementById('modal-client').style.zIndex = retourRechercheClient ? '9500' : '';
   document.getElementById('modal-client').classList.remove('hidden');
 }
 
@@ -3129,6 +3130,18 @@ function sauvegarderClient() {
   };
 
   saveDoc('clients', client);
+  // Si on créait ce client depuis un menu de recherche, on y revient avec le client sélectionné
+  if (retourRechercheClient) {
+    const p = retourRechercheClient;
+    retourRechercheClient = null;
+    document.getElementById('modal-client').style.zIndex = '';
+    const idEl = document.getElementById(p + '-client-id');
+    const searchEl = document.getElementById(p + '-client-search');
+    if (idEl && searchEl) { idEl.value = client.id; searchEl.value = client.nom; }
+    if (p === 'interv') majRappelRemarque('interv', client.id, currentIntervId);
+    fermerModal('modal-client');
+    return;
+  }
   fermerModal('modal-client');
 }
 
@@ -4569,10 +4582,12 @@ function renderClientSearchDropdown(prefix, filtre) {
   const dropdown = document.getElementById(prefix + '-client-dropdown');
   const selectedId = document.getElementById(prefix + '-client-id').value;
 
+  const ajout = `<div class="client-search-option" style="font-weight:700;color:var(--vert);border-bottom:1px solid var(--border)"
+       onmousedown="nouveauClientDepuisRecherche('${prefix}')">➕ Ajouter un nouveau client${q ? ' « ' + q.replace(/</g, '&lt;').replace(/>/g, '&gt;') + ' »' : ''}</div>`;
   if (!filtered.length) {
-    dropdown.innerHTML = `<div class="client-search-empty">Aucun client trouvé</div>`;
+    dropdown.innerHTML = ajout + `<div class="client-search-empty">Aucun client existant trouvé</div>`;
   } else {
-    dropdown.innerHTML = filtered.map(c => `
+    dropdown.innerHTML = ajout + filtered.map(c => `
       <div class="client-search-option${c.id === selectedId ? ' selected' : ''}"
            data-id="${c.id}" data-nom="${c.nom.replace(/"/g,'&quot;')}"
            onmousedown="selectionnerClient('${prefix}','${c.id}',this)">
@@ -4581,6 +4596,21 @@ function renderClientSearchDropdown(prefix, filtre) {
       </div>`).join('');
   }
   dropdown.classList.add('open');
+}
+
+// Création d'un client à la volée depuis un menu de recherche (revient ensuite à l'endroit d'origine)
+let retourRechercheClient = null;
+function nouveauClientDepuisRecherche(prefix) {
+  retourRechercheClient = prefix;
+  const texte = (document.getElementById(prefix + '-client-search').value || '').trim();
+  document.getElementById(prefix + '-client-dropdown').classList.remove('open');
+  ouvrirFormClient(); // nouveau client (z-index relevé car retourRechercheClient est posé)
+  if (texte) document.getElementById('client-nom').value = texte; // pré-remplit le nom avec le texte tapé
+}
+function fermerFormClient() {
+  retourRechercheClient = null;
+  document.getElementById('modal-client').style.zIndex = '';
+  fermerModal('modal-client');
 }
 
 function filtrerClientSearch(prefix) {
