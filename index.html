@@ -85,6 +85,7 @@
   .interv-card { background: var(--vert-pale); border-left: 3px solid var(--vert); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 0.78rem; cursor: pointer; transition: transform 0.1s; }
   .interv-card:hover { transform: translateX(2px); }
   .interv-card.tonte { background: #fff3cd; border-left-color: var(--orange); }
+  .interv-card.facturee { background: #c2e8c8; border-left: 5px solid #1e5631; }
   .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
   .interv-card .client-name { font-weight: 700; color: #212529; }
   .interv-card .interv-meta { color: var(--gris); margin-top: 2px; }
@@ -206,6 +207,7 @@
   .mois-interv-dot.tonte { background: #fff3cd; border-left-color: var(--orange); }
   .mois-interv-dot.equipe-timo { border-left-color: var(--vert-clair); }
   .mois-interv-dot.termine { opacity: 0.55; }
+  .mois-interv-dot.facturee { border-left: 5px solid #1e5631; background: #c2e8c8; }
   .mois-more { font-size: 0.7rem; color: var(--gris); cursor: pointer; text-align: center; }
   @media (max-width: 700px) {
     .mois-grid { grid-template-columns: repeat(7, 1fr); gap: 2px; }
@@ -2125,16 +2127,19 @@ function renderPlanningSemail() {
 
     interventions.filter(iv => iv.date === dateStr).forEach(iv => {
       const card = document.createElement('div');
+      const estMarco = currentUser && currentUser.name === 'Marco';
       card.className = 'interv-card'
         + (iv.type === 'tonte' ? ' tonte' : '')
         + (iv.chef === 'Timo' ? ' equipe-timo' : '')
-        + (iv.statut === 'en-attente' ? ' en-attente' : '');
+        + (iv.statut === 'en-attente' ? ' en-attente' : '')
+        + (estMarco && iv.facturee ? ' facturee' : '');
       const membres = iv.membres || [iv.chef];
       card.innerHTML = `
         <div class="client-name">${getNomClient(iv, clients)}</div>
         <div class="interv-meta">${iv.type}</div>
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
+        ${estMarco && iv.facturee ? '<span style="display:inline-block;background:#1e5631;color:white;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-top:3px">💶 Facturé</span>' : ''}
       `;
       card.onclick = () => ouvrirDetailIntervention(iv.id);
       body.appendChild(card);
@@ -2215,8 +2220,9 @@ function renderPlanningMois() {
         (iv.type === 'tonte' ? ' tonte' : '') +
         (iv.chef === 'Timo' ? ' equipe-timo' : '') +
         (iv.statut === 'termine' ? ' termine' : '') +
-        (iv.statut === 'en-attente' ? ' en-attente' : '');
-      dot.textContent = (iv.statut === 'en-attente' ? '⏳ ' : '') + getNomClient(iv, clients) + ' · ' + iv.chef;
+        (iv.statut === 'en-attente' ? ' en-attente' : '') +
+        ((currentUser && currentUser.name === 'Marco' && iv.facturee) ? ' facturee' : '');
+      dot.textContent = (iv.statut === 'en-attente' ? '⏳ ' : '') + ((currentUser && currentUser.name === 'Marco' && iv.facturee) ? '💶 ' : '') + getNomClient(iv, clients) + ' · ' + iv.chef;
       dot.onclick = () => ouvrirDetailIntervention(iv.id);
       cell.appendChild(dot);
     });
