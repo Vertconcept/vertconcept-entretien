@@ -700,6 +700,7 @@
         </div>
       </div>
     </div>
+    <div id="factu-contrats-rappel"></div>
     <div class="flex-between mb-1">
       <div class="factu-filters">
         <input type="month" class="form-control" id="factu-mois" style="width:180px" oninput="renderFacturation()">
@@ -1583,6 +1584,21 @@
           <input type="number" step="0.01" min="0" class="form-control" id="ct-prix" placeholder="ex : 1800">
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Facturation</label>
+          <select class="form-control" id="ct-frequence">
+            <option value="annuelle">Annuelle (1×/an)</option>
+            <option value="semestrielle">Semestrielle (2×/an)</option>
+            <option value="trimestrielle">Trimestrielle (4×/an)</option>
+            <option value="mensuelle">Mensuelle (12×/an)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prochaine facturation le</label>
+          <input type="date" class="form-control" id="ct-prochaine">
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="ct-complet" onchange="toggleContratComplet(this.checked)" style="width:auto"> Service complet (tout cocher)
@@ -1777,6 +1793,7 @@ function initFirestore() {
   db.collection('contrats').onSnapshot(snap => {
     appData.contrats = snap.docs.map(d => d.data());
     if (document.getElementById('page-contrats')?.classList.contains('active')) renderContrats();
+    if (document.getElementById('page-facturation')?.classList.contains('active')) renderContratsAFacturer();
   });
 
   // Frais de fonctionnement des tontes (doc unique)
@@ -3193,6 +3210,51 @@ const SERVICES_CONTRAT = [
 let currentContratId = null;
 function eurFmt(n) { return (n || 0).toFixed(2).replace('.', ',') + ' €'; }
 
+// Fréquences de facturation
+const PERIODES_FACTU = {
+  mensuelle:     { n: 12, mois: 1,  label: 'Mensuelle' },
+  trimestrielle: { n: 4,  mois: 3,  label: 'Trimestrielle' },
+  semestrielle:  { n: 2,  mois: 6,  label: 'Semestrielle' },
+  annuelle:      { n: 1,  mois: 12, label: 'Annuelle' }
+};
+function avancerDateMois(dateStr, mois) {
+  const d = new Date((dateStr || formatDate(new Date())) + 'T00:00:00');
+  d.setMonth(d.getMonth() + mois);
+  return formatDate(d);
+}
+// Marquer un contrat comme facturé → avance la prochaine échéance
+function marquerContratFacture(id) {
+  const ct = appData.contrats.find(c => c.id === id);
+  if (!ct) return;
+  const p = PERIODES_FACTU[ct.frequence] || PERIODES_FACTU.annuelle;
+  const base = ct.prochaineFacturation || formatDate(new Date());
+  saveDoc('contrats', { ...ct, prochaineFacturation: avancerDateMois(base, p.mois) });
+}
+// Rappel des contrats à facturer (page Facturation, Marco)
+function renderContratsAFacturer() {
+  const el = document.getElementById('factu-contrats-rappel');
+  if (!el) return;
+  const today = formatDate(new Date());
+  const dus = (appData.contrats || [])
+    .filter(ct => ct.frequence && ct.prochaineFacturation && ct.prochaineFacturation <= today)
+    .sort((a, b) => (a.prochaineFacturation || '').localeCompare(b.prochaineFacturation || ''));
+  if (!dus.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card" style="border:2px solid #e67e22;margin-bottom:1rem">
+    <div class="card-title">📋 Contrats à facturer (${dus.length})</div>
+    ${dus.map(ct => {
+      const client = appData.clients.find(c => c.id === ct.clientId);
+      const p = PERIODES_FACTU[ct.frequence] || PERIODES_FACTU.annuelle;
+      const montant = (ct.prix || 0) / p.n;
+      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;background:#fff8f0;border-left:4px solid #e67e22;border-radius:8px;margin-bottom:6px">
+        <div style="flex:1;min-width:160px"><strong>${client ? client.nom : 'Client'}</strong> <span style="color:var(--gris);font-size:0.8rem">— ${p.label}, échéance ${formatDateFR(ct.prochaineFacturation)}</span></div>
+        <div style="font-weight:700">${eurFmt(montant)} HTVA</div>
+        <button class="btn btn-primary btn-sm" onclick="marquerContratFacture('${ct.id}')">✅ Facturé</button>
+      </div>`;
+    }).join('')}
+    <div style="font-size:0.76rem;color:var(--gris);margin-top:4px">« Facturé » décale l'échéance à la période suivante.</div>
+  </div>`;
+}
+
 // Bilan de rentabilité d'un contrat (coût réel des interventions de l'année vs prix)
 function bilanContrat(ct) {
   const client = appData.clients.find(c => c.id === ct.clientId);
@@ -3256,6 +3318,7 @@ function renderContrats() {
       bilanHtml = `<hr style="margin:10px 0;border:none;border-top:1px solid var(--border)">
         <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:0.88rem">
           <span>💰 Prix contrat : <strong>${eurFmt(ct.prix || 0)}</strong></span>
+          <span>🧾 Facturation : <strong>${(PERIODES_FACTU[ct.frequence] || PERIODES_FACTU.annuelle).label}</strong>${ct.prochaineFacturation ? ` (prochaine : ${formatDateFR(ct.prochaineFacturation)})` : ''}</span>
           <span>💶 Coût réel (${b.nb} interv.) : <strong>${eurFmt(b.cout)}</strong></span>
           <span>📊 Marge : <strong style="color:${coul}">${eurFmt(b.marge)} (${b.pct.toFixed(0)} %)</strong></span>
         </div>
@@ -3288,6 +3351,8 @@ function ouvrirContrat(id) {
   if (ct) setClientSearch('ct', ct.clientId);
   document.getElementById('ct-annee').value = ct?.annee || new Date().getFullYear();
   document.getElementById('ct-prix').value = ct?.prix ?? '';
+  document.getElementById('ct-frequence').value = ct?.frequence || 'annuelle';
+  document.getElementById('ct-prochaine').value = ct?.prochaineFacturation || '';
   document.getElementById('ct-notes').value = ct?.notes || '';
   const services = ct?.services || [];
   document.querySelectorAll('.ct-service-cb').forEach(cb => { cb.checked = services.includes(cb.value); });
@@ -3306,6 +3371,8 @@ function sauvegarderContrat() {
     clientId,
     annee: parseInt(document.getElementById('ct-annee').value) || new Date().getFullYear(),
     prix: parseFloat(document.getElementById('ct-prix').value) || null,
+    frequence: document.getElementById('ct-frequence').value,
+    prochaineFacturation: document.getElementById('ct-prochaine').value || '',
     services,
     notes: document.getElementById('ct-notes').value.trim()
   });
@@ -3365,6 +3432,7 @@ async function importerSauvegarde(input) {
 // FACTURATION
 // =====================================================
 function renderFacturation() {
+  renderContratsAFacturer();
   const { interventions, clients } = getData();
   const terminées = interventions.filter(iv => iv.statut === 'termine');
 
