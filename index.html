@@ -549,6 +549,7 @@
     <button onclick="showPage('fiches')" id="nav-fiches">Fiches</button>
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
+    <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
     <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
   </div>
@@ -587,6 +588,9 @@
   </button>
   <button onclick="showPage('tontes')" id="bnav-tontes">
     <span class="nav-icon">🌿</span>Tontes
+  </button>
+  <button onclick="showPage('contrats')" id="bnav-contrats">
+    <span class="nav-icon">📑</span>Contrats
   </button>
   <button onclick="showPage('materiel')" id="bnav-materiel">
     <span class="nav-icon">🔧</span>Matériel
@@ -669,6 +673,16 @@
       </div>
     </div>
     <div class="client-list" id="client-list"></div>
+  </div>
+
+  <!-- ===== CONTRATS ===== -->
+  <div class="page" id="page-contrats">
+    <div class="flex-between mb-1">
+      <div class="alert alert-info" style="margin:0;flex:1">📑 Contrats d'entretien — services inclus par client</div>
+      <input type="text" class="form-control" id="contrat-filtre" placeholder="🔍 Client…" style="max-width:200px;margin-left:8px" oninput="renderContrats()">
+      <button class="btn btn-primary btn-sm" id="btn-nouveau-contrat" onclick="ouvrirContrat()" style="margin-left:8px;white-space:nowrap;display:none">+ Nouveau contrat</button>
+    </div>
+    <div id="contrats-list"></div>
   </div>
 
   <!-- ===== FACTURATION ===== -->
@@ -1529,6 +1543,55 @@
 </div>
 
 <!-- ===== MODAL DÉTAIL INTERVENTION ===== -->
+<!-- ===== MODAL CONTRAT ===== -->
+<div class="modal-overlay hidden" id="modal-contrat">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-contrat-titre">Nouveau contrat</h3>
+      <button class="close-btn" onclick="fermerModal('modal-contrat')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Client *</label>
+        <div class="client-search-wrap" id="ct-client-wrap">
+          <input type="text" class="client-search-input" id="ct-client-search" placeholder="🔍 Rechercher un client…" autocomplete="off"
+            oninput="filtrerClientSearch('ct')" onfocus="ouvrirClientSearch('ct')" onblur="fermerClientSearch('ct', 300)">
+          <input type="hidden" id="ct-client-id">
+          <div class="client-search-dropdown" id="ct-client-dropdown"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Année *</label>
+          <input type="number" class="form-control" id="ct-annee" min="2020" max="2100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prix annuel HTVA (€)</label>
+          <input type="number" step="0.01" min="0" class="form-control" id="ct-prix" placeholder="ex : 1800">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ct-complet" onchange="toggleContratComplet(this.checked)" style="width:auto"> Service complet (tout cocher)
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Services inclus</label>
+        <div id="ct-services" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="ct-notes" rows="2" placeholder="Fréquences, conditions, particularités…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-contrat" onclick="supprimerContrat()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-contrat')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderContrat()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="modal-detail">
   <div class="modal">
     <div class="modal-header">
@@ -1603,7 +1666,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -1697,6 +1760,12 @@ function initFirestore() {
     if (document.getElementById('page-planning')?.classList.contains('active')) renderBacklog();
   });
 
+  // Contrats d'entretien
+  db.collection('contrats').onSnapshot(snap => {
+    appData.contrats = snap.docs.map(d => d.data());
+    if (document.getElementById('page-contrats')?.classList.contains('active')) renderContrats();
+  });
+
   // Frais de fonctionnement des tontes (doc unique)
   db.collection('config').doc('fraisTontes').onSnapshot(snap => {
     fraisTontes = { ...FRAIS_TONTES_DEFAUT, ...(snap.exists ? snap.data() : {}) };
@@ -1751,6 +1820,7 @@ function showPage(name) {
   if (name === 'fiches') renderFiche();
   if (name === 'clients') renderClients();
   if (name === 'tontes') renderTontes();
+  if (name === 'contrats') renderContrats();
   if (name === 'facturation') renderFacturation();
   if (name === 'materiel') renderMateriel();
 }
@@ -3089,6 +3159,139 @@ function getHeuresFromForm() {
     };
   });
   return result;
+}
+
+// =====================================================
+// CONTRATS D'ENTRETIEN
+// =====================================================
+const SERVICES_CONTRAT = [
+  { key: 'tonte', label: '🌿 Tontes' },
+  { key: 'debroussaillage', label: '✂️ Débroussaillage des bords' },
+  { key: 'scarification', label: '🌾 Scarification' },
+  { key: 'tailleHaies', label: '🌳 Tailles des haies' },
+  { key: 'platesBandes', label: '🪴 Nettoyage des plates-bandes' },
+  { key: 'desherbageAllees', label: '💧 Désherbage des allées' },
+  { key: 'traitementGazon', label: '🌱 Traitement gazon (Bofix)' },
+  { key: 'engrais', label: '🧪 Engrais' },
+  { key: 'chaux', label: '⚪ Chaux' },
+  { key: 'nettoyageTerrasses', label: '🧽 Nettoyage terrasses (hypochlorite)' }
+];
+let currentContratId = null;
+function eurFmt(n) { return (n || 0).toFixed(2).replace('.', ',') + ' €'; }
+
+// Bilan de rentabilité d'un contrat (coût réel des interventions de l'année vs prix)
+function bilanContrat(ct) {
+  const client = appData.clients.find(c => c.id === ct.clientId);
+  const annee = String(ct.annee || new Date().getFullYear());
+  const interv = appData.interventions
+    .filter(iv => iv.clientId === ct.clientId && (iv.date || '').startsWith(annee))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  let cout = 0;
+  const lignesArr = interv.map(iv => {
+    const c = calculerCoutFacturation(iv, client);
+    cout += c.total;
+    return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">${formatDateFR(iv.date)}</td><td style="padding:3px 4px">${iv.type}</td><td style="padding:3px 4px;text-align:right">${eurFmt(c.total)}</td></tr>`;
+  });
+  const prix = ct.prix || 0;
+  const marge = prix - cout;
+  const pct = prix ? (marge / prix * 100) : 0;
+  const verdict = !prix
+    ? '<div style="font-size:0.82rem;color:var(--orange);margin-top:6px">⚠️ Pas de prix défini sur ce contrat.</div>'
+    : marge >= 0
+      ? `<div style="font-size:0.82rem;color:var(--vert);margin-top:6px">✅ Contrat rentable (marge ${pct.toFixed(0)} %).</div>`
+      : `<div style="font-size:0.82rem;color:#c0392b;margin-top:6px">⚠️ Contrat à perte — réajuster d'environ <strong>+${((cout / Math.max(prix, 1) - 1) * 100).toFixed(0)} %</strong> l'an prochain (prix conseillé ≈ ${eurFmt(cout / 0.7)} pour 30 % de marge).</div>`;
+  const lignes = interv.length
+    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.82rem;color:var(--gris)">Voir le détail des ${interv.length} intervention(s)</summary><table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-top:4px">${lignesArr.join('')}</table></details>`
+    : '<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">Aucune intervention enregistrée pour cette année.</div>';
+  return { nb: interv.length, cout, marge, pct, verdict, lignes };
+}
+
+function renderContrats() {
+  const cont = document.getElementById('contrats-list');
+  if (!cont) return;
+  const marco = currentUser && currentUser.name === 'Marco';
+  const btn = document.getElementById('btn-nouveau-contrat');
+  if (btn) btn.style.display = marco ? '' : 'none';
+  const { contrats, clients } = getData();
+  const filtre = (document.getElementById('contrat-filtre')?.value || '').toLowerCase().trim();
+  let liste = contrats.map(ct => ({ ct, client: clients.find(c => c.id === ct.clientId) }));
+  if (filtre) liste = liste.filter(x => (x.client?.nom || '').toLowerCase().includes(filtre));
+  liste.sort((a, b) => (a.client?.nom || '').localeCompare(b.client?.nom || ''));
+  if (!liste.length) {
+    cont.innerHTML = `<div class="card"><div class="empty-state">Aucun contrat${filtre ? ' pour ce filtre' : ''}.${marco ? '<br>Cliquez « + Nouveau contrat » pour en créer un.' : ''}</div></div>`;
+    return;
+  }
+  cont.innerHTML = liste.map(({ ct, client }) => {
+    const servicesHtml = SERVICES_CONTRAT.map(s => {
+      const inclus = (ct.services || []).includes(s.key);
+      return `<span style="font-size:0.78rem;padding:2px 8px;border-radius:20px;${inclus ? 'background:#d8f3dc;color:#1e5631;font-weight:600' : 'background:#f1f1f1;color:#bbb;text-decoration:line-through'}">${inclus ? '✓ ' : ''}${s.label}</span>`;
+    }).join(' ');
+    let bilanHtml = '';
+    if (marco) {
+      const b = bilanContrat(ct);
+      const coul = b.marge >= 0 ? 'var(--vert)' : '#c0392b';
+      bilanHtml = `<hr style="margin:10px 0;border:none;border-top:1px solid var(--border)">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:0.88rem">
+          <span>💰 Prix contrat : <strong>${eurFmt(ct.prix || 0)}</strong></span>
+          <span>💶 Coût réel (${b.nb} interv.) : <strong>${eurFmt(b.cout)}</strong></span>
+          <span>📊 Marge : <strong style="color:${coul}">${eurFmt(b.marge)} (${b.pct.toFixed(0)} %)</strong></span>
+        </div>
+        ${b.verdict}
+        ${b.lignes}`;
+    }
+    return `<div class="card">
+      <div class="flex-between">
+        <div>
+          <div style="font-weight:800;font-size:1.05rem">${client ? client.nom : 'Client inconnu'}</div>
+          <div style="font-size:0.8rem;color:var(--gris)">Contrat ${ct.annee || ''}${ct.notes ? ' · ' + ct.notes : ''}</div>
+        </div>
+        ${marco ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirContrat('${ct.id}')">✏️</button>` : ''}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${servicesHtml}</div>
+      ${bilanHtml}
+    </div>`;
+  }).join('');
+}
+
+function ouvrirContrat(id) {
+  currentContratId = id || null;
+  const ct = id ? appData.contrats.find(c => c.id === id) : null;
+  document.getElementById('modal-contrat-titre').textContent = ct ? 'Modifier le contrat' : 'Nouveau contrat';
+  document.getElementById('btn-suppr-contrat').style.display = ct ? '' : 'none';
+  document.getElementById('ct-services').innerHTML = SERVICES_CONTRAT.map(s =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer"><input type="checkbox" class="ct-service-cb" value="${s.key}" style="width:auto"> ${s.label}</label>`
+  ).join('');
+  resetClientSearch('ct');
+  if (ct) setClientSearch('ct', ct.clientId);
+  document.getElementById('ct-annee').value = ct?.annee || new Date().getFullYear();
+  document.getElementById('ct-prix').value = ct?.prix ?? '';
+  document.getElementById('ct-notes').value = ct?.notes || '';
+  const services = ct?.services || [];
+  document.querySelectorAll('.ct-service-cb').forEach(cb => { cb.checked = services.includes(cb.value); });
+  document.getElementById('ct-complet').checked = services.length === SERVICES_CONTRAT.length;
+  document.getElementById('modal-contrat').classList.remove('hidden');
+}
+function toggleContratComplet(checked) {
+  document.querySelectorAll('.ct-service-cb').forEach(cb => { cb.checked = checked; });
+}
+function sauvegarderContrat() {
+  const clientId = document.getElementById('ct-client-id').value;
+  if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
+  const services = [...document.querySelectorAll('.ct-service-cb:checked')].map(cb => cb.value);
+  saveDoc('contrats', {
+    id: currentContratId || uuid(),
+    clientId,
+    annee: parseInt(document.getElementById('ct-annee').value) || new Date().getFullYear(),
+    prix: parseFloat(document.getElementById('ct-prix').value) || null,
+    services,
+    notes: document.getElementById('ct-notes').value.trim()
+  });
+  fermerModal('modal-contrat');
+}
+function supprimerContrat() {
+  if (!currentContratId || !confirm('Supprimer ce contrat ?')) return;
+  deleteDoc('contrats', currentContratId);
+  fermerModal('modal-contrat');
 }
 
 // =====================================================
