@@ -1816,7 +1816,8 @@ let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
 const FRAIS_FACTU_DEFAUT = {
   dechetsBase: 75, dechetsIncrement: 50, dechetsTranche: 3,
   coutHoraireOuvrier: 25, prixCarburant: 1.95, consoLitres100: 13,
-  vanMensuel: 1250, vanJoursMois: 20, vanHeuresJour: 8, contributionOutils: 3, margeCible: 30
+  vanMensuel: 1250, vanJoursMois: 20, vanHeuresJour: 8, contributionOutils: 3, margeCible: 30,
+  coutTontePassage: 40, nbPassagesTonte: 16
 };
 let fraisFactu = { ...FRAIS_FACTU_DEFAUT };
 
@@ -3205,6 +3206,14 @@ function bilanContrat(ct) {
     cout += c.total;
     return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">${formatDateFR(iv.date)}</td><td style="padding:3px 4px">${iv.type}</td><td style="padding:3px 4px;text-align:right">${eurFmt(c.total)}</td></tr>`;
   });
+  // Tontes : faites en sessions collectives (non rattachées au client) → ajout forfaitaire si le contrat inclut la tonte
+  let ligneTonte = '';
+  if ((ct.services || []).includes('tonte')) {
+    const nbT = fraisFactu.nbPassagesTonte || 16;
+    const coutT = nbT * (fraisFactu.coutTontePassage || 0);
+    cout += coutT;
+    ligneTonte = `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">🌿 Tontes (${nbT} passages)</td><td style="padding:3px 4px">tonte</td><td style="padding:3px 4px;text-align:right">${eurFmt(coutT)}</td></tr>`;
+  }
   const prix = ct.prix || 0;
   const marge = prix - cout;
   const pct = prix ? (marge / prix * 100) : 0;
@@ -3213,8 +3222,9 @@ function bilanContrat(ct) {
     : marge >= 0
       ? `<div style="font-size:0.82rem;color:var(--vert);margin-top:6px">✅ Contrat rentable (marge ${pct.toFixed(0)} %).</div>`
       : `<div style="font-size:0.82rem;color:#c0392b;margin-top:6px">⚠️ Contrat à perte — réajuster d'environ <strong>+${((cout / Math.max(prix, 1) - 1) * 100).toFixed(0)} %</strong> l'an prochain (prix conseillé ≈ ${eurFmt(cout / 0.7)} pour 30 % de marge).</div>`;
-  const lignes = interv.length
-    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.82rem;color:var(--gris)">Voir le détail des ${interv.length} intervention(s)</summary><table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-top:4px">${lignesArr.join('')}</table></details>`
+  const toutesLignes = ligneTonte ? [...lignesArr, ligneTonte] : lignesArr;
+  const lignes = toutesLignes.length
+    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.82rem;color:var(--gris)">Voir le détail (${toutesLignes.length} poste(s))</summary><table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-top:4px">${toutesLignes.join('')}</table></details>`
     : '<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">Aucune intervention enregistrée pour cette année.</div>';
   return { nb: interv.length, cout, marge, pct, verdict, lignes };
 }
@@ -3509,6 +3519,8 @@ function renderCoutFacturationPanel(iv, client) {
         ${champFactu('fx-dechets-base', '🗑️ Déchets : base (€)', f.dechetsBase)}
         ${champFactu('fx-dechets-inc', '🗑️ Déchets : +€ / tranche', f.dechetsIncrement)}
         ${champFactu('fx-dechets-tranche', '🗑️ Tranche déchets (m³)', f.dechetsTranche)}
+        ${champFactu('fx-tonte-cout', '🌿 Coût d\'une tonte (€/passage)', f.coutTontePassage)}
+        ${champFactu('fx-tonte-nb', '🌿 Nb passages tonte / an', f.nbPassagesTonte)}
       </div>
     </div>`;
 }
@@ -3533,7 +3545,8 @@ function recalcCoutFactu() {
   const cfg = { ...fraisFactu,
     coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vanMensuel: v('fx-van-mois'), vanJoursMois: v('fx-van-jours') || 20, vanHeuresJour: v('fx-van-heures') || 8,
     prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
-    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
+    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3,
+    coutTontePassage: v('fx-tonte-cout'), nbPassagesTonte: v('fx-tonte-nb') || 16 };
   const { interventions, clients } = getData();
   const iv = interventions.find(i => i.id === currentFactuId);
   if (!iv) return;
@@ -3546,7 +3559,8 @@ function saveFraisFactu() {
   const v = id => parseFloat(document.getElementById(id).value) || 0;
   const data = { coutHoraireOuvrier: v('fx-cout-horaire'), contributionOutils: v('fx-outils'), vanMensuel: v('fx-van-mois'), vanJoursMois: v('fx-van-jours') || 20, vanHeuresJour: v('fx-van-heures') || 8,
     prixCarburant: v('fx-carb'), consoLitres100: v('fx-conso'), margeCible: v('fx-marge'),
-    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3 };
+    dechetsBase: v('fx-dechets-base'), dechetsIncrement: v('fx-dechets-inc'), dechetsTranche: v('fx-dechets-tranche') || 3,
+    coutTontePassage: v('fx-tonte-cout'), nbPassagesTonte: v('fx-tonte-nb') || 16 };
   db.collection('config').doc('fraisFacturation').set(data).catch(e => console.error('saveFraisFactu', e));
 }
 
