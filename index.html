@@ -687,6 +687,19 @@
 
   <!-- ===== FACTURATION ===== -->
   <div class="page" id="page-facturation">
+    <div class="card" id="card-sauvegarde" style="margin-bottom:1rem;border:1px solid var(--vert-clair)">
+      <div class="flex-between" style="flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:800">🛡️ Sauvegarde des données</div>
+          <div style="font-size:0.8rem;color:var(--gris)">Téléchargez de temps en temps un fichier de secours (clients, interventions, contrats, machines…). À garder précieusement.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="exporterSauvegarde()">📥 Télécharger une sauvegarde</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restore-input').click()">♻️ Restaurer un fichier</button>
+          <input type="file" id="restore-input" accept=".json,application/json" style="display:none" onchange="importerSauvegarde(this)">
+        </div>
+      </div>
+    </div>
     <div class="flex-between mb-1">
       <div class="factu-filters">
         <input type="month" class="form-control" id="factu-mois" style="width:180px" oninput="renderFacturation()">
@@ -3292,6 +3305,50 @@ function supprimerContrat() {
   if (!currentContratId || !confirm('Supprimer ce contrat ?')) return;
   deleteDoc('contrats', currentContratId);
   fermerModal('modal-contrat');
+}
+
+// =====================================================
+// SAUVEGARDE / RESTAURATION (Marco)
+// =====================================================
+function exporterSauvegarde() {
+  const data = {
+    _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
+    clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
+    machines: appData.machines, pannes: appData.pannes, achats: appData.achats, backlog: appData.backlog,
+    config: { fraisTontes, fraisFacturation: fraisFactu }
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'vertconcept-sauvegarde-' + formatDate(new Date()) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+async function importerSauvegarde(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'backlog'];
+  const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
+  if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
+  const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
+  if (!confirm(`⚠️ RESTAURATION\n\nCela va ré-ajouter / écraser ${total} fiche(s) à partir de la sauvegarde du ${quand}.\n\n• Les fiches supprimées par erreur seront recréées.\n• Les fiches modifiées depuis seront remplacées par la version de la sauvegarde.\n\nÀ n'utiliser qu'en cas de problème. Continuer ?`)) return;
+  let n = 0;
+  for (const c of cols) {
+    for (const item of (data[c] || [])) {
+      if (item && item.id) { db.collection(c).doc(item.id).set(JSON.parse(JSON.stringify(item))).catch(() => {}); n++; }
+    }
+  }
+  if (data.config) {
+    if (data.config.fraisTontes) db.collection('config').doc('fraisTontes').set(data.config.fraisTontes).catch(() => {});
+    if (data.config.fraisFacturation) db.collection('config').doc('fraisFacturation').set(data.config.fraisFacturation).catch(() => {});
+  }
+  alert(`✅ Restauration lancée : ${n} fiche(s) réécrite(s). L'écran va se mettre à jour tout seul.`);
 }
 
 // =====================================================
