@@ -3327,10 +3327,12 @@ function bilanContrat(ct) {
   // Tontes : faites en sessions collectives (non rattachées au client) → ajout forfaitaire si le contrat inclut la tonte
   let ligneTonte = '';
   if ((ct.services || []).includes('tonte')) {
-    const nbT = fraisFactu.nbPassagesTonte || 16;
+    const nbReel = (appData.tontesPassages || []).filter(p => p.clientId === ct.clientId && (p.date || '').startsWith(annee)).length;
+    const reel = nbReel > 0;
+    const nbT = reel ? nbReel : (fraisFactu.nbPassagesTonte || 16);
     const coutT = nbT * (fraisFactu.coutTontePassage || 0);
     cout += coutT;
-    ligneTonte = `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">🌿 Tontes (${nbT} passages)</td><td style="padding:3px 4px">tonte</td><td style="padding:3px 4px;text-align:right">${eurFmt(coutT)}</td></tr>`;
+    ligneTonte = `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">🌿 Tontes (${nbT} passages ${reel ? 'réels' : 'prévus'})</td><td style="padding:3px 4px">tonte</td><td style="padding:3px 4px;text-align:right">${eurFmt(coutT)}</td></tr>`;
   }
   const prix = ct.prix || 0;
   const marge = prix - cout;
