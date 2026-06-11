@@ -1697,7 +1697,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -1789,6 +1789,12 @@ function initFirestore() {
   db.collection('backlog').onSnapshot(snap => {
     appData.backlog = snap.docs.map(d => d.data());
     if (document.getElementById('page-planning')?.classList.contains('active')) renderBacklog();
+  });
+
+  // Journal des tontes réellement effectuées (passages par client)
+  db.collection('tontesPassages').onSnapshot(snap => {
+    appData.tontesPassages = snap.docs.map(d => d.data());
+    if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
   });
 
   // Contrats d'entretien
@@ -2472,12 +2478,23 @@ function renderTontes() {
       </div>`).join('')
     : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
 
-  // --- Tournée optimisée : itinéraire au plus proche (GPS), repli tri code postal ---
-  const ligneClient = c => {
+  // --- Tournée optimisée + check-list de validation des tontes ---
+  const anneeT = String(new Date().getFullYear());
+  const ligneClient = (c, i) => {
     const cp = c.codePostal || ''; const ville = c.ville || ''; const rue = c.rue || c.adresse || '';
     const lieu = [rue, [cp, ville].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || '📍 adresse manquante';
-    const montant = estMarco && c.tontePrix ? ` <span style="color:var(--vert);font-weight:700">· 💶 ${eur(c.tontePrix)}</span>` : '';
-    return `<li style="margin-bottom:2px"><strong>${c.nom}</strong> <span style="color:var(--gris)">— ${lieu}</span>${montant}</li>`;
+    const montant = estMarco && c.tontePrix ? ` · 💶 ${eur(c.tontePrix)}` : '';
+    const fait = !!passageRecentClient(c.id);
+    const nb = nbPassagesClientAnnee(c.id);
+    const prevus = nbPassagesAn(c, saison);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0efe9">
+      <button onclick="toggleTontePassage('${c.id}')" title="${fait ? 'Annuler cette tonte' : 'Marquer comme tondu'}" style="font-size:1.5rem;background:none;border:none;cursor:pointer;line-height:1;padding:0">${fait ? '✅' : '⬜'}</button>
+      <div style="width:22px;text-align:right;color:var(--gris);font-weight:700;flex:none">${i + 1}.</div>
+      <div style="flex:1;min-width:0">
+        <div><strong>${c.nom}</strong> <span style="color:var(--gris);font-size:0.82rem">— ${lieu}${montant}</span></div>
+        <div style="font-size:0.76rem;color:${nb > prevus ? 'var(--vert)' : 'var(--gris)'}">🔢 ${nb}/${prevus} tontes en ${anneeT}${fait ? ' · ✓ fait cette semaine' : ''}</div>
+      </div>
+    </div>`;
   };
   const ttEl = document.getElementById('tonte-tournee');
   if (!clientsTonte.length) {
@@ -2489,12 +2506,12 @@ function renderTontes() {
     ttEl.innerHTML = `
       <div id="tonte-geo-status" style="font-size:0.82rem;margin-bottom:8px;color:${modeGeo ? 'var(--vert)' : 'var(--orange)'}">
         ${modeGeo
-          ? `🧭 Des plus éloignées (grosses tontes) vers le dépôt — on termine par Silly / Bassilly`
+          ? `🧭 Des plus éloignées (grosses tontes) vers le dépôt — on termine par Silly / Bassilly. Cochez ✅ chaque tonte réalisée.`
           : `⚠️ Adresses pas encore géolocalisées — ordre provisoire par code postal. Cliquez « 📍 Géolocaliser » pour un vrai itinéraire.`}
       </div>
-      <ol style="margin:0;padding-left:1.5rem;line-height:1.9">${liste.map(ligneClient).join('')}</ol>
+      <div>${liste.map(ligneClient).join('')}</div>
       ${sansGeo.length ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">📍 ${sansGeo.length} client(s) sans coordonnées (hors itinéraire) : ${sansGeo.map(c=>c.nom).join(', ')}. Relancez « 📍 Géolocaliser ».</div>` : ''}
-      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">Ordre indicatif. Ajustez sur le terrain si besoin.</div>`;
+      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">✅ = tondu cette semaine (recliquer pour annuler). Le compteur suit le nombre réel de passages sur l'année.</div>`;
   }
 
   // --- Rentabilité (Marco uniquement) ---
@@ -2577,6 +2594,26 @@ function nbPassagesAn(client, saison) {
   const debut = (client.tonteDebut && client.tonteDebut > saison.debut) ? client.tonteDebut : saison.debut;
   if (debut > saison.fin) return 0;
   return getTonteDates(debut, saison.fin).length;
+}
+
+// --- Validation des tontes réellement effectuées (passages par client) ---
+// Passage récent (cette semaine = 7 derniers jours) pour gérer la tournée sur 2 jours
+function passageRecentClient(clientId) {
+  const limite = formatDate(new Date(Date.now() - 7 * 86400000));
+  return (appData.tontesPassages || [])
+    .filter(p => p.clientId === clientId && (p.date || '') >= limite)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+}
+// Nombre de tontes réellement faites cette année pour ce client
+function nbPassagesClientAnnee(clientId) {
+  const annee = String(new Date().getFullYear());
+  return (appData.tontesPassages || []).filter(p => p.clientId === clientId && (p.date || '').startsWith(annee)).length;
+}
+// Cocher / décocher une tonte : ajoute un passage aujourd'hui, ou retire celui de la semaine
+function toggleTontePassage(clientId) {
+  const recent = passageRecentClient(clientId);
+  if (recent) deleteDoc('tontesPassages', recent.id);
+  else saveDoc('tontesPassages', { id: uuid(), clientId, date: formatDate(new Date()) });
 }
 
 // Nombre de jours de tonte sur la saison (jeudi + vendredi de chaque cycle)
