@@ -552,6 +552,7 @@
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
+    <button onclick="showPage('creation')" id="nav-creation" style="display:none">🏗️ Création</button>
     <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
   </div>
@@ -593,6 +594,9 @@
   </button>
   <button onclick="showPage('contrats')" id="bnav-contrats">
     <span class="nav-icon">📑</span>Contrats
+  </button>
+  <button onclick="showPage('creation')" id="bnav-creation" style="display:none">
+    <span class="nav-icon">🏗️</span>Création
   </button>
   <button onclick="showPage('materiel')" id="bnav-materiel">
     <span class="nav-icon">🔧</span>Matériel
@@ -685,6 +689,27 @@
       <button class="btn btn-primary btn-sm" id="btn-nouveau-contrat" onclick="ouvrirContrat()" style="margin-left:8px;white-space:nowrap;display:none">+ Nouveau contrat</button>
     </div>
     <div id="contrats-list"></div>
+  </div>
+
+  <!-- ===== CRÉATION (chantiers) ===== -->
+  <div class="page" id="page-creation">
+    <div class="flex-between mb-1" style="flex-wrap:wrap;gap:8px">
+      <div class="semaine-nav" style="margin-bottom:0">
+        <button class="btn btn-secondary btn-sm" onclick="navCreation(-1)">◀</button>
+        <h3 id="creation-periode-titre" style="min-width:210px;text-align:center"></h3>
+        <button class="btn btn-secondary btn-sm" onclick="navCreation(1)">▶</button>
+        <button class="btn btn-secondary btn-sm" onclick="creationAujourdhui()">Aujourd'hui</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="vue-toggle">
+          <button id="creation-vue-semaine" class="active" onclick="setVueCreation('semaine')">Semaine</button>
+          <button id="creation-vue-mois" onclick="setVueCreation('mois')">Mois</button>
+          <button id="creation-vue-annee" onclick="setVueCreation('annee')">Année</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="ouvrirChantier()" style="white-space:nowrap">+ Chantier</button>
+      </div>
+    </div>
+    <div id="creation-list"></div>
   </div>
 
   <!-- ===== FACTURATION ===== -->
@@ -1559,6 +1584,46 @@
 </div>
 
 <!-- ===== MODAL DÉTAIL INTERVENTION ===== -->
+<!-- ===== MODAL CHANTIER ===== -->
+<div class="modal-overlay hidden" id="modal-chantier">
+  <div class="modal">
+    <div class="modal-header"><h3 id="modal-chantier-titre">Nouveau chantier</h3><button class="close-btn" onclick="fermerModal('modal-chantier')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Client *</label>
+        <div class="client-search-wrap" id="ch-client-wrap">
+          <input type="text" class="client-search-input" id="ch-client-search" placeholder="🔍 Rechercher un client…" autocomplete="off"
+            oninput="filtrerClientSearch('ch')" onfocus="ouvrirClientSearch('ch')" onblur="fermerClientSearch('ch', 300)">
+          <input type="hidden" id="ch-client-id">
+          <div class="client-search-dropdown" id="ch-client-dropdown"></div>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Nom du chantier *</label><input type="text" class="form-control" id="ch-nom" placeholder="Ex : Aménagement jardin + terrasse"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Début</label><input type="date" class="form-control" id="ch-debut"></div>
+        <div class="form-group"><label class="form-label">Fin prévue</label><input type="date" class="form-control" id="ch-fin"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Statut</label>
+          <select class="form-control" id="ch-statut">
+            <option value="devis">📝 Devis</option>
+            <option value="planifie">📅 Planifié</option>
+            <option value="en-cours">🔧 En cours</option>
+            <option value="termine">✅ Terminé</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Budget / montant (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-budget" placeholder="ex : 12000"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description / travaux</label><textarea class="form-control" id="ch-description" rows="3" placeholder="Détail des travaux prévus…"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-chantier" onclick="supprimerChantier()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-chantier')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderChantier()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL CONTRAT ===== -->
 <div class="modal-overlay hidden" id="modal-contrat">
   <div class="modal">
@@ -1677,6 +1742,11 @@ firebase.initializeApp({
 const db = firebase.firestore();
 const auth = firebase.auth();
 const ADMINS = ['Marco', 'Jimi', 'Timo', 'Justin']; // comptes avec accès admin
+// Pôle de chaque personne : 'entretien' | 'creation' | 'direction' (voit tout). Défaut = entretien.
+const USER_POLES = { 'Marco': 'direction' };
+function poleUser() { return (currentUser && USER_POLES[currentUser.name]) || 'entretien'; }
+function voitCreation() { const p = poleUser(); return p === 'creation' || p === 'direction'; }
+function voitEntretien() { const p = poleUser(); return p === 'entretien' || p === 'direction'; }
 // Adresse e-mail réelle de chaque compte Firebase Auth (les e-mails ne sont pas secrets)
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
@@ -1697,7 +1767,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -1797,6 +1867,12 @@ function initFirestore() {
     if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
   });
 
+  // Chantiers (création)
+  db.collection('chantiers').onSnapshot(snap => {
+    appData.chantiers = snap.docs.map(d => d.data());
+    if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
+  });
+
   // Contrats d'entretien
   db.collection('contrats').onSnapshot(snap => {
     appData.contrats = snap.docs.map(d => d.data());
@@ -1860,6 +1936,7 @@ function showPage(name) {
   if (name === 'clients') renderClients();
   if (name === 'tontes') renderTontes();
   if (name === 'contrats') renderContrats();
+  if (name === 'creation') renderCreation();
   if (name === 'facturation') renderFacturation();
   if (name === 'materiel') renderMateriel();
 }
@@ -1944,6 +2021,9 @@ function applyUser(user) {
   const voitFactu = user.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
+  const vc = voitCreation();
+  document.getElementById('nav-creation').style.display = vc ? '' : 'none';
+  document.getElementById('bnav-creation').style.display = vc ? '' : 'none';
 
   // Pré-remplir le nom dans les formulaires
   const auteurSelects = ['fo-auteur', 'remarque-auteur'];
@@ -1986,6 +2066,9 @@ function toggleMode() {
   const voitFactu = currentUser && currentUser.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
+  const vc2 = voitCreation();
+  document.getElementById('nav-creation').style.display = vc2 ? '' : 'none';
+  document.getElementById('bnav-creation').style.display = vc2 ? '' : 'none';
   if (!voitFactu && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
   }
@@ -3440,6 +3523,106 @@ function supprimerContrat() {
   if (!currentContratId || !confirm('Supprimer ce contrat ?')) return;
   deleteDoc('contrats', currentContratId);
   fermerModal('modal-contrat');
+}
+
+// =====================================================
+// CRÉATION — CHANTIERS (planning long terme)
+// =====================================================
+let vueCreation = 'semaine';
+let creationOffset = 0;
+let currentChantierId = null;
+const STATUTS_CHANTIER = {
+  devis:      { label: '📝 Devis',     c: '#7f8c8d' },
+  planifie:   { label: '📅 Planifié',  c: '#2980b9' },
+  'en-cours': { label: '🔧 En cours',  c: '#e67e22' },
+  termine:    { label: '✅ Terminé',   c: '#1e5631' }
+};
+function periodeCreation() {
+  const now = new Date();
+  if (vueCreation === 'mois') {
+    const ref = new Date(now.getFullYear(), now.getMonth() + creationOffset, 1);
+    const fin = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    return { debut: formatDate(ref), fin: formatDate(fin), titre: ref.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(/^./, s => s.toUpperCase()) };
+  }
+  if (vueCreation === 'annee') {
+    const an = now.getFullYear() + creationOffset;
+    return { debut: an + '-01-01', fin: an + '-12-31', titre: 'Année ' + an };
+  }
+  const lundi = getLundiSemaine(creationOffset);
+  const dim = new Date(lundi); dim.setDate(lundi.getDate() + 6);
+  return { debut: formatDate(lundi), fin: formatDate(dim), titre: `Semaine du ${lundi.getDate()}/${lundi.getMonth() + 1} au ${dim.getDate()}/${dim.getMonth() + 1}` };
+}
+function setVueCreation(v) { vueCreation = v; creationOffset = 0; renderCreation(); }
+function navCreation(delta) { creationOffset += delta; renderCreation(); }
+function creationAujourdhui() { creationOffset = 0; renderCreation(); }
+
+function renderCreation() {
+  const el = document.getElementById('creation-list');
+  if (!el) return;
+  ['semaine', 'mois', 'annee'].forEach(v => document.getElementById('creation-vue-' + v)?.classList.toggle('active', v === vueCreation));
+  const p = periodeCreation();
+  const t = document.getElementById('creation-periode-titre'); if (t) t.textContent = p.titre;
+  const { chantiers, clients } = getData();
+  // Chantiers actifs sur la période : début ≤ fin de période ET fin ≥ début de période
+  const actifs = chantiers.filter(ch => {
+    const d = ch.dateDebut || '';
+    const f = ch.dateFin || ch.dateDebut || '';
+    return (!d || d <= p.fin) && (!f || f >= p.debut);
+  }).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  if (!actifs.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state">Aucun chantier sur cette période.<br>Cliquez « + Chantier » pour en créer un.</div></div>`;
+    return;
+  }
+  el.innerHTML = actifs.map(ch => {
+    const client = clients.find(c => c.id === ch.clientId);
+    const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+    const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
+    return `<div class="card" onclick="ouvrirChantier('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
+      <div class="flex-between" style="gap:8px">
+        <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}</div>
+          <div style="font-size:0.82rem;color:var(--gris)">${client ? client.nom : '— (sans client)'} · 📅 ${periode}</div></div>
+        <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.78rem;padding:3px 10px;border-radius:20px;white-space:nowrap;flex:none">${st.label}</span>
+      </div>
+      ${ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
+      ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function ouvrirChantier(id) {
+  currentChantierId = id || null;
+  const ch = id ? appData.chantiers.find(c => c.id === id) : null;
+  document.getElementById('modal-chantier-titre').textContent = ch ? 'Modifier le chantier' : 'Nouveau chantier';
+  document.getElementById('btn-suppr-chantier').style.display = ch ? '' : 'none';
+  resetClientSearch('ch');
+  if (ch) setClientSearch('ch', ch.clientId);
+  document.getElementById('ch-nom').value = ch?.nom || '';
+  document.getElementById('ch-debut').value = ch?.dateDebut || '';
+  document.getElementById('ch-fin').value = ch?.dateFin || '';
+  document.getElementById('ch-statut').value = ch?.statut || 'devis';
+  document.getElementById('ch-budget').value = ch?.budget ?? '';
+  document.getElementById('ch-description').value = ch?.description || '';
+  document.getElementById('modal-chantier').classList.remove('hidden');
+}
+function sauvegarderChantier() {
+  const nom = document.getElementById('ch-nom').value.trim();
+  if (!nom) { alert('Donnez un nom au chantier.'); return; }
+  saveDoc('chantiers', {
+    id: currentChantierId || uuid(),
+    clientId: document.getElementById('ch-client-id').value || '',
+    nom,
+    dateDebut: document.getElementById('ch-debut').value || '',
+    dateFin: document.getElementById('ch-fin').value || '',
+    statut: document.getElementById('ch-statut').value,
+    budget: parseFloat(document.getElementById('ch-budget').value) || null,
+    description: document.getElementById('ch-description').value.trim()
+  });
+  fermerModal('modal-chantier');
+}
+function supprimerChantier() {
+  if (!currentChantierId || !confirm('Supprimer ce chantier ?')) return;
+  deleteDoc('chantiers', currentChantierId);
+  fermerModal('modal-chantier');
 }
 
 // =====================================================
