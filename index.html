@@ -709,6 +709,39 @@
     <div id="creation-list"></div>
   </div>
 
+  <!-- ===== DÉTAIL CHANTIER ===== -->
+  <div class="page" id="page-chantier-detail">
+    <button class="btn btn-secondary btn-sm" onclick="showPage('creation')" style="margin-bottom:0.75rem">← Retour aux chantiers</button>
+    <div class="card" id="chantier-detail-entete"></div>
+
+    <div class="card">
+      <div class="card-title">⏱️ Heures du jour</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-h-date"></div>
+        <div class="form-group"><label class="form-label">Ouvrier</label><input type="text" class="form-control" id="ch-h-ouvrier" placeholder="Prénom"></div>
+        <div class="form-group"><label class="form-label">Heures</label><input type="number" step="0.25" min="0" class="form-control" id="ch-h-heures" placeholder="ex : 8"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="ajouterHeureChantier()">+ Ajouter les heures</button>
+      <div id="ch-heures-list" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧱 Matériaux emportés / utilisés</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-m-date"></div>
+        <div class="form-group" style="flex:2"><label class="form-label">Matériau</label><input type="text" class="form-control" id="ch-m-designation" placeholder="Ex : Stabilisé, gravier, dalles, sable…"></div>
+        <div class="form-group"><label class="form-label">Quantité</label><input type="number" step="0.01" min="0" class="form-control" id="ch-m-qte"></div>
+        <div class="form-group"><label class="form-label">Unité</label>
+          <select class="form-control" id="ch-m-unite">
+            <option>m³</option><option>T</option><option>kg</option><option>sac(s)</option><option>palette(s)</option><option>pièce(s)</option><option>ml</option><option>m²</option><option>L</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="ajouterMateriauChantier()">+ Ajouter le matériau</button>
+      <div id="ch-materiaux-list" style="margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- ===== FACTURATION ===== -->
   <div class="page" id="page-facturation">
     <div class="card" id="card-sauvegarde" style="margin-bottom:1rem;border:1px solid var(--vert-clair)">
@@ -1764,7 +1797,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -1868,6 +1901,15 @@ function initFirestore() {
   db.collection('chantiers').onSnapshot(snap => {
     appData.chantiers = snap.docs.map(d => d.data());
     if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierHeures').onSnapshot(snap => {
+    appData.chantierHeures = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierMateriaux').onSnapshot(snap => {
+    appData.chantierMateriaux = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
 
   // Contrats d'entretien
@@ -1934,6 +1976,7 @@ function showPage(name) {
   if (name === 'tontes') renderTontes();
   if (name === 'contrats') renderContrats();
   if (name === 'creation') renderCreation();
+  if (name === 'chantier-detail') renderChantierDetail();
   if (name === 'facturation') renderFacturation();
   if (name === 'materiel') renderMateriel();
 }
@@ -3575,7 +3618,7 @@ function renderCreation() {
     const client = clients.find(c => c.id === ch.clientId);
     const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
     const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
-    return `<div class="card" onclick="ouvrirChantier('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
+    return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
       <div class="flex-between" style="gap:8px">
         <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}</div>
           <div style="font-size:0.82rem;color:var(--gris)">${client ? client.nom : '— (sans client)'} · 📅 ${periode}</div></div>
@@ -3622,6 +3665,76 @@ function supprimerChantier() {
   deleteDoc('chantiers', currentChantierId);
   fermerModal('modal-chantier');
 }
+
+// --- Détail d'un chantier : heures journalières + matériaux ---
+let currentChantierDetailId = null;
+function ouvrirChantierDetail(id) {
+  currentChantierDetailId = id;
+  document.getElementById('ch-h-date').value = formatDate(new Date());
+  document.getElementById('ch-m-date').value = formatDate(new Date());
+  document.getElementById('ch-h-ouvrier').value = currentUser ? currentUser.name : '';
+  showPage('chantier-detail');
+}
+function renderChantierDetail() {
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  const entete = document.getElementById('chantier-detail-entete');
+  if (!entete) return;
+  if (!ch) { entete.innerHTML = '<div class="empty-state">Chantier introuvable.</div>'; return; }
+  const client = appData.clients.find(c => c.id === ch.clientId);
+  const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+  entete.innerHTML = `
+    <div class="flex-between" style="gap:8px;flex-wrap:wrap">
+      <div style="min-width:0"><div style="font-weight:800;font-size:1.15rem">${esc(ch.nom) || 'Chantier'}</div>
+        <div style="color:var(--gris);font-size:0.85rem">${client ? esc(client.nom) : '—'} · 📅 ${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.78rem;padding:3px 10px;border-radius:20px">${st.label}</span>
+        <button class="btn btn-secondary btn-sm" onclick="ouvrirChantier('${ch.id}')">✏️ Modifier</button>
+      </div>
+    </div>
+    ${ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
+    ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
+
+  const heures = appData.chantierHeures.filter(h => h.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const totalH = heures.reduce((s, h) => s + (parseFloat(h.heures) || 0), 0);
+  document.getElementById('ch-heures-list').innerHTML = heures.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Ouvrier</th><th style="padding:4px;text-align:right">Heures</th><th></th></tr></thead>
+        <tbody>${heures.map(h => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(h.date)}</td><td style="padding:4px">${esc(h.ouvrier)}</td><td style="padding:4px;text-align:right">${h.heures} h</td><td style="text-align:right"><button onclick="supprimerHeureChantier('${h.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--vert)"><td colspan="2" style="padding:6px 4px;font-weight:800">Total</td><td style="padding:6px 4px;text-align:right;font-weight:800">${totalH} h</td><td></td></tr></tfoot>
+      </table>`
+    : '<div class="empty-state">Aucune heure encodée pour ce chantier.</div>';
+
+  const mats = appData.chantierMateriaux.filter(m => m.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  document.getElementById('ch-materiaux-list').innerHTML = mats.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th><th></th></tr></thead>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td><td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+      </table>`
+    : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
+}
+function ajouterHeureChantier() {
+  if (!currentChantierDetailId) return;
+  const date = document.getElementById('ch-h-date').value;
+  const ouvrier = document.getElementById('ch-h-ouvrier').value.trim();
+  const heures = parseFloat(document.getElementById('ch-h-heures').value);
+  if (!date || !ouvrier || !heures) { alert('Date, ouvrier et heures sont requis.'); return; }
+  saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures });
+  document.getElementById('ch-h-heures').value = '';
+}
+function supprimerHeureChantier(id) { deleteDoc('chantierHeures', id); }
+function ajouterMateriauChantier() {
+  if (!currentChantierDetailId) return;
+  const date = document.getElementById('ch-m-date').value;
+  const designation = document.getElementById('ch-m-designation').value.trim();
+  const quantite = parseFloat(document.getElementById('ch-m-qte').value);
+  const unite = document.getElementById('ch-m-unite').value;
+  if (!date || !designation || !quantite) { alert('Date, matériau et quantité sont requis.'); return; }
+  saveDoc('chantierMateriaux', { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite });
+  document.getElementById('ch-m-designation').value = '';
+  document.getElementById('ch-m-qte').value = '';
+}
+function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
 
 // =====================================================
 // SAUVEGARDE / RESTAURATION (Marco)
