@@ -1771,9 +1771,13 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 const auth = firebase.auth();
-const ADMINS = ['Marco', 'Jimi', 'Timo', 'Justin']; // comptes avec accès admin
+const ADMINS = ['Marco', 'Jimi', 'Timo', 'Justin', 'Thibaut']; // comptes avec accès admin (Thibaut = chef création)
 // Pôle de chaque personne : 'entretien' | 'creation' | 'direction' (voit tout). Défaut = entretien.
-const USER_POLES = { 'Marco': 'direction' };
+const USER_POLES = {
+  'Marco': 'direction',
+  // Équipe Création
+  'Thibaut': 'creation', 'Jerome': 'creation', 'Olivier': 'creation', 'Antoine': 'creation', 'Anthony': 'creation'
+};
 function poleUser() { return (currentUser && USER_POLES[currentUser.name]) || 'entretien'; }
 function voitCreation() { const p = poleUser(); return p === 'creation' || p === 'direction'; }
 function voitEntretien() { const p = poleUser(); return p === 'entretien' || p === 'direction'; }
@@ -1786,7 +1790,13 @@ const USER_EMAILS = {
   'Mateo':  'mferretti150@gmail.com',
   'Bryan':  'bryanfagnart77@gmail.com',
   'Evann':  'evannhennico07@gmail.com',
-  'Lucas':  'lucas@vertconcept.app' // compte pas encore créé
+  'Lucas':  'lucas@vertconcept.app', // compte pas encore créé
+  // Équipe Création (comptes à créer dans Firebase avec EXACTEMENT ces e-mails)
+  'Thibaut': 'thibaut@vertconcept.app',
+  'Jerome':  'jerome@vertconcept.app',
+  'Olivier': 'olivier@vertconcept.app',
+  'Antoine': 'antoine@vertconcept.app',
+  'Anthony': 'anthony@vertconcept.app'
 };
 function nameToEmail(name) {
   return (USER_EMAILS[name] || (name.toLowerCase() + '@vertconcept.app')).toLowerCase();
@@ -1990,8 +2000,8 @@ let pendingAdminUser = null;
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Timo','Mateo','Bryan','Evann','Lucas'];
-  const bureau = ['Marco','Justin'];
+  const tous = ['Marco','Justin','Jimi','Timo','Mateo','Bryan','Evann','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
+  const bureau = ['Marco','Justin','Thibaut'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
     <button onclick="clicLogin('${n}')"
@@ -2061,9 +2071,9 @@ function applyUser(user) {
   const voitFactu = user.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
-  const vc = voitCreation();
-  document.getElementById('nav-creation').style.display = vc ? '' : 'none';
-  document.getElementById('bnav-creation').style.display = vc ? '' : 'none';
+  appliquerVisibilitePoles();
+  // Un ouvrier Création atterrit directement sur son pôle
+  if (!voitEntretien() && voitCreation()) showPage('creation');
 
   // Pré-remplir le nom dans les formulaires
   const auteurSelects = ['fo-auteur', 'remarque-auteur'];
@@ -2106,9 +2116,7 @@ function toggleMode() {
   const voitFactu = currentUser && currentUser.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
-  const vc2 = voitCreation();
-  document.getElementById('nav-creation').style.display = vc2 ? '' : 'none';
-  document.getElementById('bnav-creation').style.display = vc2 ? '' : 'none';
+  appliquerVisibilitePoles();
   if (!voitFactu && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
   }
@@ -2116,12 +2124,25 @@ function toggleMode() {
   renderPlanning();
 }
 
+// Affiche/masque les onglets selon le pôle de l'utilisateur connecté.
+// Entretien : Planning, Tontes, Contrats, bouton central « + Fiche ».
+// Création : onglet 🏗️ Création. Partagés (Clients, Matériel) : tout le monde.
+function appliquerVisibilitePoles() {
+  const ent = voitEntretien(), cre = voitCreation();
+  ['nav-planning','bnav-planning','nav-tontes','bnav-tontes','nav-contrats','bnav-contrats','bnav-creer'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = ent ? '' : 'none';
+  });
+  ['nav-creation','bnav-creation'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = cre ? '' : 'none';
+  });
+}
+
 function updateNotifBadge() {
   const { interventions } = getData();
   const count = interventions.filter(iv => iv.statut === 'en-attente').length;
   const btn = document.getElementById('notif-btn');
   const countEl = document.getElementById('notif-count');
-  btn.style.display = (modeAdmin && count > 0) ? 'flex' : 'none';
+  btn.style.display = (modeAdmin && voitEntretien() && count > 0) ? 'flex' : 'none';
   countEl.textContent = count;
 }
 
