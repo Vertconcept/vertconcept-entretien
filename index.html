@@ -721,6 +721,12 @@
         <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-h-date"></div>
         <div class="form-group"><label class="form-label">Ouvrier</label><input type="text" class="form-control" id="ch-h-ouvrier" placeholder="Prénom"></div>
         <div class="form-group"><label class="form-label">Heures</label><input type="number" step="0.25" min="0" class="form-control" id="ch-h-heures" placeholder="ex : 8"></div>
+        <div class="form-group"><label class="form-label">Type</label>
+          <select class="form-control" id="ch-h-poste">
+            <option value="devis">📋 Prévu au devis</option>
+            <option value="supplement">🆕 Supplément (hors devis)</option>
+          </select>
+        </div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterHeureChantier()">+ Ajouter les heures</button>
       <div id="ch-heures-list" style="margin-top:12px"></div>
@@ -735,6 +741,12 @@
         <div class="form-group"><label class="form-label">Unité</label>
           <select class="form-control" id="ch-m-unite">
             <option>m³</option><option>T</option><option>kg</option><option>sac(s)</option><option>palette(s)</option><option>pièce(s)</option><option>ml</option><option>m²</option><option>L</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Type</label>
+          <select class="form-control" id="ch-m-poste">
+            <option value="devis">📋 Prévu au devis</option>
+            <option value="supplement">🆕 Supplément (hors devis)</option>
           </select>
         </div>
         <div class="form-group" id="ch-m-cout-group" style="display:none"><label class="form-label">💰 Coût (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-m-cout" placeholder="optionnel"></div>
@@ -3721,13 +3733,17 @@ function renderChantierDetail() {
     ${ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
 
+  const supp = p => p === 'supplement';
+  const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
+
   const heures = appData.chantierHeures.filter(h => h.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const totalH = heures.reduce((s, h) => s + (parseFloat(h.heures) || 0), 0);
+  const totalHSupp = heures.filter(h => supp(h.poste)).reduce((s, h) => s + (parseFloat(h.heures) || 0), 0);
   document.getElementById('ch-heures-list').innerHTML = heures.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Ouvrier</th><th style="padding:4px;text-align:right">Heures</th><th></th></tr></thead>
-        <tbody>${heures.map(h => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(h.date)}</td><td style="padding:4px">${esc(h.ouvrier)}</td><td style="padding:4px;text-align:right">${h.heures} h</td><td style="text-align:right"><button onclick="supprimerHeureChantier('${h.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
-        <tfoot><tr style="border-top:2px solid var(--vert)"><td colspan="2" style="padding:6px 4px;font-weight:800">Total</td><td style="padding:6px 4px;text-align:right;font-weight:800">${totalH} h</td><td></td></tr></tfoot>
+        <tbody>${heures.map(h => `<tr style="border-bottom:1px solid var(--border)${supp(h.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(h.date)}</td><td style="padding:4px">${esc(h.ouvrier)}${supp(h.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${h.heures} h</td><td style="text-align:right"><button onclick="supprimerHeureChantier('${h.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--vert)"><td colspan="2" style="padding:6px 4px;font-weight:800">Total${totalHSupp ? ` <span style="color:#e67e22;font-weight:700;font-size:0.8rem">(dont ${totalHSupp} h hors devis)</span>` : ''}</td><td style="padding:6px 4px;text-align:right;font-weight:800">${totalH} h</td><td></td></tr></tfoot>
       </table>`
     : '<div class="empty-state">Aucune heure encodée pour ce chantier.</div>';
 
@@ -3736,7 +3752,7 @@ function renderChantierDetail() {
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${estMarco ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right">${m.cout ? eurFmt(m.cout) : '—'}</td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right">${m.cout ? eurFmt(m.cout) : '—'}</td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -3751,6 +3767,10 @@ function renderChantierDetail() {
       const coutMat = mats.reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
       const matSansCout = mats.filter(m => !m.cout).length;
       const coutTotal = coutMO + coutMat;
+      // Part « hors devis » (supplément) à refacturer en plus
+      const coutMOSupp = totalHSupp * tauxH;
+      const coutMatSupp = mats.filter(m => supp(m.poste)).reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
+      const coutSupp = coutMOSupp + coutMatSupp;
       const budget = parseFloat(ch.budget) || 0;
       const marge = budget - coutTotal;
       const margePct = budget > 0 ? (marge / budget * 100) : null;
@@ -3760,8 +3780,10 @@ function renderChantierDetail() {
         ${ligne(`👷 Main d'œuvre — ${totalH} h × ${eurFmt(tauxH)}/h`, eurFmt(coutMO))}
         ${ligne(`🧱 Matériaux${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat))}
         ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
-        ${budget > 0 ? ligne('💰 Budget / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
-        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'}</span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : ''}`;
+        ${coutSupp > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:#fd7e1418;color:#e67e22;font-weight:800"><span>🆕 Suppléments hors devis<br><span style="font-weight:400;font-size:0.75rem">à refacturer en plus du devis (${totalHSupp ? totalHSupp + ' h' : ''}${totalHSupp && coutMatSupp ? ' + ' : ''}${coutMatSupp ? 'matériaux' : ''})</span></span><span>${eurFmt(coutSupp)}</span></div>` : ''}
+        ${budget > 0 ? ligne('💰 Budget devis / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
+        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'}</span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : ''}
+        ${budget > 0 && coutSupp > 0 ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--gris)">💡 Le budget couvre le devis initial. Pense à facturer les <strong style="color:#e67e22">${eurFmt(coutSupp)}</strong> de suppléments en plus.</div>` : ''}`;
     }
   }
 }
@@ -3771,7 +3793,8 @@ function ajouterHeureChantier() {
   const ouvrier = document.getElementById('ch-h-ouvrier').value.trim();
   const heures = parseFloat(document.getElementById('ch-h-heures').value);
   if (!date || !ouvrier || !heures) { alert('Date, ouvrier et heures sont requis.'); return; }
-  saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures });
+  const poste = document.getElementById('ch-h-poste').value;
+  saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures, poste });
   document.getElementById('ch-h-heures').value = '';
 }
 function supprimerHeureChantier(id) { deleteDoc('chantierHeures', id); }
@@ -3784,7 +3807,8 @@ function ajouterMateriauChantier() {
   if (!date || !designation || !quantite) { alert('Date, matériau et quantité sont requis.'); return; }
   const coutEl = document.getElementById('ch-m-cout');
   const cout = coutEl && coutEl.value !== '' ? (parseFloat(coutEl.value) || 0) : null;
-  const doc = { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite };
+  const poste = document.getElementById('ch-m-poste').value;
+  const doc = { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite, poste };
   if (cout !== null) doc.cout = cout;
   saveDoc('chantierMateriaux', doc);
   document.getElementById('ch-m-designation').value = '';
