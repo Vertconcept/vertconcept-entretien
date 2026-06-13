@@ -713,6 +713,7 @@
   <div class="page" id="page-chantier-detail">
     <button class="btn btn-secondary btn-sm" onclick="showPage('creation')" style="margin-bottom:0.75rem">← Retour aux chantiers</button>
     <div class="card" id="chantier-detail-entete"></div>
+    <div class="card" id="chantier-detail-recap" style="display:none"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -736,6 +737,7 @@
             <option>m³</option><option>T</option><option>kg</option><option>sac(s)</option><option>palette(s)</option><option>pièce(s)</option><option>ml</option><option>m²</option><option>L</option>
           </select>
         </div>
+        <div class="form-group" id="ch-m-cout-group" style="display:none"><label class="form-label">💰 Coût (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-m-cout" placeholder="optionnel"></div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterMateriauChantier()">+ Ajouter le matériau</button>
       <div id="ch-materiaux-list" style="margin-top:12px"></div>
@@ -3694,6 +3696,9 @@ function ouvrirChantierDetail(id) {
   document.getElementById('ch-h-date').value = formatDate(new Date());
   document.getElementById('ch-m-date').value = formatDate(new Date());
   document.getElementById('ch-h-ouvrier').value = currentUser ? currentUser.name : '';
+  // Champ coût matériau réservé à Marco
+  const cg = document.getElementById('ch-m-cout-group');
+  if (cg) cg.style.display = (currentUser && currentUser.name === 'Marco') ? '' : 'none';
   showPage('chantier-detail');
 }
 function renderChantierDetail() {
@@ -3727,12 +3732,38 @@ function renderChantierDetail() {
     : '<div class="empty-state">Aucune heure encodée pour ce chantier.</div>';
 
   const mats = appData.chantierMateriaux.filter(m => m.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const estMarco = currentUser && currentUser.name === 'Marco';
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
-        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th><th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td><td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${estMarco ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right">${m.cout ? eurFmt(m.cout) : '—'}</td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
+
+  // ===== Récap rentabilité (Marco uniquement) =====
+  const recap = document.getElementById('chantier-detail-recap');
+  if (recap) {
+    if (!estMarco) { recap.style.display = 'none'; }
+    else {
+      recap.style.display = '';
+      const tauxH = (typeof fraisFactu !== 'undefined' && fraisFactu.coutHoraireOuvrier) || 25;
+      const coutMO = totalH * tauxH;
+      const coutMat = mats.reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
+      const matSansCout = mats.filter(m => !m.cout).length;
+      const coutTotal = coutMO + coutMat;
+      const budget = parseFloat(ch.budget) || 0;
+      const marge = budget - coutTotal;
+      const margePct = budget > 0 ? (marge / budget * 100) : null;
+      const ligne = (label, val, fort) => `<div class="flex-between" style="padding:4px 0${fort ? ';border-top:2px solid var(--vert);margin-top:4px;font-weight:800' : ''}"><span>${label}</span><span>${val}</span></div>`;
+      recap.innerHTML = `
+        <div class="card-title">📊 Rentabilité du chantier <span style="font-size:0.7rem;color:var(--gris);font-weight:400">(visible par Marco uniquement)</span></div>
+        ${ligne(`👷 Main d'œuvre — ${totalH} h × ${eurFmt(tauxH)}/h`, eurFmt(coutMO))}
+        ${ligne(`🧱 Matériaux${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat))}
+        ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
+        ${budget > 0 ? ligne('💰 Budget / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
+        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'}</span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : ''}`;
+    }
+  }
 }
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
@@ -3751,9 +3782,14 @@ function ajouterMateriauChantier() {
   const quantite = parseFloat(document.getElementById('ch-m-qte').value);
   const unite = document.getElementById('ch-m-unite').value;
   if (!date || !designation || !quantite) { alert('Date, matériau et quantité sont requis.'); return; }
-  saveDoc('chantierMateriaux', { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite });
+  const coutEl = document.getElementById('ch-m-cout');
+  const cout = coutEl && coutEl.value !== '' ? (parseFloat(coutEl.value) || 0) : null;
+  const doc = { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite };
+  if (cout !== null) doc.cout = cout;
+  saveDoc('chantierMateriaux', doc);
   document.getElementById('ch-m-designation').value = '';
   document.getElementById('ch-m-qte').value = '';
+  if (coutEl) coutEl.value = '';
 }
 function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
 
