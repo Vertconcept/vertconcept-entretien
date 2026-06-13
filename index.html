@@ -548,7 +548,6 @@
   <div class="logo">Vert<span>concept</span> — Entretien</div>
   <div class="header-nav">
     <button onclick="showPage('planning')" id="nav-planning" class="active">Planning</button>
-    <button onclick="showPage('fiches')" id="nav-fiches">Fiches</button>
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
@@ -578,9 +577,6 @@
 <nav class="bottom-nav" id="bottom-nav">
   <button onclick="showPage('planning')" id="bnav-planning" class="active">
     <span class="nav-icon">📅</span>Planning
-  </button>
-  <button onclick="showPage('fiches')" id="bnav-fiches">
-    <span class="nav-icon">📋</span>Fiches
   </button>
   <!-- Bouton central créer une fiche -->
   <button onclick="ouvrirFicheOuvrier()" id="bnav-creer" class="bnav-creer-btn">
@@ -634,6 +630,11 @@
       <div class="mois-grid" style="margin-top:4px" id="mois-grid"></div>
     </div>
 
+    <div class="card" id="card-remarques-clients" style="display:none;margin-top:1rem">
+      <div class="card-title">💬 Remarques clients à prendre en compte</div>
+      <div id="fiches-remarques-recap"></div>
+    </div>
+
     <div class="card" id="card-backlog" style="margin-top:1rem">
       <div class="card-title">📌 Interventions à planifier <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— stock visible sur toutes les semaines</span></div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -663,10 +664,6 @@
       </div>
     </div>
     <div id="fiche-content"></div>
-    <div class="card" id="card-remarques-clients" style="display:none">
-      <div class="card-title">💬 Remarques clients à prendre en compte</div>
-      <div id="fiches-remarques-recap"></div>
-    </div>
   </div>
 
   <!-- ===== CLIENTS ===== -->
@@ -2159,6 +2156,7 @@ function renderPlanning() {
   if (planningVue === 'semaine') renderPlanningSemail();
   else renderPlanningMois();
   renderBacklog();
+  renderRemarquesClients();
 }
 
 // --- Stock d'interventions à planifier (backlog, persistant entre semaines) ---
@@ -2344,14 +2342,14 @@ function selectFicheEquipe(equipe) {
 function renderRemarquesClients() {
   const card = document.getElementById('card-remarques-clients');
   if (!card) return;
-  card.style.display = '';
   const { interventions, clients } = getData();
   const liste = interventions
     .filter(iv => (iv.remarquesClient || '').trim())
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 50);
   const cont = document.getElementById('fiches-remarques-recap');
-  if (!liste.length) { cont.innerHTML = '<div class="empty-state">Aucune remarque client encodée pour l’instant.</div>'; return; }
+  if (!liste.length) { card.style.display = 'none'; return; } // masqué tant qu'il n'y a aucune remarque
+  card.style.display = '';
   cont.innerHTML = liste.map(iv => {
     const c = clients.find(x => x.id === iv.clientId);
     const auteur = iv.soumisePar || iv.chef || '?';
