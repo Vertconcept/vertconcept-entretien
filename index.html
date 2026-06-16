@@ -87,6 +87,7 @@
   .interv-card.tonte { background: #fff3cd; border-left-color: var(--orange); }
   .interv-card.facturee { background: #c2e8c8; border-left: 5px solid #1e5631; }
   .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
+  .interv-card.equipe-mateo { border-left-color: #6f42c1; }
   .interv-card .client-name { font-weight: 700; color: #212529; }
   .interv-card .interv-meta { color: var(--gris); margin-top: 2px; }
   .add-interv-btn { width: 100%; border: 1.5px dashed var(--border); background: transparent; border-radius: 6px; padding: 6px; font-size: 0.78rem; color: var(--gris); cursor: pointer; margin-top: 4px; }
@@ -98,6 +99,7 @@
   .fiche-equipe-btn { padding: 8px 20px; border-radius: 20px; border: 2px solid var(--border); background: white; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
   .fiche-equipe-btn.active-jimi { border-color: #084298; background: #cfe2ff; color: #084298; }
   .fiche-equipe-btn.active-timo { border-color: #0a3622; background: #d1e7dd; color: #0a3622; }
+  .fiche-equipe-btn.active-mateo { border-color: #6f42c1; background: #e9defa; color: #6f42c1; }
   .fiche-interv { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
   .fiche-interv-header { background: var(--vert-pale); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
   .fiche-interv-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -206,6 +208,7 @@
   .mois-interv-dot { font-size: 0.72rem; padding: 2px 5px; border-radius: 4px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--vert-pale); border-left: 3px solid var(--vert); }
   .mois-interv-dot.tonte { background: #fff3cd; border-left-color: var(--orange); }
   .mois-interv-dot.equipe-timo { border-left-color: var(--vert-clair); }
+  .mois-interv-dot.equipe-mateo { border-left-color: #6f42c1; }
   .mois-interv-dot.termine { opacity: 0.55; }
   .mois-interv-dot.facturee { border-left: 5px solid #1e5631; background: #c2e8c8; }
   .mois-more { font-size: 0.7rem; color: var(--gris); cursor: pointer; text-align: center; }
@@ -658,6 +661,7 @@
           <div class="fiche-equipe-selector">
             <button class="fiche-equipe-btn active-jimi" id="fiche-btn-jimi" onclick="selectFicheEquipe('Jimi')">🔵 Jimi</button>
             <button class="fiche-equipe-btn" id="fiche-btn-timo" onclick="selectFicheEquipe('Timo')">🟢 Timo</button>
+            <button class="fiche-equipe-btn" id="fiche-btn-mateo" onclick="selectFicheEquipe('Mateo')">🟣 Mateo</button>
           </div>
         </div>
         <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimer</button>
@@ -1356,6 +1360,7 @@
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
           <option value="Timo">Timo</option>
+          <option value="Mateo">Mateo</option>
         </select>
       </div>
       <div class="form-group">
@@ -1363,7 +1368,7 @@
         <div class="equipe-toggle" id="equipe-toggle">
           <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
           <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
-          <div class="membre-chip" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
+          <div class="membre-chip chef" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
           <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
           <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
@@ -1773,7 +1778,7 @@
 // DATA MODEL & FIRESTORE
 // =====================================================
 const MEMBRES = ['Marco','Jimi','Timo','Justin','Mateo','Bryan','Evann','Lucas'];
-const CHEFS = ['Marco','Jimi','Timo'];
+const CHEFS = ['Marco','Jimi','Timo','Mateo'];
 
 firebase.initializeApp({
   apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
@@ -2295,7 +2300,7 @@ function renderPlanningSemail() {
       const estMarco = currentUser && currentUser.name === 'Marco';
       card.className = 'interv-card'
         + (iv.type === 'tonte' ? ' tonte' : '')
-        + (iv.chef === 'Timo' ? ' equipe-timo' : '')
+        + (iv.chef === 'Timo' ? ' equipe-timo' : iv.chef === 'Mateo' ? ' equipe-mateo' : '')
         + (iv.statut === 'en-attente' ? ' en-attente' : '')
         + (estMarco && iv.facturee ? ' facturee' : '');
       const membres = iv.membres || [iv.chef];
@@ -2383,7 +2388,7 @@ function renderPlanningMois() {
       const dot = document.createElement('div');
       dot.className = 'mois-interv-dot' +
         (iv.type === 'tonte' ? ' tonte' : '') +
-        (iv.chef === 'Timo' ? ' equipe-timo' : '') +
+        (iv.chef === 'Timo' ? ' equipe-timo' : iv.chef === 'Mateo' ? ' equipe-mateo' : '') +
         (iv.statut === 'termine' ? ' termine' : '') +
         (iv.statut === 'en-attente' ? ' en-attente' : '') +
         ((currentUser && currentUser.name === 'Marco' && iv.facturee) ? ' facturee' : '');
@@ -2408,8 +2413,10 @@ function renderPlanningMois() {
 // =====================================================
 function selectFicheEquipe(equipe) {
   ficheEquipe = equipe;
-  document.getElementById('fiche-btn-jimi').className = 'fiche-equipe-btn' + (equipe === 'Jimi' ? ' active-jimi' : '');
-  document.getElementById('fiche-btn-timo').className = 'fiche-equipe-btn' + (equipe === 'Timo' ? ' active-timo' : '');
+  CHEFS.forEach(c => {
+    const btn = document.getElementById('fiche-btn-' + c.toLowerCase());
+    if (btn) btn.className = 'fiche-equipe-btn' + (equipe === c ? ' active-' + c.toLowerCase() : '');
+  });
   renderFiche();
 }
 
