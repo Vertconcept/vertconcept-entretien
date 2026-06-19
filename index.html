@@ -799,6 +799,7 @@
       <div class="materiel-tabs">
         <button class="materiel-tab active" onclick="switchMaterielTab('machines')">🔧 Machines</button>
         <button class="materiel-tab" onclick="switchMaterielTab('pannes')">⚠️ Pannes & Casses</button>
+        <button class="materiel-tab" onclick="switchMaterielTab('stock')">📦 Stock</button>
         <button class="materiel-tab" onclick="switchMaterielTab('achats')">🛒 À commander</button>
       </div>
       <div id="materiel-actions"></div>
@@ -817,6 +818,13 @@
         </label>
       </div>
       <div id="pannes-list"></div>
+    </div>
+
+    <!-- Stock -->
+    <div class="materiel-section" id="ms-stock">
+      <div class="equipe-toggle" id="stock-filtres" style="margin-bottom:10px"></div>
+      <input type="text" class="form-control" id="stock-search" placeholder="🔍 Rechercher un article…" oninput="renderStock()" style="margin-bottom:12px">
+      <div id="stock-list"></div>
     </div>
 
     <!-- Achats -->
@@ -1100,6 +1108,71 @@
       <button class="btn btn-danger btn-sm" id="btn-suppr-achat" onclick="supprimerAchat()" style="margin-right:auto;display:none">Supprimer</button>
       <button class="btn btn-secondary" onclick="fermerModal('modal-achat')">Annuler</button>
       <button class="btn btn-primary" onclick="sauvegarderAchat()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL STOCK ===== -->
+<div class="modal-overlay hidden" id="modal-stock">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-stock-titre">Article en stock</h3>
+      <button class="close-btn" onclick="fermerModal('modal-stock')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nom de l'article *</label>
+        <input type="text" class="form-control" id="stock-nom" placeholder="Ex : Pavés Kandla gris, Bordure corten 2m, Sac de jointoiement…">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Catégorie</label>
+          <select class="form-control" id="stock-categorie">
+            <option value="plantes">🌿 Plantes</option>
+            <option value="amendements">🪴 Amendements</option>
+            <option value="phyto">🧪 Produits phyto</option>
+            <option value="materiaux">🧱 Matériaux</option>
+            <option value="autre">📦 Autre</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Disponibilité</label>
+          <select class="form-control" id="stock-statut">
+            <option value="dispo">✅ En stock (au dépôt)</option>
+            <option value="bas">⚠️ Stock bas</option>
+            <option value="rupture">❌ À commander (fournisseur)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Quantité</label>
+          <input type="text" class="form-control" id="stock-quantite" placeholder="ex : 12, 3 palettes…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unité</label>
+          <input type="text" class="form-control" id="stock-unite" placeholder="ex : sacs, m², pièces, T…">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">📍 Emplacement</label>
+          <input type="text" class="form-control" id="stock-emplacement" placeholder="Dépôt, étagère, extérieur…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">🏪 Fournisseur</label>
+          <input type="text" class="form-control" id="stock-fournisseur" placeholder="Où le racheter">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="stock-notes" rows="2" placeholder="Référence, remarque…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-stock" onclick="supprimerStock()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-stock')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderStock()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -1826,7 +1899,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -1907,7 +1980,7 @@ function initFirestore() {
     else renderCurrentPage();
   }, err => { showLoading(false); alert('Erreur Firebase interventions : ' + err.message); });
 
-  ['machines','pannes','achats'].forEach(col => {
+  ['machines','pannes','achats','stock'].forEach(col => {
     db.collection(col).onSnapshot(snap => {
       appData[col] = snap.docs.map(d => d.data());
       if (clientsReady && intervReady) renderCurrentPage();
@@ -3831,7 +3904,7 @@ function exporterSauvegarde() {
   const data = {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
-    machines: appData.machines, pannes: appData.pannes, achats: appData.achats, backlog: appData.backlog,
+    machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3850,7 +3923,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'backlog'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
@@ -4165,13 +4238,14 @@ let currentMachineId = null, currentPanneId = null, currentAchatId = null;
 function switchMaterielTab(tab) {
   materielTabActive = tab;
   document.querySelectorAll('.materiel-tab').forEach((btn, i) => {
-    btn.classList.toggle('active', ['machines','pannes','achats'][i] === tab);
+    btn.classList.toggle('active', ['machines','pannes','stock','achats'][i] === tab);
   });
   document.querySelectorAll('.materiel-section').forEach(s => s.classList.remove('active'));
   document.getElementById('ms-' + tab).classList.add('active');
   updateMaterielActions();
   if (tab === 'machines') renderMachines();
   if (tab === 'pannes') renderPannes();
+  if (tab === 'stock') renderStock();
   if (tab === 'achats') renderAchats();
 }
 
@@ -4179,6 +4253,7 @@ function renderMateriel() {
   updateMaterielActions();
   if (materielTabActive === 'machines') renderMachines();
   if (materielTabActive === 'pannes') renderPannes();
+  if (materielTabActive === 'stock') renderStock();
   if (materielTabActive === 'achats') renderAchats();
 }
 
@@ -4188,6 +4263,8 @@ function updateMaterielActions() {
     actions.innerHTML = modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirMachine()">+ Machine</button>` : '';
   else if (materielTabActive === 'pannes')
     actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="ouvrirPanne()">⚠️ Signaler une panne</button>`;
+  else if (materielTabActive === 'stock')
+    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="ouvrirStock()">+ Article</button>`;
   else if (materielTabActive === 'achats')
     actions.innerHTML = modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirAchat()">+ Article à commander</button>` : '';
 }
@@ -4420,6 +4497,144 @@ function supprimerAchat() {
   if (!currentAchatId || !confirm('Supprimer cet article ?')) return;
   deleteDoc('achats', currentAchatId);
   fermerModal('modal-achat');
+}
+
+// =====================================================
+// STOCK / INVENTAIRE (plantes, amendements, phyto, matériaux…) — consultable par tous
+// =====================================================
+const STOCK_CATEGORIES = {
+  plantes:     { label: '🌿 Plantes',         c: '#1e5631' },
+  amendements: { label: '🪴 Amendements',     c: '#8d6e63' },
+  phyto:       { label: '🧪 Produits phyto',  c: '#c0392b' },
+  materiaux:   { label: '🧱 Matériaux',       c: '#5d6d7e' },
+  autre:       { label: '📦 Autre',           c: '#7f8c8d' }
+};
+const STOCK_STATUTS = {
+  dispo:   { label: '✅ En stock',     c: '#1e5631', bg: '#1e563118' },
+  bas:     { label: '⚠️ Stock bas',    c: '#b9770e', bg: '#fd7e1422' },
+  rupture: { label: '❌ À commander',  c: '#c0392b', bg: '#c0392b18' }
+};
+let stockFiltre = 'tout';
+let currentStockId = null;
+
+function setStockFiltre(cat) { stockFiltre = cat; renderStock(); }
+
+function renderStock() {
+  const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const { stock } = getData();
+  // Chips de filtre par catégorie
+  const chips = document.getElementById('stock-filtres');
+  if (chips) {
+    const cats = ['tout', ...Object.keys(STOCK_CATEGORIES)];
+    const compteur = c => c === 'tout' ? stock.length : stock.filter(i => (i.categorie || 'autre') === c).length;
+    chips.innerHTML = cats.map(c => {
+      const lbl = c === 'tout' ? '📋 Tout' : STOCK_CATEGORIES[c].label;
+      return `<button onclick="setStockFiltre('${c}')" class="membre-chip${stockFiltre === c ? ' selected' : ''}">${lbl} <span style="opacity:0.6">(${compteur(c)})</span></button>`;
+    }).join('');
+  }
+  const q = (document.getElementById('stock-search')?.value || '').toLowerCase().trim();
+  let items = [...stock];
+  if (stockFiltre !== 'tout') items = items.filter(i => (i.categorie || 'autre') === stockFiltre);
+  if (q) items = items.filter(i => (i.nom || '').toLowerCase().includes(q) || (i.notes || '').toLowerCase().includes(q) || (i.fournisseur || '').toLowerCase().includes(q));
+  const ordreStatut = { rupture: 0, bas: 1, dispo: 2 };
+  items.sort((a, b) => (ordreStatut[a.statut] ?? 2) - (ordreStatut[b.statut] ?? 2) || (a.nom || '').localeCompare(b.nom || ''));
+
+  const list = document.getElementById('stock-list');
+  if (!list) return;
+  if (!stock.length) {
+    list.innerHTML = `<div class="card"><div class="empty-state">Aucun article en stock pour le moment.<br>Clique sur « + Article » pour commencer l'inventaire.</div></div>`;
+    return;
+  }
+  if (!items.length) { list.innerHTML = `<div class="card"><div class="empty-state">Aucun article ne correspond à ce filtre.</div></div>`; return; }
+
+  const aCommander = items.filter(i => i.statut === 'rupture').length;
+  const rappel = aCommander ? `<div class="card" style="margin-bottom:10px;border-left:5px solid #c0392b;background:#c0392b0d"><strong style="color:#c0392b">❌ ${aCommander} article(s) à aller chercher chez le fournisseur</strong></div>` : '';
+
+  list.innerHTML = rappel + items.map(i => {
+    const cat = STOCK_CATEGORIES[i.categorie] || STOCK_CATEGORIES.autre;
+    const st = STOCK_STATUTS[i.statut] || STOCK_STATUTS.dispo;
+    const qte = i.quantite ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '';
+    const sousLigne = [cat.label, i.emplacement ? `📍 ${esc(i.emplacement)}` : '', i.fournisseur ? `🏪 ${esc(i.fournisseur)}` : ''].filter(Boolean).join(' · ');
+    return `<div class="card" style="margin-bottom:8px;padding:12px;border-left:5px solid ${cat.c}">
+      <div class="flex-between" style="gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:800">${esc(i.nom)}${qte ? ` <span style="font-weight:600;color:var(--gris);font-size:0.85rem">· ${esc(qte)}</span>` : ''}</div>
+          <div style="font-size:0.8rem;color:var(--gris);margin-top:2px">${sousLigne}</div>
+          ${i.notes ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:2px">📝 ${esc(i.notes)}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <button onclick="cyclerStatutStock('${i.id}')" title="Cliquer pour changer la disponibilité" style="border:none;cursor:pointer;font-weight:800;font-size:0.8rem;padding:6px 13px;border-radius:20px;background:${st.bg};color:${st.c};white-space:nowrap">${st.label}</button>
+          <div style="display:flex;gap:6px">
+            ${i.statut === 'rupture' ? `<button class="btn btn-secondary btn-sm" onclick="ajouterStockACommander('${i.id}')" title="Ajouter à la liste À commander">🛒 À commander</button>` : ''}
+            <button class="btn btn-secondary btn-sm" onclick="ouvrirStock('${i.id}')">✏️</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Clic sur le badge : dispo → bas → rupture → dispo
+function cyclerStatutStock(id) {
+  const i = appData.stock.find(x => x.id === id);
+  if (!i) return;
+  const ordre = ['dispo', 'bas', 'rupture'];
+  const next = ordre[(ordre.indexOf(i.statut || 'dispo') + 1) % ordre.length];
+  saveDoc('stock', { ...i, statut: next });
+}
+
+// Bascule un article en rupture dans la liste « À commander »
+function ajouterStockACommander(id) {
+  const i = appData.stock.find(x => x.id === id);
+  if (!i) return;
+  const exist = appData.achats.find(a => a.statut !== 'recu' && (a.article || '').toLowerCase() === (i.nom || '').toLowerCase());
+  if (exist) { alert(`« ${i.nom} » est déjà dans la liste À commander.`); return; }
+  saveDoc('achats', {
+    id: uuid(), article: i.nom,
+    qte: i.quantite ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '',
+    priorite: 'normale',
+    notes: i.fournisseur ? `Fournisseur : ${i.fournisseur}` : '',
+    statut: 'a-commander'
+  });
+  alert(`« ${i.nom} » ajouté à la liste 🛒 À commander.`);
+}
+
+function ouvrirStock(id) {
+  currentStockId = id || null;
+  const i = id ? getData().stock.find(x => x.id === id) : null;
+  document.getElementById('modal-stock-titre').textContent = i ? 'Modifier l\'article' : 'Nouvel article en stock';
+  document.getElementById('btn-suppr-stock').style.display = (i && modeAdmin) ? '' : 'none';
+  document.getElementById('stock-nom').value = i?.nom || '';
+  document.getElementById('stock-categorie').value = i?.categorie || (stockFiltre !== 'tout' ? stockFiltre : 'materiaux');
+  document.getElementById('stock-statut').value = i?.statut || 'dispo';
+  document.getElementById('stock-quantite').value = i?.quantite || '';
+  document.getElementById('stock-unite').value = i?.unite || '';
+  document.getElementById('stock-emplacement').value = i?.emplacement || '';
+  document.getElementById('stock-fournisseur').value = i?.fournisseur || '';
+  document.getElementById('stock-notes').value = i?.notes || '';
+  document.getElementById('modal-stock').classList.remove('hidden');
+}
+
+function sauvegarderStock() {
+  const nom = document.getElementById('stock-nom').value.trim();
+  if (!nom) { alert('Le nom de l\'article est obligatoire.'); return; }
+  saveDoc('stock', {
+    id: currentStockId || uuid(), nom,
+    categorie: document.getElementById('stock-categorie').value,
+    statut: document.getElementById('stock-statut').value,
+    quantite: document.getElementById('stock-quantite').value.trim(),
+    unite: document.getElementById('stock-unite').value.trim(),
+    emplacement: document.getElementById('stock-emplacement').value.trim(),
+    fournisseur: document.getElementById('stock-fournisseur').value.trim(),
+    notes: document.getElementById('stock-notes').value.trim()
+  });
+  fermerModal('modal-stock');
+}
+
+function supprimerStock() {
+  if (!currentStockId || !confirm('Supprimer cet article du stock ?')) return;
+  deleteDoc('stock', currentStockId);
+  fermerModal('modal-stock');
 }
 
 // =====================================================
