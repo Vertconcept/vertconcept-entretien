@@ -3946,7 +3946,46 @@ function renderCreationSemaine(el, chantiers, clients) {
       </div>
     </div>`;
   }
-  el.innerHTML = `<div class="jours-grid${montrerSamedi ? ' avec-samedi' : ''}">${cols}</div>`;
+
+  // Liste détaillée des chantiers de la semaine (sous le planning)
+  const dim = new Date(lundi); dim.setDate(lundi.getDate() + 6);
+  const debutSem = formatDate(lundi), finSem = formatDate(dim);
+  const liste = chantiers.filter(ch => {
+    const d = ch.dateDebut || '', f = ch.dateFin || ch.dateDebut || '';
+    return (!d || d <= finSem) && (!f || f >= debutSem);
+  }).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  const listeHtml = liste.length
+    ? `<div style="margin-top:1.25rem">
+        <div class="card-title" style="margin-bottom:8px">📋 Chantiers de la semaine <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">(${liste.length})</span></div>
+        ${liste.map(ch => carteChantierDetaillee(ch, clients)).join('')}
+      </div>`
+    : '';
+
+  el.innerHTML = `<div class="jours-grid${montrerSamedi ? ' avec-samedi' : ''}">${cols}</div>` + listeHtml;
+}
+
+// Carte détaillée d'un chantier (liste sous le planning semaine)
+function carteChantierDetaillee(ch, clients) {
+  const client = clients.find(c => c.id === ch.clientId);
+  const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+  const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
+  const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+  const ord = etapesOrdonnees(ch);
+  const faits = (ch.etapes || []).filter(k => ord.some(e => e.key === k)).length;
+  const pct = ord.length ? Math.round(faits / ord.length * 100) : 0;
+  const today = formatDate(new Date());
+  const retard = ch.statut !== 'termine' && ch.dateFin && ch.dateFin < today;
+  return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
+      <div class="flex-between" style="gap:8px">
+        <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}${retard ? ' <span style="color:#c0392b;font-size:0.78rem;font-weight:700">⚠️ en retard</span>' : ''}</div>
+          <div style="font-size:0.82rem;color:var(--gris)">${client ? client.nom : '— (sans client)'} · 📅 ${periode}</div></div>
+        <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.78rem;padding:3px 10px;border-radius:20px;white-space:nowrap;flex:none">${st.label}</span>
+      </div>
+      ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
+      ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
+      ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
+      ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
+    </div>`;
 }
 
 // --- Vue MOIS : calendrier (chantiers actifs chaque jour) ---
