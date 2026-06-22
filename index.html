@@ -2227,6 +2227,11 @@ function initFirestore() {
     fraisTontes = { ...FRAIS_TONTES_DEFAUT, ...(snap.exists ? snap.data() : {}) };
     if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
   });
+  // Début du tour de tonte en cours (réinitialise les cases à chaque nouveau passage)
+  db.collection('config').doc('tontes').onSnapshot(snap => {
+    tontesTourDebut = (snap.exists && snap.data().tourDebut) ? snap.data().tourDebut : '';
+    if (document.getElementById('page-tontes')?.classList.contains('active')) renderTontes();
+  });
   // Tarifs pour le calcul du prix à facturer (doc unique)
   db.collection('config').doc('fraisFacturation').onSnapshot(snap => {
     fraisFactu = { ...FRAIS_FACTU_DEFAUT, ...(snap.exists ? snap.data() : {}) };
@@ -2261,6 +2266,7 @@ const FRAIS_TONTES_DEFAUT = {
   coutHoraireOuvrier: 16.80, heuresParJour: 8, nbOuvriers: 2
 };
 let fraisTontes = { ...FRAIS_TONTES_DEFAUT };
+let tontesTourDebut = ''; // date (YYYY-MM-DD) du début du tour de tonte en cours
 // Frais/tarifs pour le calcul du prix à facturer (Marco/chefs, stocké dans config/fraisFacturation)
 const FRAIS_FACTU_DEFAUT = {
   dechetsBase: 75, dechetsIncrement: 50, dechetsTranche: 3,
@@ -3044,7 +3050,7 @@ function renderTontes() {
       <div style="width:22px;text-align:right;color:var(--gris);font-weight:700;flex:none">${i + 1}.</div>
       <div style="flex:1;min-width:0">
         <div><strong>${c.nom}</strong> <span style="color:var(--gris);font-size:0.82rem">— ${lieu}${montant}</span></div>
-        <div style="font-size:0.76rem;color:${nb > prevus ? 'var(--vert)' : 'var(--gris)'}">🔢 ${nb}/${prevus} tontes en ${anneeT}${fait ? ' · ✓ fait cette semaine' : ''}</div>
+        <div style="font-size:0.76rem;color:${nb > prevus ? 'var(--vert)' : 'var(--gris)'}">🔢 ${nb}/${prevus} tontes en ${anneeT}${fait ? ' · ✓ fait ce tour' : ''}</div>
       </div>
     </div>`;
   };
@@ -3055,7 +3061,12 @@ function renderTontes() {
     const { ordre, sansGeo } = ordonnerTournee(clientsTonte, getDepotGeo());
     const modeGeo = ordre.length > 0;
     const liste = modeGeo ? ordre : [...clientsTonte].sort(comparerTonteAdresse);
+    const faits = liste.filter(c => passageRecentClient(c.id)).length;
     ttEl.innerHTML = `
+      <div class="flex-between" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:0.82rem">✅ <strong>${faits}/${liste.length}</strong> tontes faites ce tour${tontesTourDebut ? ` <span style="color:var(--gris)">(depuis le ${formatDateFR(tontesTourDebut)})</span>` : ''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="nouveauTourTonte()" title="Repartir à zéro pour le prochain passage">🔄 Nouveau tour</button>
+      </div>
       <div id="tonte-geo-status" style="font-size:0.82rem;margin-bottom:8px;color:${modeGeo ? 'var(--vert)' : 'var(--orange)'}">
         ${modeGeo
           ? `🧭 Des plus éloignées (grosses tontes) vers le dépôt — on termine par Silly / Bassilly. Cochez ✅ chaque tonte réalisée.`
@@ -3063,7 +3074,7 @@ function renderTontes() {
       </div>
       <div>${liste.map(ligneClient).join('')}</div>
       ${sansGeo.length ? `<div style="font-size:0.8rem;color:var(--orange);margin-top:8px">📍 ${sansGeo.length} client(s) sans coordonnées (hors itinéraire) : ${sansGeo.map(c=>c.nom).join(', ')}. Relancez « 📍 Géolocaliser ».</div>` : ''}
-      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">✅ = tondu cette semaine (recliquer pour annuler). Le compteur suit le nombre réel de passages sur l'année.</div>`;
+      <div style="font-size:0.78rem;color:var(--gris);margin-top:6px">✅ = tondu ce tour (recliquer pour annuler). Quand le tour est terminé, cliquez « 🔄 Nouveau tour » pour repartir à zéro. Le compteur suit le nombre réel de passages sur l'année.</div>`;
   }
 
   // --- Rentabilité (Marco uniquement) ---
@@ -3149,12 +3160,18 @@ function nbPassagesAn(client, saison) {
 }
 
 // --- Validation des tontes réellement effectuées (passages par client) ---
-// Passage récent (cette semaine = 7 derniers jours) pour gérer la tournée sur 2 jours
+// Passage du tour en cours (depuis le début du tour, ou à défaut les 7 derniers jours)
 function passageRecentClient(clientId) {
-  const limite = formatDate(new Date(Date.now() - 7 * 86400000));
+  const limite = tontesTourDebut || formatDate(new Date(Date.now() - 7 * 86400000));
   return (appData.tontesPassages || [])
     .filter(p => p.clientId === clientId && (p.date || '') >= limite)
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+}
+// Démarrer un nouveau tour : toutes les cases repassent à vide (l'historique des passages est conservé pour le bilan)
+function nouveauTourTonte() {
+  if (!confirm('Démarrer un nouveau tour de tonte ?\n\nToutes les cases ✅ repassent à vide pour ce nouveau passage. L\'historique (compteur annuel, bilan) est conservé.')) return;
+  db.collection('config').doc('tontes').set({ tourDebut: formatDate(new Date()) }, { merge: true })
+    .catch(e => { console.error('nouveauTour', e); alert('Erreur, réessayez.'); });
 }
 // Nombre de tontes réellement faites cette année pour ce client
 function nbPassagesClientAnnee(clientId) {
