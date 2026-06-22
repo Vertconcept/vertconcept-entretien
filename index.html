@@ -4088,8 +4088,8 @@ function renderCreationSemaine(el, chantiers, clients) {
   const joursNoms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const actifsJour = dStr => chantiers.filter(ch => { const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut; return d && d <= dStr && f >= dStr; })
     .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
-  const samedi = new Date(lundi); samedi.setDate(lundi.getDate() + 5);
-  const montrerSamedi = afficherSamediCreation || actifsJour(formatDate(samedi)).length > 0;
+  // Les ouvriers ne travaillent pas le week-end : le samedi ne s'affiche que via le bouton, jamais en prolongeant un chantier
+  const montrerSamedi = afficherSamediCreation;
   majBoutonSamediCreation();
   const nbJours = montrerSamedi ? 6 : 5;
 
@@ -4342,7 +4342,7 @@ function renderChantierDetail() {
         <div style="font-weight:800;color:${barC}">${pct}%</div>
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
-      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:120px"></span><span style="width:66px;text-align:center">Qté devis</span><span style="width:66px;text-align:center">Qté réel</span><span style="width:16px"></span></div>
+      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:120px"></span><span style="width:62px;text-align:center">Qté devis</span><span style="width:62px;text-align:center">Qté réel</span><span style="width:54px;text-align:center">Unité</span><span style="width:16px"></span></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
         ${ordonnees.map((e, idx) => { const q = (ch.etapesQte && ch.etapesQte[e.key]) || {}; return `<div data-key="${e.key}"
             ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')"
@@ -4354,8 +4354,9 @@ function renderChantierDetail() {
           <span draggable="true" ondragstart="dragEtapeStart('${e.key}')" ondragend="renderChantierDetail()" style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
           <span style="flex:1;min-width:120px;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
-          <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:66px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
-          <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:66px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
+          <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
+          <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
+          <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="–" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:54px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
           <span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer ce poste" style="cursor:pointer;opacity:0.55">🗑️</span>
         </div>`; }).join('')}
       </div>
