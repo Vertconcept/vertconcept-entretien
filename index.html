@@ -4143,7 +4143,7 @@ function carteChantierDetaillee(ch, clients) {
   const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
   const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
   const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
-  const ord = etapesOrdonnees(ch);
+  const ord = etapesOrdonnees(ch).filter(e => (e.type || 'poste') === 'poste');
   const faits = (ch.etapes || []).filter(k => ord.some(e => e.key === k)).length;
   const pct = ord.length ? Math.round(faits / ord.length * 100) : 0;
   const today = formatDate(new Date());
@@ -4332,10 +4332,19 @@ function renderChantierDetail() {
   if (avEl) {
     const perso = ch.etapesPerso || [];
     const ordonnees = etapesOrdonnees(ch);
-    const faites = new Set((ch.etapes || []).filter(k => ordonnees.some(e => e.key === k)));
-    const pct = ordonnees.length ? Math.round(faites.size / ordonnees.length * 100) : 0;
+    const estPoste = e => (e.type || 'poste') === 'poste';
+    const postesList = ordonnees.filter(estPoste);
+    const faites = new Set((ch.etapes || []).filter(k => postesList.some(e => e.key === k)));
+    const pct = postesList.length ? Math.round(faites.size / postesList.length * 100) : 0;
     const barC = pct === 100 ? '#1e5631' : '#e67e22';
     const persoKeys = new Set(perso.map(e => e.key));
+    const ctrls = (e, idx) => `<span style="display:flex;flex-direction:column;line-height:0.75">
+        <span onclick="deplacerEtape('${e.key}',-1)" title="Monter" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === 0 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▲</span>
+        <span onclick="deplacerEtape('${e.key}',1)" title="Descendre" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === ordonnees.length - 1 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▼</span>
+      </span>
+      <span draggable="true" ondragstart="dragEtapeStart('${e.key}')" ondragend="renderChantierDetail()" style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>`;
+    const delBtn = e => `<span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer" style="cursor:pointer;opacity:0.55">🗑️</span>`;
+    const rowAttrs = e => `data-key="${e.key}" ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')"`;
     avEl.innerHTML = `
       <div class="flex-between" style="align-items:center;margin-bottom:8px">
         <div class="card-title" style="margin:0">📈 Avancement</div>
@@ -4344,26 +4353,31 @@ function renderChantierDetail() {
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
       <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:120px"></span><span style="width:62px;text-align:center">Qté devis</span><span style="width:62px;text-align:center">Qté réel</span><span style="width:54px;text-align:center">Unité</span><span style="width:16px"></span></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
-        ${ordonnees.map((e, idx) => { const q = (ch.etapesQte && ch.etapesQte[e.key]) || {}; return `<div data-key="${e.key}"
-            ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')"
-            style="display:flex;align-items:center;gap:6px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px;flex-wrap:wrap">
-          <span style="display:flex;flex-direction:column;line-height:0.75">
-            <span onclick="deplacerEtape('${e.key}',-1)" title="Monter" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === 0 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▲</span>
-            <span onclick="deplacerEtape('${e.key}',1)" title="Descendre" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === ordonnees.length - 1 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▼</span>
-          </span>
-          <span draggable="true" ondragstart="dragEtapeStart('${e.key}')" ondragend="renderChantierDetail()" style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
+        ${ordonnees.map((e, idx) => {
+          const type = e.type || 'poste';
+          if (type === 'titre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:6px 2px 3px;margin-top:8px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:800;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.3px;color:var(--vert);border-bottom:2px solid var(--vert-pale);padding-bottom:3px">${esc(e.label)}</span>${delBtn(e)}</div>`;
+          if (type === 'soustitre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:4px 2px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:700;color:#555;font-style:italic">↳ ${esc(e.label)}</span>${delBtn(e)}</div>`;
+          const q = (ch.etapesQte && ch.etapesQte[e.key]) || {};
+          return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px;flex-wrap:wrap">
+          ${ctrls(e, idx)}
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
           <span style="flex:1;min-width:120px;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
           <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
           <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
           <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="–" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:54px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
-          <span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer ce poste" style="cursor:pointer;opacity:0.55">🗑️</span>
-        </div>`; }).join('')}
+          ${delBtn(e)}
+        </div>`;
+        }).join('')}
       </div>
       ${(ch.etapesMasquees && ch.etapesMasquees.length) ? `<div style="margin-top:6px"><span onclick="reinitialiserEtapesDefaut()" style="cursor:pointer;font-size:0.78rem;color:var(--vert)">↩️ Remettre les étapes par défaut</span></div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <input type="text" class="form-control" id="ch-etape-input" placeholder="Ajouter un poste (ex : Pose clôture, Éclairage…)" onkeydown="if(event.key==='Enter')ajouterEtapePerso()" style="flex:1">
-        <button class="btn btn-secondary btn-sm" onclick="ajouterEtapePerso()" style="white-space:nowrap">+ Poste</button>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <select class="form-control" id="ch-etape-type" style="width:auto;flex:none">
+          <option value="poste">☑️ Poste</option>
+          <option value="titre">📌 Titre</option>
+          <option value="soustitre">↳ Sous-titre</option>
+        </select>
+        <input type="text" class="form-control" id="ch-etape-input" placeholder="Ajouter un poste, un titre ou un sous-titre…" onkeydown="if(event.key==='Enter')ajouterEtapePerso()" style="flex:1;min-width:150px">
+        <button class="btn btn-secondary btn-sm" onclick="ajouterEtapePerso()" style="white-space:nowrap">+ Ajouter</button>
       </div>`;
   }
 
@@ -4571,7 +4585,8 @@ function ajouterEtapePerso() {
   const input = document.getElementById('ch-etape-input');
   const label = input.value.trim();
   if (!label) return;
-  const perso = [...(ch.etapesPerso || []), { key: 'ep_' + uuid(), label }];
+  const type = document.getElementById('ch-etape-type')?.value || 'poste';
+  const perso = [...(ch.etapesPerso || []), { key: 'ep_' + uuid(), label, type }];
   saveDoc('chantiers', { ...ch, etapesPerso: perso });
   input.value = '';
 }
@@ -4916,10 +4931,10 @@ function cyclerStatutAppro(id) {
 // CONGÉS & ABSENCES
 // =====================================================
 const CONGE_TYPES = {
-  conge:      { label: '🏖️ Congé',              c: '#2980b9' },
+  conge:      { label: '🏖️ Congé',              c: '#e6b800' },
   maladie:    { label: '🤒 Maladie',            c: '#c0392b' },
-  intemperie: { label: '🌧️ Intempérie',         c: '#e67e22' },
-  fermeture:  { label: '🏢 Fermeture annuelle',  c: '#7f8c8d', adminOnly: true }
+  intemperie: { label: '🌧️ Intempérie',         c: '#2980b9' },
+  fermeture:  { label: '🏢 Fermeture annuelle',  c: '#e67e22', adminOnly: true }
 };
 const CONGE_STATUTS = {
   'en-attente': { label: '⏳ En attente', c: '#b9770e', bg: '#fd7e1418' },
