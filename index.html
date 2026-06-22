@@ -758,7 +758,6 @@
       <div class="card-title">⏱️ Heures du jour</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-h-date"></div>
-        <div class="form-group"><label class="form-label">Ouvrier</label><input type="text" class="form-control" id="ch-h-ouvrier" placeholder="Prénom"></div>
         <div class="form-group"><label class="form-label">Heures</label><input type="number" step="0.25" min="0" class="form-control" id="ch-h-heures" placeholder="ex : 8"></div>
         <div class="form-group"><label class="form-label">Type</label>
           <select class="form-control" id="ch-h-poste">
@@ -766,6 +765,10 @@
             <option value="supplement">🆕 Supplément (hors devis)</option>
           </select>
         </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ouvrier(s) — cochez tous ceux qui ont fait ces heures ce jour</label>
+        <div class="equipe-toggle" id="ch-h-ouvriers"></div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterHeureChantier()">+ Ajouter les heures</button>
       <div id="ch-heures-list" style="margin-top:12px"></div>
@@ -4562,7 +4565,12 @@ function ouvrirChantierDetail(id) {
   currentChantierDetailId = id;
   document.getElementById('ch-h-date').value = formatDate(new Date());
   document.getElementById('ch-m-date').value = formatDate(new Date());
-  document.getElementById('ch-h-ouvrier').value = currentUser ? currentUser.name : '';
+  // Cases ouvriers : équipe du chantier ∪ équipe Création ∪ moi ; moi pré-coché
+  const chOuv = appData.chantiers.find(c => c.id === id);
+  const moi = currentUser ? currentUser.name : '';
+  const pool = [...new Set([...((chOuv && chOuv.equipe) || []), ...MEMBRES_CREATION, moi].filter(Boolean))];
+  const ouvEl = document.getElementById('ch-h-ouvriers');
+  if (ouvEl) ouvEl.innerHTML = pool.map(m => `<div class="membre-chip${m === moi ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`).join('');
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
   if (cg) cg.style.display = voitChantierFinances() ? '' : 'none';
@@ -5737,11 +5745,11 @@ function renderConges() {
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-h-date').value;
-  const ouvrier = document.getElementById('ch-h-ouvrier').value.trim();
+  const ouvriers = [...document.querySelectorAll('#ch-h-ouvriers .membre-chip.selected')].map(c => c.dataset.membre);
   const heures = parseFloat(document.getElementById('ch-h-heures').value);
-  if (!date || !ouvrier || !heures) { alert('Date, ouvrier et heures sont requis.'); return; }
+  if (!date || !ouvriers.length || !heures) { alert('Date, au moins un ouvrier et les heures sont requis.'); return; }
   const poste = document.getElementById('ch-h-poste').value;
-  saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures, poste });
+  ouvriers.forEach(ouvrier => saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures, poste }));
   document.getElementById('ch-h-heures').value = '';
 }
 function supprimerHeureChantier(id) { deleteDoc('chantierHeures', id); }
