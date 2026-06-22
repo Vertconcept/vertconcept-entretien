@@ -559,13 +559,13 @@
 <header>
   <div class="logo">Vert<span>concept</span> — Entretien</div>
   <div class="header-nav">
-    <button onclick="showPage('creation')" id="nav-creation" style="display:none">🏗️ Création</button>
+    <button onclick="showPage('creation')" id="nav-creation" style="display:none">🏡 Création</button>
     <button onclick="showPage('planning')" id="nav-planning" class="active">Entretien</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
-    <button onclick="showPage('conges')" id="nav-conges">🏖️ Congés <span id="conges-badge" style="display:none;background:#c0392b;color:#fff;border-radius:10px;font-size:0.68rem;font-weight:700;padding:0 5px;margin-left:2px"></span></button>
+    <button onclick="showPage('conges')" id="nav-conges">☀️ Congés <span id="conges-badge" style="display:none;background:#c0392b;color:#fff;border-radius:10px;font-size:0.68rem;font-weight:700;padding:0 5px;margin-left:2px"></span></button>
     <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
@@ -589,25 +589,25 @@
 <!-- NAVIGATION BAS (mobile) -->
 <nav class="bottom-nav" id="bottom-nav">
   <button onclick="showPage('creation')" id="bnav-creation" style="display:none">
-    <span class="nav-icon">🏗️</span>Création
+    <span class="nav-icon">🏡</span>Création
   </button>
   <button onclick="showPage('planning')" id="bnav-planning" class="active">
-    <span class="nav-icon">📅</span>Entretien
+    <span class="nav-icon">🍃</span>Entretien
   </button>
   <button onclick="showPage('tontes')" id="bnav-tontes">
-    <span class="nav-icon">🌿</span>Tontes
+    <span class="nav-icon">✂️</span>Tontes
   </button>
   <button onclick="showPage('contrats')" id="bnav-contrats">
-    <span class="nav-icon">📑</span>Contrats
+    <span class="nav-icon">📝</span>Contrats
   </button>
   <button onclick="showPage('clients')" id="bnav-clients">
     <span class="nav-icon">👥</span>Clients
   </button>
   <button onclick="showPage('materiel')" id="bnav-materiel">
-    <span class="nav-icon">🔧</span>Matériel
+    <span class="nav-icon">🛠️</span>Matériel
   </button>
   <button onclick="showPage('conges')" id="bnav-conges">
-    <span class="nav-icon">🏖️</span>Congés
+    <span class="nav-icon">☀️</span>Congés
   </button>
   <button onclick="showPage('facturation')" id="bnav-facturation">
     <span class="nav-icon">💶</span>Factu
@@ -2270,7 +2270,7 @@ const FRAIS_FACTU_DEFAUT = {
 let fraisFactu = { ...FRAIS_FACTU_DEFAUT };
 
 // Icônes de la barre de navigation mobile (personnalisables, stockées dans config/navIcones)
-const NAV_ICONES_DEFAUT = { creation: '🏗️', planning: '📅', tontes: '🌿', contrats: '📑', clients: '👥', materiel: '🔧', conges: '🏖️', facturation: '💶' };
+const NAV_ICONES_DEFAUT = { creation: '🏡', planning: '🍃', tontes: '✂️', contrats: '📝', clients: '👥', materiel: '🛠️', conges: '☀️', facturation: '💶' };
 const NAV_TABS = [
   { key: 'creation', label: 'Création' }, { key: 'planning', label: 'Entretien' },
   { key: 'tontes', label: 'Tontes' }, { key: 'contrats', label: 'Contrats' },
