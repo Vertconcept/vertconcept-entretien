@@ -220,6 +220,9 @@
     .mois-jour { min-height: 60px; padding: 4px; }
     .mois-interv-dot { display: none; }
     .mois-jour-num .add-btn-mois { opacity: 1; }
+    /* Mais on garde les absences visibles dans le calendrier des congés */
+    #conges-calendrier .mois-interv-dot { display: block; font-size: 0.56rem; padding: 1px 3px; overflow: hidden; text-overflow: ellipsis; }
+    #conges-calendrier .mois-jour { min-height: 56px; }
   }
 
   /* IMPORT EXCEL */
@@ -304,14 +307,17 @@
       z-index: 99;
       box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
       padding-bottom: env(safe-area-inset-bottom);
+      overflow-x: auto; flex-wrap: nowrap;
+      scrollbar-width: none; -webkit-overflow-scrolling: touch;
     }
+    .bottom-nav::-webkit-scrollbar { display: none; }
     .bottom-nav button {
-      flex: 1; border: none; background: transparent;
+      flex: 1 0 auto; min-width: 60px; border: none; background: transparent;
       color: var(--gris); font-size: 0.62rem; font-weight: 600;
       padding: 8px 2px 6px; cursor: pointer;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
       transition: color 0.15s;
-      min-height: 56px;
+      min-height: 56px; white-space: nowrap;
     }
     .bottom-nav button .nav-icon { font-size: 1.3rem; line-height: 1; }
     .bottom-nav button.active { color: var(--vert); }
@@ -582,15 +588,15 @@
 
 <!-- NAVIGATION BAS (mobile) -->
 <nav class="bottom-nav" id="bottom-nav">
+  <button onclick="showPage('creation')" id="bnav-creation" style="display:none">
+    <span class="nav-icon">🏗️</span>Création
+  </button>
   <button onclick="showPage('planning')" id="bnav-planning" class="active">
     <span class="nav-icon">📅</span>Entretien
   </button>
-  <!-- Bouton central créer une fiche -->
+  <!-- Bouton créer une fiche (entretien) -->
   <button onclick="ouvrirFicheOuvrier()" id="bnav-creer" class="bnav-creer-btn">
     <span class="nav-icon" style="font-size:1.6rem;line-height:1">✚</span>Fiche
-  </button>
-  <button onclick="showPage('clients')" id="bnav-clients">
-    <span class="nav-icon">👥</span>Clients
   </button>
   <button onclick="showPage('tontes')" id="bnav-tontes">
     <span class="nav-icon">🌿</span>Tontes
@@ -598,8 +604,8 @@
   <button onclick="showPage('contrats')" id="bnav-contrats">
     <span class="nav-icon">📑</span>Contrats
   </button>
-  <button onclick="showPage('creation')" id="bnav-creation" style="display:none">
-    <span class="nav-icon">🏗️</span>Création
+  <button onclick="showPage('clients')" id="bnav-clients">
+    <span class="nav-icon">👥</span>Clients
   </button>
   <button onclick="showPage('materiel')" id="bnav-materiel">
     <span class="nav-icon">🔧</span>Matériel
