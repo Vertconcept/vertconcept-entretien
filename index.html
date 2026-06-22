@@ -797,6 +797,8 @@
       <div id="ch-materiaux-list" style="margin-top:12px"></div>
     </div>
 
+    <div class="card" id="chantier-detail-machines"></div>
+
     <div class="card">
       <div class="card-title">💬 Échanges chef ⇄ Marco</div>
       <div id="ch-messages-list" style="margin-bottom:10px"></div>
@@ -1068,6 +1070,10 @@
       <div class="form-group">
         <label class="form-label">Type d'entretien à prévoir</label>
         <input type="text" class="form-control" id="machine-type-entretien" placeholder="Vidange, affûtage lames, remplacement filtre…">
+      </div>
+      <div class="form-group" id="machine-cout-group" style="display:none">
+        <label class="form-label">💰 Coût d'utilisation / jour (€) <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— pour facturer l'engin aux chantiers (grue, chargeur…)</span></label>
+        <input type="number" step="0.01" min="0" class="form-control" id="machine-cout-jour" placeholder="ex : 250 (la demi-journée = moitié)">
       </div>
       <div class="form-group">
         <label class="form-label">Notes</label>
@@ -2097,7 +2103,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], conges: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2233,6 +2239,10 @@ function initFirestore() {
   });
   db.collection('chantierDegats').onSnapshot(snap => {
     appData.chantierDegats = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierMachines').onSnapshot(snap => {
+    appData.chantierMachines = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
   db.collection('conges').onSnapshot(snap => {
@@ -4811,6 +4821,39 @@ function renderChantierDetail() {
       </div>`;
   }
 
+  // --- Engins / machines utilisés sur le chantier (journée / demi-journée) ---
+  const mcEl = document.getElementById('chantier-detail-machines');
+  if (mcEl) {
+    const finM = voitChantierFinances();
+    const machinesDispo = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+    const items = appData.chantierMachines.filter(x => x.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const coutMachine = x => { const m = (appData.machines || []).find(mm => mm.id === x.machineId); return (m && parseFloat(m.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); };
+    const totalM = items.reduce((s, x) => s + coutMachine(x), 0);
+    mcEl.innerHTML = `
+      <div class="card-title">🚜 Engins / machines utilisés <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— journée ou demi-journée</span></div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-mc-date" value="${formatDate(new Date())}"></div>
+        <div class="form-group" style="flex:2"><label class="form-label">Engin</label>
+          <select class="form-control" id="ch-mc-machine">${machinesDispo.length ? machinesDispo.map(m => `<option value="${m.id}">${esc(m.nom)}</option>`).join('') : '<option value="">(aucune machine — créez-en dans Matériel)</option>'}</select>
+        </div>
+        <div class="form-group"><label class="form-label">Durée</label>
+          <select class="form-control" id="ch-mc-duree"><option value="jour">🌞 Journée</option><option value="demi">🌗 Demi-journée</option></select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="ajouterMachineChantier()">+ Ajouter l'engin</button>
+      ${items.length ? `<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+        ${items.map(x => {
+          const m = (appData.machines || []).find(mm => mm.id === x.machineId);
+          return `<div class="flex-between" style="gap:8px;padding:6px 8px;background:#f8f9fa;border-radius:8px">
+            <div style="min-width:0;flex:1">🚜 ${esc(m ? m.nom : (x.machineNom || 'Engin supprimé'))} <span style="color:var(--gris);font-size:0.8rem">· ${x.duree === 'demi' ? '½ journée' : 'journée'} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
+            ${finM ? `<span style="font-weight:700;color:#1e5631;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
+            <button onclick="supprimerMachineChantier('${x.id}')" title="Retirer" style="background:none;border:none;cursor:pointer;flex:none">🗑️</button>
+          </div>`;
+        }).join('')}
+        ${finM && totalM ? `<div class="flex-between" style="padding:5px 8px;font-weight:800;border-top:2px solid var(--vert)"><span>Total engins</span><span>${eurFmt(totalM)}</span></div>` : ''}
+      </div>` : '<div class="empty-state" style="padding:10px">Aucun engin noté. Ajoutez la grue, le chargeur, etc. utilisés ce chantier.</div>'}`;
+  }
+
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
 
@@ -4846,7 +4889,8 @@ function renderChantierDetail() {
       const matSansCout = mats.filter(m => !m.cout).length;
       const appros = appData.chantierAppro.filter(a => a.chantierId === ch.id);
       const coutAppro = appros.reduce((s, a) => s + (parseFloat(a.quantite) || 0) * (parseFloat(a.prix) || 0), 0);
-      const coutTotal = coutMO + coutMat + coutAppro;
+      const coutMachines = (appData.chantierMachines || []).filter(x => x.chantierId === ch.id).reduce((s, x) => { const mm = (appData.machines || []).find(m => m.id === x.machineId); return s + (mm && parseFloat(mm.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); }, 0);
+      const coutTotal = coutMO + coutMat + coutAppro + coutMachines;
       // Part « hors devis » (supplément) à refacturer en plus
       const coutMOSupp = totalHSupp * tauxH;
       const coutMatSupp = mats.filter(m => supp(m.poste)).reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
@@ -4860,6 +4904,7 @@ function renderChantierDetail() {
         ${ligne(`👷 Main d'œuvre — ${totalH} h × ${eurFmt(tauxH)}/h`, eurFmt(coutMO))}
         ${(coutMat || !coutAppro) ? ligne(`🧱 Matériaux emportés${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat)) : ''}
         ${coutAppro ? ligne('📦 Matériaux à commander', eurFmt(coutAppro)) : ''}
+        ${coutMachines ? ligne('🚜 Engins / machines', eurFmt(coutMachines)) : ''}
         ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
         ${coutSupp > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:#fd7e1418;color:#e67e22;font-weight:800"><span>🆕 Suppléments hors devis<br><span style="font-weight:400;font-size:0.75rem">à refacturer en plus du devis (${totalHSupp ? totalHSupp + ' h' : ''}${totalHSupp && coutMatSupp ? ' + ' : ''}${coutMatSupp ? 'matériaux' : ''})</span></span><span>${eurFmt(coutSupp)}</span></div>` : ''}
         ${budget > 0 ? ligne('💰 Budget devis / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
@@ -5753,6 +5798,17 @@ function ajouterHeureChantier() {
   document.getElementById('ch-h-heures').value = '';
 }
 function supprimerHeureChantier(id) { deleteDoc('chantierHeures', id); }
+function ajouterMachineChantier() {
+  if (!currentChantierDetailId) return;
+  const machineId = document.getElementById('ch-mc-machine').value;
+  const date = document.getElementById('ch-mc-date').value;
+  const duree = document.getElementById('ch-mc-duree').value;
+  if (!machineId) { alert('Choisissez un engin (créez-en dans Matériel si besoin).'); return; }
+  if (!date) { alert('Indiquez la date.'); return; }
+  const m = appData.machines.find(x => x.id === machineId);
+  saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur: currentUser ? currentUser.name : '', ts: new Date().toISOString() });
+}
+function supprimerMachineChantier(id) { deleteDoc('chantierMachines', id); }
 function ajouterMateriauChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-m-date').value;
@@ -5785,7 +5841,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, chantierPlanning: appData.chantierPlanning, chantierDegats: appData.chantierDegats, conges: appData.conges,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, chantierPlanning: appData.chantierPlanning, chantierDegats: appData.chantierDegats, chantierMachines: appData.chantierMachines, conges: appData.conges,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -5804,7 +5860,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'chantierDegats', 'conges'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'chantierDegats', 'chantierMachines', 'conges'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
@@ -6206,21 +6262,28 @@ function ouvrirMachine(id) {
   document.getElementById('machine-prochain-entretien').value = m?.prochainEntretien || '';
   document.getElementById('machine-type-entretien').value = m?.typeEntretien || '';
   document.getElementById('machine-notes').value = m?.notes || '';
+  // Coût/jour = Marco + Justin (facturation chantier)
+  document.getElementById('machine-cout-group').style.display = voitChantierFinances() ? '' : 'none';
+  document.getElementById('machine-cout-jour').value = (m && m.coutJour != null) ? m.coutJour : '';
   document.getElementById('modal-machine').classList.remove('hidden');
 }
 
 function sauvegarderMachine() {
   const nom = document.getElementById('machine-nom').value.trim();
   if (!nom) { alert('Nom obligatoire.'); return; }
-  const data = getData();
+  const ancienne = appData.machines.find(x => x.id === currentMachineId) || {};
+  const prixRaw = document.getElementById('machine-cout-jour').value;
+  const coutJour = voitChantierFinances() ? (prixRaw !== '' ? (parseFloat(prixRaw) || 0) : null) : (ancienne.coutJour ?? null);
   const machine = {
+    ...ancienne,
     id: currentMachineId || uuid(), nom,
     type: document.getElementById('machine-type').value,
     statut: document.getElementById('machine-statut').value,
     dernierEntretien: document.getElementById('machine-dernier-entretien').value || null,
     prochainEntretien: document.getElementById('machine-prochain-entretien').value || null,
     typeEntretien: document.getElementById('machine-type-entretien').value,
-    notes: document.getElementById('machine-notes').value
+    notes: document.getElementById('machine-notes').value,
+    coutJour
   };
   saveDoc('machines', machine);
   fermerModal('modal-machine');
