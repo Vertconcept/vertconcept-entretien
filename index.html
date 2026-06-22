@@ -737,6 +737,7 @@
     <div class="card" id="chantier-detail-devis"></div>
     <div class="card" id="chantier-detail-fichiers"></div>
     <div class="card" id="chantier-detail-supplements"></div>
+    <div class="card" id="chantier-detail-appro"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -1226,6 +1227,48 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fermerModal('modal-postes-devis')">Annuler</button>
       <button class="btn btn-primary" onclick="creerPostesDepuisTexte()">✅ Créer les postes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL APPRO (matériau à prévoir/commander pour un chantier) ===== -->
+<div class="modal-overlay hidden" id="modal-appro">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-appro-titre">Matériau à prévoir</h3>
+      <button class="close-btn" onclick="fermerModal('modal-appro')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Matériau *</label>
+        <input type="text" class="form-control" id="appro-designation" list="stock-datalist" placeholder="Ex : Pavés Kandla, stabilisé, bordure corten…">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Quantité</label><input type="text" class="form-control" id="appro-quantite" placeholder="ex : 3, 5…"></div>
+        <div class="form-group"><label class="form-label">Unité</label>
+          <select class="form-control" id="appro-unite">
+            <option value=""></option><option>m³</option><option>T</option><option>kg</option><option>sac(s)</option><option>palette(s)</option><option>pièce(s)</option><option>ml</option><option>m²</option><option>L</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Statut</label>
+          <select class="form-control" id="appro-statut">
+            <option value="a-commander">📋 À commander</option>
+            <option value="commande">📦 Commandé</option>
+            <option value="a-enlever">🚚 À enlever chez le fournisseur</option>
+            <option value="en-stock">✅ En stock (au dépôt)</option>
+            <option value="livre">📥 Livré / reçu</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">📅 Livraison / enlèvement prévu le</label><input type="date" class="form-control" id="appro-date"></div>
+      </div>
+      <div class="form-group"><label class="form-label">🏪 Fournisseur / notes</label><input type="text" class="form-control" id="appro-notes" placeholder="Où, référence, remarque…"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-appro" onclick="supprimerAppro()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-appro')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderAppro()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -1968,7 +2011,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2092,6 +2135,10 @@ function initFirestore() {
   });
   db.collection('chantierSupplements').onSnapshot(snap => {
     appData.chantierSupplements = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierAppro').onSnapshot(snap => {
+    appData.chantierAppro = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
 
@@ -4011,7 +4058,8 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
     const dStr = formatDate(jour);
     const autreMois = jour.getMonth() !== mois;
     const weekend = jour.getDay() === 0 || jour.getDay() === 6;
-    const actifs = chantiers.filter(ch => {
+    // Les ouvriers ne travaillent pas le week-end : on ne pré-remplit pas samedi/dimanche
+    const actifs = weekend ? [] : chantiers.filter(ch => {
       const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut;
       return d && d <= dStr && f >= dStr;
     });
@@ -4269,6 +4317,34 @@ function renderChantierDetail() {
         <input type="text" class="form-control" id="ch-supplement-input" placeholder="Ex : Le client demande aussi une bordure le long de l'allée" onkeydown="if(event.key==='Enter')ajouterSupplementChantier()" style="flex:1">
         <button class="btn btn-primary btn-sm" onclick="ajouterSupplementChantier()" style="white-space:nowrap">+ Ajouter</button>
       </div>`;
+  }
+
+  // --- Approvisionnement : matériaux à prévoir/commander pour le chantier ---
+  const apEl = document.getElementById('chantier-detail-appro');
+  if (apEl) {
+    const items = appData.chantierAppro.filter(a => a.chantierId === ch.id)
+      .sort((a, b) => (APPRO_STATUTS_ORDRE[a.statut] ?? 9) - (APPRO_STATUTS_ORDRE[b.statut] ?? 9) || (a.datePrevue || '').localeCompare(b.datePrevue || ''));
+    apEl.innerHTML = `
+      <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin:0">🧱 Matériaux à prévoir / commander</div>
+        <button class="btn btn-primary btn-sm" onclick="ouvrirAppro()">+ Matériau</button>
+      </div>
+      ${items.length ? `<div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:420px">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+          <th style="padding:5px">Matériau</th><th style="padding:5px">Qté</th><th style="padding:5px">Statut</th><th style="padding:5px">Prévu le</th><th></th>
+        </tr></thead>
+        <tbody>${items.map(a => {
+          const st = APPRO_STATUTS[a.statut] || APPRO_STATUTS['a-commander'];
+          const qte = [a.quantite, a.unite].filter(Boolean).join(' ');
+          return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:5px"><div style="font-weight:600">${esc(a.designation)}</div>${a.notes ? `<div style="font-size:0.74rem;color:var(--gris)">${esc(a.notes)}</div>` : ''}</td>
+            <td style="padding:5px;white-space:nowrap">${esc(qte) || '—'}</td>
+            <td style="padding:5px"><button onclick="cyclerStatutAppro('${a.id}')" title="Cliquer pour changer le statut" style="border:none;cursor:pointer;font-weight:700;font-size:0.74rem;padding:4px 9px;border-radius:20px;background:${st.bg};color:${st.c};white-space:nowrap">${st.label}</button></td>
+            <td style="padding:5px;white-space:nowrap">${a.datePrevue ? '📅 ' + formatDateFR(a.datePrevue) : '—'}</td>
+            <td style="padding:5px;text-align:right;white-space:nowrap"><button onclick="ouvrirAppro('${a.id}')" style="background:none;border:none;cursor:pointer">✏️</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>` : '<div class="empty-state" style="padding:10px">Aucun matériau prévu. Listez ici ce qu\'il faut commander/sortir du stock pour ce chantier.</div>'}`;
   }
 
   const supp = p => p === 'supplement';
@@ -4636,6 +4712,62 @@ function supprimerSupplementChantier(id) {
   deleteDoc('chantierSupplements', id);
 }
 
+// --- Approvisionnement matériaux du chantier ---
+const APPRO_STATUTS = {
+  'a-commander': { label: '📋 À commander', c: '#c0392b', bg: '#c0392b15' },
+  'commande':    { label: '📦 Commandé',    c: '#2980b9', bg: '#2980b915' },
+  'a-enlever':   { label: '🚚 À enlever',   c: '#b9770e', bg: '#fd7e1422' },
+  'en-stock':    { label: '✅ En stock',    c: '#1e5631', bg: '#1e563115' },
+  'livre':       { label: '📥 Livré',       c: '#1e5631', bg: '#1e563115' }
+};
+const APPRO_STATUTS_ORDRE = { 'a-commander': 0, 'commande': 1, 'a-enlever': 2, 'en-stock': 3, 'livre': 4 };
+let currentApproId = null, currentApproChantier = null;
+
+function ouvrirAppro(id) {
+  currentApproId = id || null;
+  currentApproChantier = currentChantierDetailId;
+  const a = id ? appData.chantierAppro.find(x => x.id === id) : null;
+  document.getElementById('modal-appro-titre').textContent = a ? 'Modifier le matériau' : 'Matériau à prévoir';
+  document.getElementById('btn-suppr-appro').style.display = a ? '' : 'none';
+  document.getElementById('appro-designation').value = a?.designation || '';
+  document.getElementById('appro-quantite').value = a?.quantite || '';
+  document.getElementById('appro-unite').value = a?.unite || '';
+  document.getElementById('appro-statut').value = a?.statut || 'a-commander';
+  document.getElementById('appro-date').value = a?.datePrevue || '';
+  document.getElementById('appro-notes').value = a?.notes || '';
+  // datalist depuis le stock
+  const dl = document.getElementById('stock-datalist');
+  if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${(s.nom || '').replace(/"/g, '&quot;')}">`).join('');
+  document.getElementById('modal-appro').classList.remove('hidden');
+}
+function sauvegarderAppro() {
+  const designation = document.getElementById('appro-designation').value.trim();
+  if (!designation) { alert('Indiquez le matériau.'); return; }
+  saveDoc('chantierAppro', {
+    id: currentApproId || uuid(),
+    chantierId: currentApproChantier,
+    designation,
+    quantite: document.getElementById('appro-quantite').value.trim(),
+    unite: document.getElementById('appro-unite').value,
+    statut: document.getElementById('appro-statut').value,
+    datePrevue: document.getElementById('appro-date').value || '',
+    notes: document.getElementById('appro-notes').value.trim()
+  });
+  fermerModal('modal-appro');
+}
+function supprimerAppro() {
+  if (!currentApproId || !confirm('Supprimer ce matériau ?')) return;
+  deleteDoc('chantierAppro', currentApproId);
+  fermerModal('modal-appro');
+}
+function cyclerStatutAppro(id) {
+  const a = appData.chantierAppro.find(x => x.id === id);
+  if (!a) return;
+  const ordre = ['a-commander', 'commande', 'a-enlever', 'en-stock', 'livre'];
+  const next = ordre[(ordre.indexOf(a.statut || 'a-commander') + 1) % ordre.length];
+  saveDoc('chantierAppro', { ...a, statut: next });
+}
+
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-h-date').value;
@@ -4679,7 +4811,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -4698,7 +4830,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
