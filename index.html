@@ -635,6 +635,14 @@
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:1rem;padding:10px 12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" class="form-control" id="interv-search" placeholder="🔍 Rechercher toutes les interventions d'un client (passées + à venir)…" oninput="rechercheInterventions()" style="flex:1;min-width:220px">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('interv-search').value='';rechercheInterventions()">✕</button>
+      </div>
+      <div id="interv-search-results" style="margin-top:8px"></div>
+    </div>
+
     <div id="planning-semaine-view">
       <div class="jours-grid" id="planning-grid"></div>
     </div>
@@ -2679,6 +2687,26 @@ function bandeauAbsencesJour(dStr) {
   return h;
 }
 
+// Recherche de toutes les interventions (passées + à venir) d'un client
+function rechercheInterventions() {
+  const cont = document.getElementById('interv-search-results');
+  if (!cont) return;
+  const q = (document.getElementById('interv-search').value || '').toLowerCase().trim();
+  if (!q) { cont.innerHTML = ''; return; }
+  const { interventions, clients } = getData();
+  const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const res = interventions.filter(iv => getNomClient(iv, clients).toLowerCase().includes(q))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!res.length) { cont.innerHTML = `<div style="font-size:0.85rem;color:var(--gris);padding:6px">Aucune intervention pour « ${esc(q)} ».</div>`; return; }
+  cont.innerHTML = `<div style="font-size:0.8rem;color:var(--gris);margin-bottom:4px">${res.length} intervention(s) :</div>` + res.map(iv => {
+    const membres = (iv.membres || [iv.chef]).filter(Boolean).join(', ');
+    return `<div onclick="ouvrirDetailIntervention('${iv.id}')" style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer">
+      <div style="min-width:0"><strong>${esc(getNomClient(iv, clients))}</strong> <span style="color:var(--gris);font-size:0.8rem">${esc(iv.type)}${membres ? ' · ' + esc(membres) : ''}</span><div style="font-size:0.78rem;color:var(--gris)">📅 ${formatDateFR(iv.date)}</div></div>
+      <div style="flex:none">${statutBadgeHtml(iv.statut)}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderPlanningSemail() {
   const lundi = getLundiSemaine(currentWeekOffset);
   const today = formatDate(new Date());
@@ -3600,6 +3628,17 @@ function ouvrirDetailIntervention(id) {
       ${iv.pulve ? pulveFicheHtml(iv.pulve) : ''}
     </div>
     ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
+    <hr>
+    <div class="fiche-field-label">📁 Documents (plan de plantation, d'implantation…)</div>
+    <div style="margin-top:4px">${(iv.fichiers || []).length ? (iv.fichiers || []).map(f => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:5px 8px;background:#f8f9fa;border-radius:8px;margin-bottom:4px">
+        <span style="cursor:pointer;flex:1;min-width:0" onclick="voirFichierIntervention('${f.id}','${(f.type || '').replace(/'/g, '')}')">${(f.type || '').startsWith('image/') ? '🖼️' : '📄'} <span style="text-decoration:underline">${(f.nom || '').replace(/</g, '&lt;')}</span></span>
+        ${modeAdmin ? `<button onclick="supprimerFichierIntervention('${id}','${f.id}')" title="Supprimer" style="background:none;border:none;cursor:pointer">🗑️</button>` : ''}
+      </div>`).join('') : '<div style="font-size:0.82rem;color:var(--gris)">Aucun document.</div>'}</div>
+    <div style="margin-top:6px">
+      <input type="file" accept="image/*,application/pdf,.pdf" id="iv-fichier-input" multiple onchange="televerserFichierIntervention('${id}',this)">
+      <div style="font-size:0.76rem;color:var(--gris);margin-top:2px">PDF ou images · max ~700 Ko par fichier.</div>
+      <div id="iv-fichier-status" style="font-size:0.8rem;color:var(--gris);margin-top:2px"></div>
+    </div>
   `;
 
   // Boutons statut rapide (admin)
@@ -5051,6 +5090,47 @@ function supprimerFichierChantier(chId, fileId) {
   Promise.resolve(deleteDoc('chantierFichiers', fileId))
     .then(() => { if (ch) return saveDoc('chantiers', { ...ch, fichiers: (ch.fichiers || []).filter(f => f.id !== fileId) }); })
     .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); });
+}
+
+// --- Documents joints à une intervention (entretien) ---
+function televerserFichierIntervention(ivId, input) {
+  const files = [...(input.files || [])];
+  if (!files.length) return;
+  const iv = appData.interventions.find(i => i.id === ivId);
+  if (!iv) return;
+  const statut = document.getElementById('iv-fichier-status');
+  const valides = files.filter(f => (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) && f.size <= FICHIER_MAX_OCTETS);
+  const rejetes = files.length - valides.length;
+  if (!valides.length) { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Fichier(s) refusé(s) : PDF ou image, max ~700 Ko.</span>'; input.value = ''; return; }
+  if (statut) statut.textContent = '⏳ Envoi en cours…';
+  Promise.all(valides.map(f => new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res({ id: 'fi_' + uuid(), nom: f.name, type: f.type || 'application/pdf', data: r.result });
+    r.onerror = () => res(null);
+    r.readAsDataURL(f);
+  }))).then(async results => {
+    const ok = results.filter(Boolean);
+    for (const it of ok) await saveDoc('interventionFichiers', { id: it.id, interventionId: ivId, nom: it.nom, type: it.type, data: it.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+    const meta = ok.map(it => ({ id: it.id, nom: it.nom, type: it.type }));
+    await saveDoc('interventions', { ...iv, fichiers: [...(iv.fichiers || []), ...meta] });
+    input.value = '';
+    if (statut && rejetes) statut.innerHTML = `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s).</span>`;
+    ouvrirDetailIntervention(ivId);
+  }).catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec de l\'envoi (fichier peut-être trop lourd).</span>'; });
+}
+function voirFichierIntervention(id, type) {
+  db.collection('interventionFichiers').doc(id).get().then(doc => {
+    if (!doc.exists || !doc.data().data) { alert('Fichier introuvable.'); return; }
+    const url = URL.createObjectURL(dataURLversBlob(doc.data().data));
+    afficherFichierPleinEcran(url, (type || doc.data().type || '').startsWith('image/'), doc.data().nom || 'Document');
+  }).catch(e => alert('Erreur de chargement : ' + (e.message || e)));
+}
+function supprimerFichierIntervention(ivId, fileId) {
+  if (!confirm('Supprimer ce document ?')) return;
+  const iv = appData.interventions.find(i => i.id === ivId);
+  Promise.resolve(deleteDoc('interventionFichiers', fileId))
+    .then(() => { if (iv) return saveDoc('interventions', { ...iv, fichiers: (iv.fichiers || []).filter(f => f.id !== fileId) }); })
+    .then(() => ouvrirDetailIntervention(ivId));
 }
 
 // Lit le texte du PDF du devis et pré-remplit la zone d'édition des postes
