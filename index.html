@@ -4618,7 +4618,7 @@ function renderChantierDetail() {
   // --- Devis joint (PDF sans prix) ---
   const dvEl = document.getElementById('chantier-detail-devis');
   if (dvEl) {
-    const estMarcoDv = currentUser && currentUser.name === 'Marco';
+    const estMarcoDv = voitChantierFinances(); // Marco + Justin gèrent les devis
     if (ch.devisNom) {
       dvEl.innerHTML = `
         <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px">
