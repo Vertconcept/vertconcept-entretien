@@ -754,7 +754,7 @@
       <div class="card-title">🧱 Matériaux emportés / utilisés</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-m-date"></div>
-        <div class="form-group" style="flex:2"><label class="form-label">Matériau</label><input type="text" class="form-control" id="ch-m-designation" placeholder="Ex : Stabilisé, gravier, dalles, sable…"></div>
+        <div class="form-group" style="flex:2"><label class="form-label">Matériau</label><input type="text" class="form-control" id="ch-m-designation" list="stock-datalist" placeholder="Ex : Stabilisé, gravier, dalles, sable…"><datalist id="stock-datalist"></datalist></div>
         <div class="form-group"><label class="form-label">Quantité</label><input type="number" step="0.01" min="0" class="form-control" id="ch-m-qte"></div>
         <div class="form-group"><label class="form-label">Unité</label>
           <select class="form-control" id="ch-m-unite">
@@ -1185,6 +1185,12 @@
         <div class="form-group">
           <label class="form-label">🏪 Fournisseur</label>
           <input type="text" class="form-control" id="stock-fournisseur" placeholder="Où le racheter">
+        </div>
+      </div>
+      <div class="form-row" id="stock-prix-group" style="display:none">
+        <div class="form-group">
+          <label class="form-label">💰 Prix d'achat unitaire HTVA (€)</label>
+          <input type="number" step="0.01" min="0" class="form-control" id="stock-prix" placeholder="par unité — confidentiel (vous seul)">
         </div>
       </div>
       <div class="form-group">
@@ -4020,6 +4026,9 @@ function ouvrirChantierDetail(id) {
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
   if (cg) cg.style.display = (currentUser && currentUser.name === 'Marco') ? '' : 'none';
+  // Suggestions de matériaux depuis le stock
+  const dl = document.getElementById('stock-datalist');
+  if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${(s.nom || '').replace(/"/g, '&quot;')}">`).join('');
   showPage('chantier-detail');
 }
 function renderChantierDetail() {
@@ -4414,7 +4423,12 @@ function ajouterMateriauChantier() {
   const unite = document.getElementById('ch-m-unite').value;
   if (!date || !designation || !quantite) { alert('Date, matériau et quantité sont requis.'); return; }
   const coutEl = document.getElementById('ch-m-cout');
-  const cout = coutEl && coutEl.value !== '' ? (parseFloat(coutEl.value) || 0) : null;
+  let cout = coutEl && coutEl.value !== '' ? (parseFloat(coutEl.value) || 0) : null;
+  // Si aucun coût saisi, reprendre le prix d'achat du même article en stock (× quantité)
+  if (cout === null) {
+    const art = appData.stock.find(s => (s.nom || '').toLowerCase() === designation.toLowerCase() && s.prixAchat != null && s.prixAchat !== '');
+    if (art) cout = +((parseFloat(art.prixAchat) || 0) * quantite).toFixed(2);
+  }
   const poste = document.getElementById('ch-m-poste').value;
   const doc = { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite, poste };
   if (cout !== null) doc.cout = cout;
@@ -5079,16 +5093,35 @@ function renderStock() {
   const aCommander = items.filter(i => i.statut === 'rupture').length;
   const rappel = aCommander ? `<div class="card" style="margin-bottom:10px;border-left:5px solid #c0392b;background:#c0392b0d"><strong style="color:#c0392b">❌ ${aCommander} article(s) à aller chercher chez le fournisseur</strong></div>` : '';
 
-  list.innerHTML = rappel + items.map(i => {
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const valeurLigne = it => (parseFloat(it.quantite) || 0) * (parseFloat(it.prixAchat) || 0);
+  // Bandeau valeur totale + export (Marco uniquement, sur tout le stock)
+  let enteteMarco = '';
+  if (estMarco) {
+    const valorises = stock.filter(it => it.prixAchat != null && it.prixAchat !== '');
+    const total = valorises.reduce((s, it) => s + valeurLigne(it), 0);
+    const sansPrix = stock.length - valorises.length;
+    enteteMarco = `<div class="card" style="margin-bottom:10px;border-left:5px solid #1e5631;background:#1e56310d">
+      <div class="flex-between" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <div><strong>💰 Valeur totale du stock : ${eurFmt(total)}</strong> <span style="font-size:0.8rem;color:var(--gris)">HTVA · ${valorises.length} article(s) valorisé(s)${sansPrix ? ` · ${sansPrix} sans prix` : ''}</span></div>
+        <button class="btn btn-secondary btn-sm" onclick="exporterStockComptable()">📊 Export comptable (Excel)</button>
+      </div>
+    </div>`;
+  }
+
+  list.innerHTML = enteteMarco + rappel + items.map(i => {
     const cat = STOCK_CATEGORIES[i.categorie] || STOCK_CATEGORIES.autre;
     const st = STOCK_STATUTS[i.statut] || STOCK_STATUTS.dispo;
     const qte = i.quantite ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '';
     const sousLigne = [cat.label, i.emplacement ? `📍 ${esc(i.emplacement)}` : '', i.fournisseur ? `🏪 ${esc(i.fournisseur)}` : ''].filter(Boolean).join(' · ');
+    const lignePrix = (estMarco && i.prixAchat != null && i.prixAchat !== '')
+      ? `<div style="font-size:0.8rem;color:#1e5631;margin-top:2px">💰 ${eurFmt(i.prixAchat)}/u${valeurLigne(i) ? ` · valeur ${eurFmt(valeurLigne(i))}` : ''}</div>` : '';
     return `<div class="card" style="margin-bottom:8px;padding:12px;border-left:5px solid ${cat.c}">
       <div class="flex-between" style="gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0;flex:1">
           <div style="font-weight:800">${esc(i.nom)}${qte ? ` <span style="font-weight:600;color:var(--gris);font-size:0.85rem">· ${esc(qte)}</span>` : ''}</div>
           <div style="font-size:0.8rem;color:var(--gris);margin-top:2px">${sousLigne}</div>
+          ${lignePrix}
           ${i.notes ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:2px">📝 ${esc(i.notes)}</div>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
@@ -5141,13 +5174,21 @@ function ouvrirStock(id) {
   document.getElementById('stock-emplacement').value = i?.emplacement || '';
   document.getElementById('stock-fournisseur').value = i?.fournisseur || '';
   document.getElementById('stock-notes').value = i?.notes || '';
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  document.getElementById('stock-prix-group').style.display = estMarco ? '' : 'none';
+  document.getElementById('stock-prix').value = (i && i.prixAchat != null) ? i.prixAchat : '';
   document.getElementById('modal-stock').classList.remove('hidden');
 }
 
 function sauvegarderStock() {
   const nom = document.getElementById('stock-nom').value.trim();
   if (!nom) { alert('Le nom de l\'article est obligatoire.'); return; }
+  const ancien = appData.stock.find(s => s.id === currentStockId) || {};
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const prixRaw = document.getElementById('stock-prix').value;
+  const prixAchat = estMarco ? (prixRaw !== '' ? (parseFloat(prixRaw) || 0) : null) : (ancien.prixAchat ?? null);
   saveDoc('stock', {
+    ...ancien,
     id: currentStockId || uuid(), nom,
     categorie: document.getElementById('stock-categorie').value,
     statut: document.getElementById('stock-statut').value,
@@ -5155,7 +5196,8 @@ function sauvegarderStock() {
     unite: document.getElementById('stock-unite').value.trim(),
     emplacement: document.getElementById('stock-emplacement').value.trim(),
     fournisseur: document.getElementById('stock-fournisseur').value.trim(),
-    notes: document.getElementById('stock-notes').value.trim()
+    notes: document.getElementById('stock-notes').value.trim(),
+    prixAchat
   });
   fermerModal('modal-stock');
 }
@@ -5164,6 +5206,42 @@ function supprimerStock() {
   if (!currentStockId || !confirm('Supprimer cet article du stock ?')) return;
   deleteDoc('stock', currentStockId);
   fermerModal('modal-stock');
+}
+
+// Export Excel de l'inventaire valorisé (pour le comptable) — Marco uniquement
+function exporterStockComptable() {
+  if (!(currentUser && currentUser.name === 'Marco')) return;
+  const { stock } = getData();
+  if (!stock.length) { alert('Aucun article en stock à exporter.'); return; }
+  const labelCat = c => (STOCK_CATEGORIES[c] || STOCK_CATEGORIES.autre).label.replace(/^\S+\s/, '');
+  const num = v => (v === null || v === undefined || v === '') ? '' : (parseFloat(v) || 0);
+  let total = 0;
+  const lignes = stock
+    .slice()
+    .sort((a, b) => (a.categorie || '').localeCompare(b.categorie || '') || (a.nom || '').localeCompare(b.nom || ''))
+    .map(i => {
+      const q = parseFloat(i.quantite) || 0;
+      const pu = num(i.prixAchat);
+      const val = (pu === '' ? 0 : q * pu);
+      total += val;
+      return {
+        'Article': i.nom || '',
+        'Catégorie': labelCat(i.categorie),
+        'Quantité': i.quantite || '',
+        'Unité': i.unite || '',
+        'Prix achat unitaire HTVA (€)': pu,
+        'Valeur HTVA (€)': pu === '' ? '' : +val.toFixed(2),
+        'Fournisseur': i.fournisseur || '',
+        'Emplacement': i.emplacement || ''
+      };
+    });
+  lignes.push({});
+  lignes.push({ 'Article': 'VALEUR TOTALE DU STOCK', 'Valeur HTVA (€)': +total.toFixed(2) });
+  const ws = XLSX.utils.json_to_sheet(lignes);
+  ws['!cols'] = [{ wch: 30 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+  XLSX.writeFile(wb, 'stock-vertconcept-' + formatDate(new Date()) + '.xlsx');
 }
 
 // =====================================================
