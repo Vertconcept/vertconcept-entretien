@@ -732,6 +732,7 @@
     <div class="card" id="chantier-detail-recap" style="display:none"></div>
     <div class="card" id="chantier-detail-avancement"></div>
     <div class="card" id="chantier-detail-devis"></div>
+    <div class="card" id="chantier-detail-fichiers"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -1935,6 +1936,8 @@ const USER_POLES = {
 function poleUser() { return (currentUser && USER_POLES[currentUser.name]) || 'entretien'; }
 function voitCreation() { const p = poleUser(); return p === 'creation' || p === 'direction'; }
 function voitEntretien() { const p = poleUser(); return p === 'entretien' || p === 'direction'; }
+// Qui peut gérer les prix d'achat du stock (Marco + Justin)
+function peutPrixStock() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin'); }
 // Adresse e-mail réelle de chaque compte Firebase Auth (les e-mails ne sont pas secrets)
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
@@ -4115,6 +4118,27 @@ function renderChantierDetail() {
     }
   }
 
+  // --- Documents du chantier (plans, esquisses…) ---
+  const fiEl = document.getElementById('chantier-detail-fichiers');
+  if (fiEl) {
+    const fichiers = ch.fichiers || [];
+    const icone = t => (t || '').startsWith('image/') ? '🖼️' : '📄';
+    fiEl.innerHTML = `
+      <div class="card-title">📁 Documents du chantier <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— plans, esquisses, photos…</span></div>
+      ${fichiers.length ? `<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0">
+        ${fichiers.map(f => `<div class="flex-between" style="gap:8px;padding:6px 8px;background:#f8f9fa;border-radius:8px">
+          <div style="min-width:0;flex:1;cursor:pointer" onclick="voirFichierChantier('${f.id}','${(f.type || '').replace(/'/g, '')}')">${icone(f.type)} <span style="text-decoration:underline">${esc(f.nom)}</span></div>
+          ${modeAdmin ? `<button onclick="supprimerFichierChantier('${ch.id}','${f.id}')" title="Supprimer" style="background:none;border:none;cursor:pointer">🗑️</button>` : ''}
+        </div>`).join('')}
+      </div>` : '<div class="empty-state" style="padding:10px">Aucun document. Ajoutez les plans, esquisses…</div>'}
+      <div style="margin-top:6px">
+        <input type="file" accept="image/*,application/pdf,.pdf" id="ch-fichier-input" multiple onchange="televerserFichierChantier(this)">
+        <div style="font-size:0.78rem;color:var(--gris);margin-top:4px">PDF ou images · max ~700 Ko par fichier.</div>
+        <div id="ch-fichier-status" style="font-size:0.82rem;color:var(--gris);margin-top:4px"></div>
+      </div>
+      <div id="ch-fichiers-viewer" style="margin-top:10px"></div>`;
+  }
+
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
 
@@ -4329,6 +4353,56 @@ function retirerDevisChantier(id) {
   const ch = appData.chantiers.find(c => c.id === id);
   Promise.resolve(deleteDoc('chantierDevis', id))
     .then(() => { if (ch) return saveDoc('chantiers', { ...ch, devisNom: null }); })
+    .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); });
+}
+
+// --- Documents du chantier (plans, esquisses, photos…) ---
+const FICHIER_MAX_OCTETS = 700 * 1024;
+function televerserFichierChantier(input) {
+  const files = [...(input.files || [])];
+  if (!files.length) return;
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const statut = document.getElementById('ch-fichier-status');
+  const valides = files.filter(f => (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) && f.size <= FICHIER_MAX_OCTETS);
+  const rejetes = files.length - valides.length;
+  if (!valides.length) { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Fichier(s) refusé(s) : PDF ou image, max ~700 Ko chacun.</span>'; input.value = ''; return; }
+  if (statut) statut.textContent = '⏳ Envoi en cours…';
+  Promise.all(valides.map(f => new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res({ id: 'fc_' + uuid(), nom: f.name, type: f.type || 'application/pdf', data: r.result });
+    r.onerror = () => res(null);
+    r.readAsDataURL(f);
+  }))).then(async results => {
+    const ok = results.filter(Boolean);
+    for (const it of ok) await saveDoc('chantierFichiers', { id: it.id, chantierId: ch.id, nom: it.nom, type: it.type, data: it.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+    const meta = ok.map(it => ({ id: it.id, nom: it.nom, type: it.type }));
+    await saveDoc('chantiers', { ...ch, fichiers: [...(ch.fichiers || []), ...meta] });
+    input.value = '';
+    if (statut && rejetes) statut.innerHTML = `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (trop lourd ou format non supporté).</span>`;
+    if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
+  }).catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec de l\'envoi (fichier peut-être trop lourd).</span>'; });
+}
+
+function voirFichierChantier(id, type) {
+  const viewer = document.getElementById('ch-fichiers-viewer');
+  if (viewer) viewer.innerHTML = '<div style="color:var(--gris);font-size:0.85rem">⏳ Chargement…</div>';
+  db.collection('chantierFichiers').doc(id).get().then(doc => {
+    if (!doc.exists || !doc.data().data) { if (viewer) viewer.innerHTML = '<div class="empty-state">Fichier introuvable.</div>'; return; }
+    const url = URL.createObjectURL(dataURLversBlob(doc.data().data));
+    const isImg = (type || doc.data().type || '').startsWith('image/');
+    const plein = `<div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">🔍 Ouvrir en plein écran</a></div>`;
+    if (viewer) viewer.innerHTML = (isImg
+      ? `<img src="${url}" style="max-width:100%;border:1px solid var(--border);border-radius:8px">`
+      : `<iframe src="${url}" style="width:100%;height:70vh;border:1px solid var(--border);border-radius:8px"></iframe>`) + plein;
+  }).catch(e => { if (viewer) viewer.innerHTML = '<div class="empty-state">Erreur de chargement : ' + (e.message || e) + '</div>'; });
+}
+
+function supprimerFichierChantier(chId, fileId) {
+  if (!confirm('Supprimer ce document ?')) return;
+  const ch = appData.chantiers.find(c => c.id === chId);
+  Promise.resolve(deleteDoc('chantierFichiers', fileId))
+    .then(() => { if (ch) return saveDoc('chantiers', { ...ch, fichiers: (ch.fichiers || []).filter(f => f.id !== fileId) }); })
     .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); });
 }
 
@@ -5093,7 +5167,7 @@ function renderStock() {
   const aCommander = items.filter(i => i.statut === 'rupture').length;
   const rappel = aCommander ? `<div class="card" style="margin-bottom:10px;border-left:5px solid #c0392b;background:#c0392b0d"><strong style="color:#c0392b">❌ ${aCommander} article(s) à aller chercher chez le fournisseur</strong></div>` : '';
 
-  const estMarco = currentUser && currentUser.name === 'Marco';
+  const estMarco = peutPrixStock();
   const valeurLigne = it => (parseFloat(it.quantite) || 0) * (parseFloat(it.prixAchat) || 0);
   // Bandeau valeur totale + export (Marco uniquement, sur tout le stock)
   let enteteMarco = '';
@@ -5174,7 +5248,7 @@ function ouvrirStock(id) {
   document.getElementById('stock-emplacement').value = i?.emplacement || '';
   document.getElementById('stock-fournisseur').value = i?.fournisseur || '';
   document.getElementById('stock-notes').value = i?.notes || '';
-  const estMarco = currentUser && currentUser.name === 'Marco';
+  const estMarco = peutPrixStock();
   document.getElementById('stock-prix-group').style.display = estMarco ? '' : 'none';
   document.getElementById('stock-prix').value = (i && i.prixAchat != null) ? i.prixAchat : '';
   document.getElementById('modal-stock').classList.remove('hidden');
@@ -5184,7 +5258,7 @@ function sauvegarderStock() {
   const nom = document.getElementById('stock-nom').value.trim();
   if (!nom) { alert('Le nom de l\'article est obligatoire.'); return; }
   const ancien = appData.stock.find(s => s.id === currentStockId) || {};
-  const estMarco = currentUser && currentUser.name === 'Marco';
+  const estMarco = peutPrixStock();
   const prixRaw = document.getElementById('stock-prix').value;
   const prixAchat = estMarco ? (prixRaw !== '' ? (parseFloat(prixRaw) || 0) : null) : (ancien.prixAchat ?? null);
   saveDoc('stock', {
@@ -5210,7 +5284,7 @@ function supprimerStock() {
 
 // Export Excel de l'inventaire valorisé (pour le comptable) — Marco uniquement
 function exporterStockComptable() {
-  if (!(currentUser && currentUser.name === 'Marco')) return;
+  if (!peutPrixStock()) return;
   const { stock } = getData();
   if (!stock.length) { alert('Aucun article en stock à exporter.'); return; }
   const labelCat = c => (STOCK_CATEGORIES[c] || STOCK_CATEGORIES.autre).label.replace(/^\S+\s/, '');
