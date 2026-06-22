@@ -1254,7 +1254,7 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="postes-devis-chantier">
-      <div style="font-size:0.84rem;color:var(--gris);margin-bottom:8px">Texte extrait du devis. <strong>Gardez une ligne par poste de travaux</strong> et supprimez le reste (en-tête, adresses, totaux, conditions…). Chaque ligne deviendra une case à cocher dans l'avancement.</div>
+      <div style="font-size:0.84rem;color:var(--gris);margin-bottom:8px">Texte extrait du devis (en-tête, totaux et conditions générales déjà retirés automatiquement). Une ligne = une entrée d'avancement.<br><strong>Astuce :</strong> <code># Titre</code> = titre de section · <code>## Sous-titre</code> = sous-titre · sinon = poste cochable. Ajustez puis « Créer ».</div>
       <textarea class="form-control" id="postes-devis-text" rows="14" style="font-size:0.85rem;font-family:inherit" placeholder="⏳ Lecture du devis…"></textarea>
     </div>
     <div class="modal-footer">
@@ -4376,6 +4376,7 @@ function renderChantierDetail() {
         <span onclick="deplacerEtape('${e.key}',1)" title="Descendre" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === ordonnees.length - 1 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▼</span>
       </span>
       <span draggable="true" ondragstart="dragEtapeStart('${e.key}')" ondragend="renderChantierDetail()" style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>`;
+    const editBtn = e => `<span onclick="renommerEtape('${e.key}')" title="Renommer" style="cursor:pointer;opacity:0.55">✏️</span>`;
     const delBtn = e => `<span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer" style="cursor:pointer;opacity:0.55">🗑️</span>`;
     const rowAttrs = e => `data-key="${e.key}" ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')"`;
     avEl.innerHTML = `
@@ -4388,8 +4389,8 @@ function renderChantierDetail() {
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
         ${ordonnees.map((e, idx) => {
           const type = e.type || 'poste';
-          if (type === 'titre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:6px 2px 3px;margin-top:8px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:800;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.3px;color:var(--vert);border-bottom:2px solid var(--vert-pale);padding-bottom:3px">${esc(e.label)}</span>${delBtn(e)}</div>`;
-          if (type === 'soustitre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:4px 2px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:700;color:#555;font-style:italic">↳ ${esc(e.label)}</span>${delBtn(e)}</div>`;
+          if (type === 'titre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:6px 2px 3px;margin-top:8px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:800;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.3px;color:var(--vert);border-bottom:2px solid var(--vert-pale);padding-bottom:3px">${esc(e.label)}</span>${editBtn(e)}${delBtn(e)}</div>`;
+          if (type === 'soustitre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:4px 2px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:700;color:#555;font-style:italic">↳ ${esc(e.label)}</span>${editBtn(e)}${delBtn(e)}</div>`;
           const q = (ch.etapesQte && ch.etapesQte[e.key]) || {};
           return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px;flex-wrap:wrap">
           ${ctrls(e, idx)}
@@ -4398,7 +4399,7 @@ function renderChantierDetail() {
           <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
           <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
           <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="–" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:54px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
-          ${delBtn(e)}
+          ${editBtn(e)}${delBtn(e)}
         </div>`;
         }).join('')}
       </div>
@@ -4663,7 +4664,25 @@ function etapesOrdonnees(ch) {
   const out = [];
   (ch.etapesOrdre || []).forEach(k => { if (map.has(k)) { out.push(map.get(k)); map.delete(k); } });
   toutes.forEach(e => { if (map.has(e.key)) out.push(e); }); // nouvelles étapes non encore ordonnées → à la fin
-  return out;
+  // Libellé personnalisé (renommage d'une étape par défaut)
+  const lbl = ch.etapesLabels || {};
+  return out.map(e => lbl[e.key] ? { ...e, label: lbl[e.key] } : e);
+}
+// Renommer une ligne d'avancement (poste, titre ou sous-titre)
+function renommerEtape(key) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const cur = etapesOrdonnees(ch).find(e => e.key === key);
+  const saisi = prompt('Renommer cette ligne :', cur ? cur.label : '');
+  if (saisi === null) return;
+  const label = saisi.trim();
+  if (!label) return;
+  const perso = ch.etapesPerso || [];
+  if (perso.some(e => e.key === key)) {
+    saveDoc('chantiers', { ...ch, etapesPerso: perso.map(e => e.key === key ? { ...e, label } : e) });
+  } else {
+    saveDoc('chantiers', { ...ch, etapesLabels: { ...(ch.etapesLabels || {}), [key]: label } });
+  }
 }
 
 let dragEtapeKey = null;
@@ -4827,25 +4846,69 @@ async function extrairePostesDevis(id) {
         if (ligne) lignes.push(ligne);
       });
     }
-    document.getElementById('postes-devis-text').value = lignes.length
-      ? lignes.join('\n')
-      : '(Aucun texte détecté — le PDF est peut-être une image scannée. Saisissez les postes à la main, une ligne par poste.)';
+    const nettoyees = nettoyerLignesDevis(lignes);
+    document.getElementById('postes-devis-text').value = nettoyees.length
+      ? nettoyees.join('\n')
+      : '(Aucun poste détecté — le PDF est peut-être une image scannée. Saisissez les postes à la main.)';
   } catch (e) {
     document.getElementById('postes-devis-text').value = 'Erreur de lecture du PDF : ' + (e.message || e) + '\n\nVous pouvez saisir les postes à la main (une ligne par poste).';
   }
 }
 
-// Transforme chaque ligne non vide en poste d'avancement
+// Nettoie le texte extrait : enlève l'en-tête, les CGV, les totaux/colonnes ; marque les titres en MAJUSCULES (#)
+function nettoyerLignesDevis(lignes) {
+  const estCGV = l => /conditions?\s+g[ée]n[ée]rales|conditions?\s+de\s+vente|^\s*c\.?\s?g\.?\s?v\.?\b|clauses?\s+g[ée]n[ée]rales/i.test(l);
+  const bruit = l => {
+    if (l.length < 2) return true;
+    if (/@/.test(l)) return true;                                              // email
+    if (/(www\.|https?:\/\/)/i.test(l)) return true;                           // site web
+    if (/\b(IBAN|BIC|T\.?V\.?A|BCE)\b/i.test(l)) return true;                   // IBAN/TVA/BCE
+    if (/\bBE\s?\d{2}/i.test(l)) return true;                                   // n° BE…
+    if (/^\s*(t[ée]l|gsm|fax|mob|tel)[.: ]/i.test(l)) return true;             // téléphone
+    if (/^\s*page\s*\d+/i.test(l)) return true;                                // pagination
+    if (/^\s*(devis|offre|facture|bon\s+de\s+commande)\b.{0,20}(n[°o]|num|#)/i.test(l)) return true; // n° devis
+    if (/^\s*(date|le)\s*[:]?\s*\d{1,2}[\/.\- ]/i.test(l)) return true;        // date:
+    if (/^\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s*$/.test(l)) return true;     // date seule
+    if (/^\s*(client|destinataire|chantier\s*[:]|votre\s+r[ée]f|notre\s+r[ée]f|objet)\b/i.test(l)) return true; // lignes d'adressage
+    if (/\b\d{4}\b/.test(l) && /\b(rue|avenue|av|chauss[ée]e|chemin|boulevard|bd|place|impasse|all[ée]e|quai|route|grand[-\s]?rue|clos|drève)\b/i.test(l)) return true; // adresse postale
+    if (l.length < 42 && /\b(s\.?p\.?r\.?l|s\.?r\.?l|s\.?c\.?r\.?l|b\.?v\.?b\.?a|a\.?s\.?b\.?l|s\.?n\.?c|s\.?c\.?s)\b\.?\s*$/i.test(l)) return true; // forme de société (nom d'entreprise)
+    if (/^[\d\s.,€%+\-/x]*$/.test(l)) return true;                             // que chiffres/symboles
+    if (/^\s*(sous-?total|total|t\.?v\.?a|montant|acompte|net\s+[àa]\s+payer|remise|escompte|htva|tvac)\b/i.test(l)) return true; // totaux
+    if (l.length < 42 && /^\s*(quantit|qt[ée]|p\.?\s?u|prix\s+unitaire|d[ée]signation|r[ée]f[ée]rence|unit[ée]|description)\b/i.test(l)) return true; // en-têtes colonnes
+    return false;
+  };
+  const out = [];
+  let dansCGV = false;
+  for (const l of lignes) {
+    if (estCGV(l)) dansCGV = true;
+    if (dansCGV) continue;          // tout ce qui suit le titre CGV est ignoré
+    if (bruit(l)) continue;
+    out.push(l);
+  }
+  // Marque les lignes tout en MAJUSCULES comme des titres (#)
+  return out.map(l => {
+    const aLettres = /[a-zà-ÿ]/i.test(l);
+    const toutMaj = aLettres && l === l.toUpperCase() && l !== l.toLowerCase();
+    return (toutMaj && l.length <= 48) ? '# ' + l : l;
+  });
+}
+
+// Transforme le texte en lignes d'avancement (# = titre, ## = sous-titre, sinon poste)
 function creerPostesDepuisTexte() {
   const id = document.getElementById('postes-devis-chantier').value;
   const ch = appData.chantiers.find(c => c.id === id);
   if (!ch) { fermerModal('modal-postes-devis'); return; }
   const lignes = document.getElementById('postes-devis-text').value
     .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('('));
-  if (!lignes.length) { alert('Aucun poste à créer.'); return; }
-  if (lignes.length > 40 && !confirm(`${lignes.length} lignes vont devenir des postes. Continuer ?\n(Astuce : supprimez d'abord les lignes inutiles.)`)) return;
-  const nouveaux = lignes.map(label => ({ key: 'ep_' + uuid(), label }));
-  saveDoc('chantiers', { ...ch, etapesPerso: [...(ch.etapesPerso || []), ...nouveaux] });
+  if (!lignes.length) { alert('Aucune ligne à créer.'); return; }
+  if (lignes.length > 60 && !confirm(`${lignes.length} lignes vont être créées. Continuer ?`)) return;
+  const items = lignes.map(l => {
+    let type = 'poste', label = l;
+    if (/^##\s+/.test(l)) { type = 'soustitre'; label = l.replace(/^##\s+/, ''); }
+    else if (/^#\s+/.test(l)) { type = 'titre'; label = l.replace(/^#\s+/, ''); }
+    return { key: 'ep_' + uuid(), label: label.trim(), type };
+  }).filter(it => it.label);
+  saveDoc('chantiers', { ...ch, etapesPerso: [...(ch.etapesPerso || []), ...items] });
   fermerModal('modal-postes-devis');
   if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
 }
