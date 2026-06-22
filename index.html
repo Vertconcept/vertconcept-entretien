@@ -8,6 +8,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
   :root {
     --vert: #2d6a4f;
@@ -1194,6 +1196,25 @@
       <button class="btn btn-danger btn-sm" id="btn-suppr-stock" onclick="supprimerStock()" style="margin-right:auto;display:none">Supprimer</button>
       <button class="btn btn-secondary" onclick="fermerModal('modal-stock')">Annuler</button>
       <button class="btn btn-primary" onclick="sauvegarderStock()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL POSTES DU DEVIS ===== -->
+<div class="modal-overlay hidden" id="modal-postes-devis">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📋 Postes du devis → avancement</h3>
+      <button class="close-btn" onclick="fermerModal('modal-postes-devis')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="postes-devis-chantier">
+      <div style="font-size:0.84rem;color:var(--gris);margin-bottom:8px">Texte extrait du devis. <strong>Gardez une ligne par poste de travaux</strong> et supprimez le reste (en-tête, adresses, totaux, conditions…). Chaque ligne deviendra une case à cocher dans l'avancement.</div>
+      <textarea class="form-control" id="postes-devis-text" rows="14" style="font-size:0.85rem;font-family:inherit" placeholder="⏳ Lecture du devis…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-postes-devis')">Annuler</button>
+      <button class="btn btn-primary" onclick="creerPostesDepuisTexte()">✅ Créer les postes</button>
     </div>
   </div>
 </div>
@@ -4062,6 +4083,7 @@ function renderChantierDetail() {
           <div class="card-title" style="margin:0">📄 Devis du chantier</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary btn-sm" onclick="afficherDevisChantier('${ch.id}')">👁️ Consulter</button>
+            <button class="btn btn-secondary btn-sm" onclick="extrairePostesDevis('${ch.id}')" title="Lire les postes du devis pour les ajouter à l'avancement">📋 Reprendre les postes</button>
             ${estMarcoDv ? `<button class="btn btn-danger btn-sm" onclick="retirerDevisChantier('${ch.id}')">🗑️ Retirer</button>` : ''}
           </div>
         </div>
@@ -4272,6 +4294,57 @@ function retirerDevisChantier(id) {
   Promise.resolve(deleteDoc('chantierDevis', id))
     .then(() => { if (ch) return saveDoc('chantiers', { ...ch, devisNom: null }); })
     .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); });
+}
+
+// Lit le texte du PDF du devis et pré-remplit la zone d'édition des postes
+async function extrairePostesDevis(id) {
+  if (typeof pdfjsLib === 'undefined') { alert('Lecture PDF indisponible (rechargez la page).'); return; }
+  document.getElementById('postes-devis-chantier').value = id;
+  document.getElementById('postes-devis-text').value = '⏳ Lecture du devis en cours…';
+  document.getElementById('modal-postes-devis').classList.remove('hidden');
+  try {
+    const doc = await db.collection('chantierDevis').doc(id).get();
+    if (!doc.exists || !doc.data().data) { document.getElementById('postes-devis-text').value = 'Devis introuvable.'; return; }
+    const buf = await dataURLversBlob(doc.data().data).arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    const lignes = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const map = new Map();
+      tc.items.forEach(it => {
+        if (!it.str || !it.str.trim()) return;
+        const y = Math.round(it.transform[5]);
+        const key = p * 100000 - y; // page puis haut→bas
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push({ x: it.transform[4], s: it.str });
+      });
+      [...map.keys()].sort((a, b) => a - b).forEach(k => {
+        const ligne = map.get(k).sort((a, b) => a.x - b.x).map(o => o.s).join(' ').replace(/\s+/g, ' ').trim();
+        if (ligne) lignes.push(ligne);
+      });
+    }
+    document.getElementById('postes-devis-text').value = lignes.length
+      ? lignes.join('\n')
+      : '(Aucun texte détecté — le PDF est peut-être une image scannée. Saisissez les postes à la main, une ligne par poste.)';
+  } catch (e) {
+    document.getElementById('postes-devis-text').value = 'Erreur de lecture du PDF : ' + (e.message || e) + '\n\nVous pouvez saisir les postes à la main (une ligne par poste).';
+  }
+}
+
+// Transforme chaque ligne non vide en poste d'avancement
+function creerPostesDepuisTexte() {
+  const id = document.getElementById('postes-devis-chantier').value;
+  const ch = appData.chantiers.find(c => c.id === id);
+  if (!ch) { fermerModal('modal-postes-devis'); return; }
+  const lignes = document.getElementById('postes-devis-text').value
+    .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('('));
+  if (!lignes.length) { alert('Aucun poste à créer.'); return; }
+  if (lignes.length > 40 && !confirm(`${lignes.length} lignes vont devenir des postes. Continuer ?\n(Astuce : supprimez d'abord les lignes inutiles.)`)) return;
+  const nouveaux = lignes.map(label => ({ key: 'ep_' + uuid(), label }));
+  saveDoc('chantiers', { ...ch, etapesPerso: [...(ch.etapesPerso || []), ...nouveaux] });
+  fermerModal('modal-postes-devis');
+  if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
 }
 
 function envoyerMessageChantier() {
