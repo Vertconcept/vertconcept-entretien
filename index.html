@@ -710,6 +710,7 @@
         <button class="btn btn-primary btn-sm" onclick="ouvrirChantier()" style="white-space:nowrap">+ Chantier</button>
       </div>
     </div>
+    <div id="creation-dashboard"></div>
     <div id="creation-list"></div>
   </div>
 
@@ -718,6 +719,7 @@
     <button class="btn btn-secondary btn-sm" onclick="showPage('creation')" style="margin-bottom:0.75rem">← Retour aux chantiers</button>
     <div class="card" id="chantier-detail-entete"></div>
     <div class="card" id="chantier-detail-recap" style="display:none"></div>
+    <div class="card" id="chantier-detail-avancement"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -757,6 +759,15 @@
       </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterMateriauChantier()">+ Ajouter le matériau</button>
       <div id="ch-materiaux-list" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💬 Échanges chef ⇄ Marco</div>
+      <div id="ch-messages-list" style="margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" class="form-control" id="ch-message-input" placeholder="Écrire un message (question, validation, info…)" onkeydown="if(event.key==='Enter')envoyerMessageChantier()" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="envoyerMessageChantier()" style="white-space:nowrap">Envoyer</button>
+      </div>
     </div>
   </div>
 
@@ -1736,6 +1747,18 @@
         </div>
         <div class="form-group"><label class="form-label">Budget / montant (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-budget" placeholder="ex : 12000"></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">👷 Chef d'équipe</label>
+          <select class="form-control" id="ch-chef">
+            <option value="Thibaut">Thibaut</option>
+            <option value="Marco">Marco</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Équipe sur le chantier</label>
+        <div class="equipe-toggle" id="ch-equipe-toggle"></div>
+      </div>
       <div class="form-group"><label class="form-label">Description / travaux</label><textarea class="form-control" id="ch-description" rows="3" placeholder="Détail des travaux prévus…"></textarea></div>
     </div>
     <div class="modal-footer">
@@ -1899,7 +1922,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2011,6 +2034,10 @@ function initFirestore() {
   });
   db.collection('chantierMateriaux').onSnapshot(snap => {
     appData.chantierMateriaux = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierMessages').onSnapshot(snap => {
+    appData.chantierMessages = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
 
@@ -3693,6 +3720,17 @@ const STATUTS_CHANTIER = {
   'en-cours': { label: '🔧 En cours',  c: '#e67e22' },
   termine:    { label: '✅ Terminé',   c: '#1e5631' }
 };
+// Équipe Création (pour affecter les ouvriers à un chantier)
+const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
+// Étapes d'avancement type d'un chantier d'aménagement
+const CHANTIER_ETAPES = [
+  { key: 'prepa',      label: '🚧 Préparation / terrassement' },
+  { key: 'fondation',  label: '🧱 Fondations / stabilisé' },
+  { key: 'pose',       label: '🔨 Pose (pavés, dalles, bordures…)' },
+  { key: 'plantation', label: '🌿 Plantation / engazonnement' },
+  { key: 'finitions',  label: '✨ Finitions' },
+  { key: 'nettoyage',  label: '🧹 Nettoyage / livraison' }
+];
 function periodeCreation() {
   const now = new Date();
   if (vueCreation === 'mois') {
@@ -3719,6 +3757,26 @@ function renderCreation() {
   const p = periodeCreation();
   const t = document.getElementById('creation-periode-titre'); if (t) t.textContent = p.titre;
   const { chantiers, clients } = getData();
+
+  // --- Tableau de bord (sur TOUS les chantiers, pas seulement la période) ---
+  const dash = document.getElementById('creation-dashboard');
+  if (dash) {
+    const today = formatDate(new Date());
+    const enCours = chantiers.filter(c => c.statut === 'en-cours').length;
+    const aVenir = chantiers.filter(c => (c.statut === 'planifie' || c.statut === 'devis') && (!c.dateDebut || c.dateDebut >= today)).length;
+    const enRetard = chantiers.filter(c => c.statut !== 'termine' && c.dateFin && c.dateFin < today).length;
+    const termines = chantiers.filter(c => c.statut === 'termine').length;
+    const tuile = (n, lbl, c) => `<div style="flex:1;min-width:110px;background:${c}12;border:1px solid ${c}33;border-left:5px solid ${c};border-radius:10px;padding:10px 12px">
+      <div style="font-size:1.5rem;font-weight:800;color:${c};line-height:1">${n}</div>
+      <div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${lbl}</div></div>`;
+    dash.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
+      ${tuile(enCours, '🔧 En cours', '#e67e22')}
+      ${tuile(aVenir, '📅 À venir', '#2980b9')}
+      ${tuile(enRetard, '⚠️ En retard', '#c0392b')}
+      ${tuile(termines, '✅ Terminés', '#1e5631')}
+    </div>`;
+  }
+
   // Chantiers actifs sur la période : début ≤ fin de période ET fin ≥ début de période
   const actifs = chantiers.filter(ch => {
     const d = ch.dateDebut || '';
@@ -3733,12 +3791,19 @@ function renderCreation() {
     const client = clients.find(c => c.id === ch.clientId);
     const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
     const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
+    const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+    const nbEtapes = (ch.etapes || []).length;
+    const pct = Math.round(nbEtapes / CHANTIER_ETAPES.length * 100);
+    const today = formatDate(new Date());
+    const retard = ch.statut !== 'termine' && ch.dateFin && ch.dateFin < today;
     return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
       <div class="flex-between" style="gap:8px">
-        <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}</div>
+        <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}${retard ? ' <span style="color:#c0392b;font-size:0.78rem;font-weight:700">⚠️ en retard</span>' : ''}</div>
           <div style="font-size:0.82rem;color:var(--gris)">${client ? client.nom : '— (sans client)'} · 📅 ${periode}</div></div>
         <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.78rem;padding:3px 10px;border-radius:20px;white-space:nowrap;flex:none">${st.label}</span>
       </div>
+      ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
+      ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
       ${ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
       ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
     </div>`;
@@ -3758,12 +3823,21 @@ function ouvrirChantier(id) {
   document.getElementById('ch-statut').value = ch?.statut || 'devis';
   document.getElementById('ch-budget').value = ch?.budget ?? '';
   document.getElementById('ch-description').value = ch?.description || '';
+  document.getElementById('ch-chef').value = ch?.chef || 'Thibaut';
+  const equipe = ch?.equipe || [];
+  document.getElementById('ch-equipe-toggle').innerHTML = MEMBRES_CREATION.map(m =>
+    `<div class="membre-chip${equipe.includes(m) ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`
+  ).join('');
   document.getElementById('modal-chantier').classList.remove('hidden');
 }
+// Toggle simple d'un chip (sans effet de bord, contrairement à toggleMembre)
+function toggleChip(el) { el.classList.toggle('selected'); }
 function sauvegarderChantier() {
   const nom = document.getElementById('ch-nom').value.trim();
   if (!nom) { alert('Donnez un nom au chantier.'); return; }
+  const ancien = appData.chantiers.find(c => c.id === currentChantierId) || {};
   saveDoc('chantiers', {
+    ...ancien,
     id: currentChantierId || uuid(),
     clientId: document.getElementById('ch-client-id').value || '',
     nom,
@@ -3771,7 +3845,9 @@ function sauvegarderChantier() {
     dateFin: document.getElementById('ch-fin').value || '',
     statut: document.getElementById('ch-statut').value,
     budget: parseFloat(document.getElementById('ch-budget').value) || null,
-    description: document.getElementById('ch-description').value.trim()
+    description: document.getElementById('ch-description').value.trim(),
+    chef: document.getElementById('ch-chef').value,
+    equipe: [...document.querySelectorAll('#ch-equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre)
   });
   fermerModal('modal-chantier');
 }
@@ -3810,8 +3886,29 @@ function renderChantierDetail() {
         <button class="btn btn-secondary btn-sm" onclick="ouvrirChantier('${ch.id}')">✏️ Modifier</button>
       </div>
     </div>
+    ${(ch.chef || (ch.equipe && ch.equipe.length)) ? `<div class="equipe-chips" style="margin-top:8px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 Chef : ${esc(ch.chef)}</span>` : ''}${(ch.equipe || []).filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
     ${ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
+
+  // --- Avancement (étapes cochables + barre) ---
+  const avEl = document.getElementById('chantier-detail-avancement');
+  if (avEl) {
+    const faites = new Set(ch.etapes || []);
+    const pct = Math.round(faites.size / CHANTIER_ETAPES.length * 100);
+    const barC = pct === 100 ? '#1e5631' : '#e67e22';
+    avEl.innerHTML = `
+      <div class="flex-between" style="align-items:center;margin-bottom:8px">
+        <div class="card-title" style="margin:0">📈 Avancement</div>
+        <div style="font-weight:800;color:${barC}">${pct}%</div>
+      </div>
+      <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${CHANTIER_ETAPES.map(e => `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;padding:3px 0">
+          <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
+          <span style="${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}">${e.label}</span>
+        </label>`).join('')}
+      </div>`;
+  }
 
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
@@ -3866,7 +3963,55 @@ function renderChantierDetail() {
         ${budget > 0 && coutSupp > 0 ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--gris)">💡 Le budget couvre le devis initial. Pense à facturer les <strong style="color:#e67e22">${eurFmt(coutSupp)}</strong> de suppléments en plus.</div>` : ''}`;
     }
   }
+
+  // --- Messagerie chef ⇄ Marco ---
+  const msgEl = document.getElementById('ch-messages-list');
+  if (msgEl) {
+    const msgs = appData.chantierMessages.filter(m => m.chantierId === ch.id).sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+    const moi = currentUser ? currentUser.name : '';
+    msgEl.innerHTML = msgs.length
+      ? msgs.map(m => {
+          const mine = m.auteur === moi;
+          const quand = m.ts ? new Date(m.ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+          return `<div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:6px">
+            <div style="max-width:80%;background:${mine ? '#6f42c115' : '#f1f3f5'};border:1px solid ${mine ? '#6f42c133' : 'var(--border)'};border-radius:12px;padding:7px 11px">
+              <div style="font-size:0.72rem;color:var(--gris);margin-bottom:2px">${esc(m.auteur)} · ${quand}${(mine || modeAdmin) ? ` · <span style="cursor:pointer" onclick="supprimerMessageChantier('${m.id}')">🗑️</span>` : ''}</div>
+              <div style="font-size:0.9rem;white-space:pre-wrap">${esc(m.texte)}</div>
+            </div></div>`;
+        }).join('')
+      : '<div class="empty-state" style="padding:10px">Aucun message. Démarrez la conversation ci-dessous.</div>';
+  }
 }
+
+function toggleEtapeChantier(key) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const set = new Set(ch.etapes || []);
+  set.has(key) ? set.delete(key) : set.add(key);
+  saveDoc('chantiers', { ...ch, etapes: [...set] });
+}
+
+function envoyerMessageChantier() {
+  if (!currentChantierDetailId) return;
+  const input = document.getElementById('ch-message-input');
+  const texte = input.value.trim();
+  if (!texte) return;
+  saveDoc('chantierMessages', {
+    id: uuid(), chantierId: currentChantierDetailId,
+    auteur: currentUser ? currentUser.name : '?',
+    ts: new Date().toISOString(), texte
+  });
+  input.value = '';
+}
+
+function supprimerMessageChantier(id) {
+  const m = appData.chantierMessages.find(x => x.id === id);
+  if (!m) return;
+  if (m.auteur !== (currentUser && currentUser.name) && !modeAdmin) return;
+  if (!confirm('Supprimer ce message ?')) return;
+  deleteDoc('chantierMessages', id);
+}
+
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-h-date').value;
@@ -3905,6 +4050,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3923,7 +4069,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
