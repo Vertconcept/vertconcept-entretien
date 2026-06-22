@@ -810,7 +810,6 @@
         </div>
       </div>
     </div>
-    <div class="card" id="card-icones" style="margin-bottom:1rem"></div>
     <div id="factu-contrats-rappel"></div>
     <div class="flex-between mb-1">
       <div class="factu-filters">
@@ -1884,9 +1883,15 @@
       </div>
       <div class="form-group"><label class="form-label">Nom du chantier *</label><input type="text" class="form-control" id="ch-nom" placeholder="Ex : Aménagement jardin + terrasse"></div>
       <div class="form-group"><label class="form-label">📍 Adresse du chantier</label><input type="text" class="form-control" id="ch-adresse" placeholder="Si différente de l'adresse du client (sinon laisser vide)"></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Début</label><input type="date" class="form-control" id="ch-debut"></div>
-        <div class="form-group"><label class="form-label">Fin prévue</label><input type="date" class="form-control" id="ch-fin"></div>
+      <div class="form-group">
+        <label class="form-label">📅 Jours du chantier <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— cochez les jours où l'équipe y sera</span></label>
+        <div class="semaine-nav" style="margin-bottom:6px;justify-content:center;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="chCalNav(-1)">◀</button>
+          <span id="ch-cal-titre" style="min-width:150px;text-align:center;font-weight:700"></span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="chCalNav(1)">▶</button>
+        </div>
+        <div id="ch-calendrier"></div>
+        <div id="ch-cal-count" style="font-size:0.78rem;color:var(--gris);margin-top:4px"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Statut</label>
@@ -4066,6 +4071,8 @@ const STATUTS_CHANTIER = {
   'en-cours': { label: '🔧 En cours',  c: '#e67e22' },
   termine:    { label: '✅ Terminé',   c: '#1e5631' }
 };
+// Unités proposées dans l'avancement
+const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
 // Équipe Création (pour affecter les ouvriers à un chantier)
 const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
 // Étapes d'avancement type d'un chantier d'aménagement
@@ -4164,7 +4171,7 @@ function majBoutonSamediCreation() {
 }
 function ouvrirChantierJour(dateStr) {
   ouvrirChantier();
-  const d = document.getElementById('ch-debut'); if (d) d.value = dateStr;
+  if (dateStr) { chJoursSel.add(dateStr); chCalRef = new Date(dateStr + 'T00:00:00'); renderChCalendrier(); }
 }
 // Retirer / remettre un chantier d'un jour précis du planning (les hommes n'y vont pas)
 function exclureChantierJour(chId, dateStr) {
@@ -4178,6 +4185,8 @@ function reinclureChantierJour(chId, dateStr) {
   if (!ch) return;
   saveDoc('chantiers', { ...ch, joursExclus: (ch.joursExclus || []).filter(d => d !== dateStr) });
 }
+// Un chantier a-t-il des jours placés (chantierPlanning) ? → il s'affiche par jours, pas par plage
+function chantierAPlacements(chId) { return (appData.chantierPlanning || []).some(p => p.chantierId === chId); }
 // Placer un chantier (pré-encodé) sur un jour précis du planning, via le menu déroulant
 function placerChantierJour(val, dateStr) {
   if (!val) return;
@@ -4200,9 +4209,9 @@ function renderCreationSemaine(el, chantiers, clients) {
   const today = formatDate(new Date());
   const joursNoms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const couvreJour = (ch, dStr) => { const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut; return d && d <= dStr && f >= dStr; };
-  const actifsJour = dStr => chantiers.filter(ch => couvreJour(ch, dStr) && !(ch.joursExclus || []).includes(dStr))
+  const actifsJour = dStr => chantiers.filter(ch => !chantierAPlacements(ch.id) && couvreJour(ch, dStr) && !(ch.joursExclus || []).includes(dStr))
     .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
-  const exclusJour = dStr => chantiers.filter(ch => couvreJour(ch, dStr) && (ch.joursExclus || []).includes(dStr));
+  const exclusJour = dStr => chantiers.filter(ch => !chantierAPlacements(ch.id) && couvreJour(ch, dStr) && (ch.joursExclus || []).includes(dStr));
   // Les ouvriers ne travaillent pas le week-end : le samedi ne s'affiche que via le bouton, jamais en prolongeant un chantier
   const montrerSamedi = afficherSamediCreation;
   majBoutonSamediCreation();
@@ -4329,7 +4338,7 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
     const ferme = fermetureJour(dStr);
     const actifs = (weekend || ferme) ? [] : chantiers.filter(ch => {
       const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut;
-      return d && d <= dStr && f >= dStr && !(ch.joursExclus || []).includes(dStr);
+      return !chantierAPlacements(ch.id) && d && d <= dStr && f >= dStr && !(ch.joursExclus || []).includes(dStr);
     });
     const idsActifs = actifs.map(c => c.id);
     const dots = actifs.map(ch => {
@@ -4397,8 +4406,10 @@ function renderCreationGantt(el, p, chantiers, clients) {
   </div>`;
 }
 
+let chJoursSel = new Set();
+let chCalRef = new Date();
 function ouvrirChantier(id) {
-  currentChantierId = id || null;
+  currentChantierId = id || uuid(); // id généré d'avance pour rattacher les jours
   const ch = id ? appData.chantiers.find(c => c.id === id) : null;
   document.getElementById('modal-chantier-titre').textContent = ch ? 'Modifier le chantier' : 'Nouveau chantier';
   document.getElementById('btn-suppr-chantier').style.display = ch ? '' : 'none';
@@ -4406,11 +4417,8 @@ function ouvrirChantier(id) {
   if (ch) setClientSearch('ch', ch.clientId);
   document.getElementById('ch-nom').value = ch?.nom || '';
   document.getElementById('ch-adresse').value = ch?.adresse || '';
-  document.getElementById('ch-debut').value = ch?.dateDebut || '';
-  document.getElementById('ch-fin').value = ch?.dateFin || '';
   document.getElementById('ch-statut').value = ch?.statut || 'devis';
   document.getElementById('ch-budget').value = ch?.budget ?? '';
-  // Budget = Marco uniquement (confidentiel)
   document.getElementById('ch-budget-group').style.display = voitChantierFinances() ? '' : 'none';
   document.getElementById('ch-description').value = ch?.description || '';
   document.getElementById('ch-chef').value = ch?.chef || 'Thibaut';
@@ -4418,28 +4426,72 @@ function ouvrirChantier(id) {
   document.getElementById('ch-equipe-toggle').innerHTML = MEMBRES_CREATION.map(m =>
     `<div class="membre-chip${equipe.includes(m) ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`
   ).join('');
+  // Jours sélectionnés : placements existants, ou la plage de dates (legacy) en jours ouvrés
+  chJoursSel = new Set((appData.chantierPlanning || []).filter(p => p.chantierId === currentChantierId).map(p => p.date));
+  if (!chJoursSel.size && ch && ch.dateDebut) {
+    const d0 = new Date(ch.dateDebut + 'T00:00:00'), d1 = new Date((ch.dateFin || ch.dateDebut) + 'T00:00:00');
+    for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) { if (d.getDay() !== 0 && d.getDay() !== 6) chJoursSel.add(formatDate(d)); }
+  }
+  const prem = [...chJoursSel].sort()[0];
+  chCalRef = prem ? new Date(prem + 'T00:00:00') : new Date();
+  renderChCalendrier();
   document.getElementById('modal-chantier').classList.remove('hidden');
 }
-// Toggle simple d'un chip (sans effet de bord, contrairement à toggleMembre)
 function toggleChip(el) { el.classList.toggle('selected'); }
+// Mini calendrier de sélection des jours du chantier
+function chCalNav(delta) { chCalRef = new Date(chCalRef.getFullYear(), chCalRef.getMonth() + delta, 1); renderChCalendrier(); }
+function toggleChJour(dStr) { if (chJoursSel.has(dStr)) chJoursSel.delete(dStr); else chJoursSel.add(dStr); renderChCalendrier(); }
+function renderChCalendrier() {
+  const el = document.getElementById('ch-calendrier'); if (!el) return;
+  const an = chCalRef.getFullYear(), mois = chCalRef.getMonth();
+  const today = formatDate(new Date());
+  document.getElementById('ch-cal-titre').textContent = chCalRef.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(/^./, s => s.toUpperCase());
+  const premier = new Date(an, mois, 1);
+  const offset = (premier.getDay() + 6) % 7;
+  const debut = new Date(an, mois, 1 - offset);
+  const jn = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  let h = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${jn.map(j => `<div style="text-align:center;font-size:0.7rem;color:var(--gris);font-weight:700">${j}</div>`).join('')}`;
+  for (let i = 0; i < 42; i++) {
+    const jour = new Date(debut); jour.setDate(debut.getDate() + i);
+    const dStr = formatDate(jour);
+    const autre = jour.getMonth() !== mois;
+    const we = jour.getDay() === 0 || jour.getDay() === 6;
+    const sel = chJoursSel.has(dStr);
+    h += `<div onclick="toggleChJour('${dStr}')" style="text-align:center;padding:6px 0;border-radius:7px;cursor:pointer;font-size:0.82rem;font-weight:${sel ? '800' : '500'};
+      background:${sel ? 'var(--vert)' : (autre ? '#f8f9fa' : '#fff')};color:${sel ? '#fff' : (autre ? '#bbb' : (we ? '#aaa' : '#333'))};
+      border:1px solid ${sel ? 'var(--vert)' : 'var(--border)'};${dStr === today && !sel ? 'outline:2px solid var(--vert-clair)' : ''}">${jour.getDate()}</div>`;
+  }
+  h += '</div>';
+  el.innerHTML = h;
+  const cnt = document.getElementById('ch-cal-count');
+  if (cnt) cnt.textContent = chJoursSel.size ? `✅ ${chJoursSel.size} jour(s) sélectionné(s)` : 'Aucun jour sélectionné (le chantier n\'apparaîtra pas dans le planning).';
+}
 function sauvegarderChantier() {
   const nom = document.getElementById('ch-nom').value.trim();
   if (!nom) { alert('Donnez un nom au chantier.'); return; }
   const ancien = appData.chantiers.find(c => c.id === currentChantierId) || {};
+  const dates = [...chJoursSel].sort();
+  const dateDebut = dates.length ? dates[0] : (ancien.dateDebut || '');
+  const dateFin = dates.length ? dates[dates.length - 1] : (ancien.dateFin || '');
   saveDoc('chantiers', {
     ...ancien,
-    id: currentChantierId || uuid(),
+    id: currentChantierId,
     clientId: document.getElementById('ch-client-id').value || '',
     nom,
     adresse: document.getElementById('ch-adresse').value.trim(),
-    dateDebut: document.getElementById('ch-debut').value || '',
-    dateFin: document.getElementById('ch-fin').value || '',
+    dateDebut, dateFin,
     statut: document.getElementById('ch-statut').value,
     budget: voitChantierFinances() ? (parseFloat(document.getElementById('ch-budget').value) || null) : (ancien.budget ?? null),
     description: document.getElementById('ch-description').value.trim(),
     chef: document.getElementById('ch-chef').value,
     equipe: [...document.querySelectorAll('#ch-equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre)
   });
+  // Synchroniser les placements (jours cochés) pour ce chantier
+  const existants = (appData.chantierPlanning || []).filter(p => p.chantierId === currentChantierId);
+  const selSet = new Set(dates);
+  existants.forEach(p => { if (!selSet.has(p.date)) deleteDoc('chantierPlanning', p.id); });
+  const dejaLa = new Set(existants.map(p => p.date));
+  dates.forEach(d => { if (!dejaLa.has(d)) saveDoc('chantierPlanning', { id: uuid(), chantierId: currentChantierId, date: d, nbHommes: '' }); });
   fermerModal('modal-chantier');
 }
 function supprimerChantier() {
@@ -4513,7 +4565,7 @@ function renderChantierDetail() {
         <div style="font-weight:800;color:${barC}">${pct}%</div>
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
-      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:170px"></span><span style="width:58px;text-align:center">devis</span><span style="width:58px;text-align:center">réel</span><span style="width:50px;text-align:center">unité</span><span style="width:42px"></span></div>
+      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:170px"></span><span style="width:58px;text-align:center">devis</span><span style="width:58px;text-align:center">réel</span><span style="width:74px;text-align:center">unité</span><span style="width:42px"></span></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
         ${ordonnees.map((e, idx) => {
           const type = e.type || 'poste';
@@ -4529,7 +4581,11 @@ function renderChantierDetail() {
           <div style="display:flex;align-items:center;gap:6px;flex:none;margin-left:auto">
             <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="devis" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:58px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center">
             <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="réel" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:58px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center;background:#fff8e1">
-            <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="unité" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:50px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center">
+            <select onchange="setEtapeQte('${e.key}','unite',this.value)" onclick="event.stopPropagation()" title="Unité" style="width:74px;padding:3px 2px;border:1px solid var(--border);border-radius:6px;font-size:0.74rem;background:white">
+              <option value="">– unité</option>
+              ${UNITES_AVANCEMENT.map(u => `<option value="${u}" ${q.unite === u ? 'selected' : ''}>${u}</option>`).join('')}
+              ${q.unite && !UNITES_AVANCEMENT.includes(q.unite) ? `<option value="${esc(q.unite)}" selected>${esc(q.unite)}</option>` : ''}
+            </select>
             ${editBtn(e)}${delBtn(e)}
           </div>
         </div>`;
@@ -5594,7 +5650,6 @@ async function importerSauvegarde(input) {
 // FACTURATION
 // =====================================================
 function renderFacturation() {
-  renderIconesSettings();
   renderContratsAFacturer();
   const { interventions, clients } = getData();
   const terminées = interventions.filter(iv => iv.statut === 'termine');
