@@ -3982,9 +3982,9 @@ function renderChantierDetail() {
   const avEl = document.getElementById('chantier-detail-avancement');
   if (avEl) {
     const perso = ch.etapesPerso || [];
-    const toutes = [...CHANTIER_ETAPES, ...perso];
-    const faites = new Set((ch.etapes || []).filter(k => toutes.some(e => e.key === k)));
-    const pct = toutes.length ? Math.round(faites.size / toutes.length * 100) : 0;
+    const ordonnees = etapesOrdonnees(ch);
+    const faites = new Set((ch.etapes || []).filter(k => ordonnees.some(e => e.key === k)));
+    const pct = ordonnees.length ? Math.round(faites.size / ordonnees.length * 100) : 0;
     const barC = pct === 100 ? '#1e5631' : '#e67e22';
     const persoKeys = new Set(perso.map(e => e.key));
     avEl.innerHTML = `
@@ -3993,12 +3993,15 @@ function renderChantierDetail() {
         <div style="font-weight:800;color:${barC}">${pct}%</div>
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        ${toutes.map(e => `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;padding:3px 0">
+      <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
+        ${ordonnees.map(e => `<div draggable="true" data-key="${e.key}"
+            ondragstart="dragEtapeStart('${e.key}')" ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')" ondragend="renderChantierDetail()"
+            style="display:flex;align-items:center;gap:8px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px">
+          <span style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner">⠿</span>
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
-          <span style="flex:1;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}">${esc(e.label)}</span>
-          ${persoKeys.has(e.key) ? `<span onclick="event.preventDefault();supprimerEtapePerso('${e.key}')" title="Supprimer ce poste" style="cursor:pointer;opacity:0.6">🗑️</span>` : ''}
-        </label>`).join('')}
+          <span style="flex:1;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
+          ${persoKeys.has(e.key) ? `<span onclick="supprimerEtapePerso('${e.key}')" title="Supprimer ce poste" style="cursor:pointer;opacity:0.6">🗑️</span>` : ''}
+        </div>`).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <input type="text" class="form-control" id="ch-etape-input" placeholder="Ajouter un poste (ex : Pose clôture, Éclairage…)" onkeydown="if(event.key==='Enter')ajouterEtapePerso()" style="flex:1">
@@ -4104,8 +4107,34 @@ function supprimerEtapePerso(key) {
   saveDoc('chantiers', {
     ...ch,
     etapesPerso: (ch.etapesPerso || []).filter(e => e.key !== key),
-    etapes: (ch.etapes || []).filter(k => k !== key)
+    etapes: (ch.etapes || []).filter(k => k !== key),
+    etapesOrdre: (ch.etapesOrdre || []).filter(k => k !== key)
   });
+}
+
+// Liste des étapes (défaut + persos) dans l'ordre choisi pour le chantier
+function etapesOrdonnees(ch) {
+  const toutes = [...CHANTIER_ETAPES, ...(ch.etapesPerso || [])];
+  const map = new Map(toutes.map(e => [e.key, e]));
+  const out = [];
+  (ch.etapesOrdre || []).forEach(k => { if (map.has(k)) { out.push(map.get(k)); map.delete(k); } });
+  toutes.forEach(e => { if (map.has(e.key)) out.push(e); }); // nouvelles étapes non encore ordonnées → à la fin
+  return out;
+}
+
+let dragEtapeKey = null;
+function dragEtapeStart(key) { dragEtapeKey = key; }
+function dropEtape(targetKey) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch || !dragEtapeKey || dragEtapeKey === targetKey) { dragEtapeKey = null; return; }
+  const ordre = etapesOrdonnees(ch).map(e => e.key);
+  const from = ordre.indexOf(dragEtapeKey);
+  const to = ordre.indexOf(targetKey);
+  if (from < 0 || to < 0) { dragEtapeKey = null; return; }
+  ordre.splice(from, 1);
+  ordre.splice(to, 0, dragEtapeKey);
+  dragEtapeKey = null;
+  saveDoc('chantiers', { ...ch, etapesOrdre: ordre });
 }
 
 function envoyerMessageChantier() {
