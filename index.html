@@ -736,6 +736,7 @@
     <div class="card" id="chantier-detail-avancement"></div>
     <div class="card" id="chantier-detail-devis"></div>
     <div class="card" id="chantier-detail-fichiers"></div>
+    <div class="card" id="chantier-detail-supplements"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -1967,7 +1968,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2087,6 +2088,10 @@ function initFirestore() {
   });
   db.collection('chantierMessages').onSnapshot(snap => {
     appData.chantierMessages = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierSupplements').onSnapshot(snap => {
+    appData.chantierSupplements = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
 
@@ -4237,6 +4242,35 @@ function renderChantierDetail() {
       <div id="ch-fichiers-viewer" style="margin-top:10px"></div>`;
   }
 
+  // --- Suppléments / demandes hors devis ---
+  const suEl = document.getElementById('chantier-detail-supplements');
+  if (suEl) {
+    const items = appData.chantierSupplements.filter(s => s.chantierId === ch.id).sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+    const moi = currentUser ? currentUser.name : '';
+    suEl.innerHTML = `
+      <div class="card-title">🆕 Suppléments / demandes hors devis <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— ajoutés par toute l'équipe</span></div>
+      <div style="font-size:0.8rem;color:var(--gris);margin:2px 0 8px">Notez ici toute demande non prévue au devis (le client demande aussi…, imprévu sur le terrain…). Pensez ensuite à pointer les heures/matériaux en « 🆕 Supplément ».</div>
+      ${items.length ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${items.map(s => {
+          const quand = s.ts ? new Date(s.ts).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : '';
+          return `<div class="flex-between" style="gap:8px;padding:7px 10px;background:${s.fait ? '#1e56310d' : '#fff7ed'};border-left:4px solid ${s.fait ? '#1e5631' : '#e67e22'};border-radius:8px">
+            <div style="min-width:0;flex:1">
+              <div style="${s.fait ? 'text-decoration:line-through;color:var(--gris)' : ''}">${esc(s.texte)}</div>
+              <div style="font-size:0.72rem;color:var(--gris);margin-top:2px">${esc(s.auteur || '')}${quand ? ' · ' + quand : ''}</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex:none">
+              <button onclick="toggleSupplementFait('${s.id}')" title="${s.fait ? 'Marquer à faire' : 'Marquer fait'}" style="background:none;border:none;cursor:pointer;font-size:1.05rem">${s.fait ? '↩️' : '✅'}</button>
+              ${(s.auteur === moi || modeAdmin) ? `<button onclick="supprimerSupplementChantier('${s.id}')" title="Supprimer" style="background:none;border:none;cursor:pointer">🗑️</button>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : '<div class="empty-state" style="padding:10px">Aucun supplément pour l\'instant.</div>'}
+      <div style="display:flex;gap:8px">
+        <input type="text" class="form-control" id="ch-supplement-input" placeholder="Ex : Le client demande aussi une bordure le long de l'allée" onkeydown="if(event.key==='Enter')ajouterSupplementChantier()" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="ajouterSupplementChantier()" style="white-space:nowrap">+ Ajouter</button>
+      </div>`;
+  }
+
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
 
@@ -4576,6 +4610,32 @@ function supprimerMessageChantier(id) {
   deleteDoc('chantierMessages', id);
 }
 
+// --- Suppléments / demandes hors devis (encart partagé) ---
+function ajouterSupplementChantier() {
+  if (!currentChantierDetailId) return;
+  const input = document.getElementById('ch-supplement-input');
+  const texte = input.value.trim();
+  if (!texte) return;
+  saveDoc('chantierSupplements', {
+    id: uuid(), chantierId: currentChantierDetailId,
+    texte, auteur: currentUser ? currentUser.name : '?',
+    ts: new Date().toISOString(), fait: false
+  });
+  input.value = '';
+}
+function toggleSupplementFait(id) {
+  const s = appData.chantierSupplements.find(x => x.id === id);
+  if (!s) return;
+  saveDoc('chantierSupplements', { ...s, fait: !s.fait });
+}
+function supprimerSupplementChantier(id) {
+  const s = appData.chantierSupplements.find(x => x.id === id);
+  if (!s) return;
+  if (s.auteur !== (currentUser && currentUser.name) && !modeAdmin) return;
+  if (!confirm('Supprimer ce supplément ?')) return;
+  deleteDoc('chantierSupplements', id);
+}
+
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-h-date').value;
@@ -4619,7 +4679,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -4638,7 +4698,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
