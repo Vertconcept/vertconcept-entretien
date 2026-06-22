@@ -559,6 +559,7 @@
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
+    <button onclick="showPage('conges')" id="nav-conges">🏖️ Congés <span id="conges-badge" style="display:none;background:#c0392b;color:#fff;border-radius:10px;font-size:0.68rem;font-weight:700;padding:0 5px;margin-left:2px"></span></button>
     <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
@@ -602,6 +603,9 @@
   </button>
   <button onclick="showPage('materiel')" id="bnav-materiel">
     <span class="nav-icon">🔧</span>Matériel
+  </button>
+  <button onclick="showPage('conges')" id="bnav-conges">
+    <span class="nav-icon">🏖️</span>Congés
   </button>
   <button onclick="showPage('facturation')" id="bnav-facturation">
     <span class="nav-icon">💶</span>Factu
@@ -865,6 +869,16 @@
       </div>
       <div id="achats-list"></div>
     </div>
+  </div>
+
+  <!-- ===== CONGÉS & ABSENCES ===== -->
+  <div class="page" id="page-conges">
+    <div class="flex-between mb-1" style="flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">🏖️ Congés & absences</h2>
+      <button class="btn btn-primary btn-sm" onclick="ouvrirConge()">+ Demande / absence</button>
+    </div>
+    <div id="conges-a-valider"></div>
+    <div id="conges-liste"></div>
   </div>
 
   <!-- ===== TONTES ===== -->
@@ -1269,6 +1283,37 @@
       <button class="btn btn-danger btn-sm" id="btn-suppr-appro" onclick="supprimerAppro()" style="margin-right:auto;display:none">Supprimer</button>
       <button class="btn btn-secondary" onclick="fermerModal('modal-appro')">Annuler</button>
       <button class="btn btn-primary" onclick="sauvegarderAppro()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL CONGÉ / ABSENCE ===== -->
+<div class="modal-overlay hidden" id="modal-conge">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-conge-titre">Nouvelle demande</h3>
+      <button class="close-btn" onclick="fermerModal('modal-conge')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-control" id="conge-type" onchange="majFormConge()"></select>
+      </div>
+      <div class="form-group" id="conge-personne-group">
+        <label class="form-label">Personne concernée</label>
+        <select class="form-control" id="conge-personne"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Du *</label><input type="date" class="form-control" id="conge-debut"></div>
+        <div class="form-group"><label class="form-label">Au</label><input type="date" class="form-control" id="conge-fin"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Motif / remarque</label><input type="text" class="form-control" id="conge-motif" placeholder="Optionnel"></div>
+      <div id="conge-info" style="font-size:0.82rem;color:var(--gris)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-conge" onclick="supprimerConge()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-conge')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderConge()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -2011,7 +2056,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], conges: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2063,7 +2108,7 @@ function showLoading(show) {
 // Re-rend la page active après chaque mise à jour Firestore
 function renderCurrentPage() {
   const pages = { planning: renderPlanning, fiches: renderFiche,
-    clients: renderClients, tontes: renderTontes, facturation: renderFacturation, materiel: renderMateriel };
+    clients: renderClients, tontes: renderTontes, facturation: renderFacturation, materiel: renderMateriel, conges: renderConges };
   for (const [name, fn] of Object.entries(pages)) {
     if (document.getElementById('page-'+name)?.classList.contains('active')) { fn(); break; }
   }
@@ -2141,6 +2186,11 @@ function initFirestore() {
     appData.chantierAppro = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
+  db.collection('conges').onSnapshot(snap => {
+    appData.conges = snap.docs.map(d => d.data());
+    updateCongesBadge();
+    if (document.getElementById('page-conges')?.classList.contains('active')) renderConges();
+  });
 
   // Contrats d'entretien
   db.collection('contrats').onSnapshot(snap => {
@@ -2209,6 +2259,7 @@ function showPage(name) {
   if (name === 'chantier-detail') renderChantierDetail();
   if (name === 'facturation') renderFacturation();
   if (name === 'materiel') renderMateriel();
+  if (name === 'conges') renderConges();
 }
 
 // =====================================================
@@ -2292,6 +2343,7 @@ function applyUser(user) {
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
   appliquerVisibilitePoles();
+  updateCongesBadge();
   // Un ouvrier Création atterrit directement sur son pôle
   if (!voitEntretien() && voitCreation()) showPage('creation');
 
@@ -4768,6 +4820,141 @@ function cyclerStatutAppro(id) {
   saveDoc('chantierAppro', { ...a, statut: next });
 }
 
+// =====================================================
+// CONGÉS & ABSENCES
+// =====================================================
+const CONGE_TYPES = {
+  conge:      { label: '🏖️ Congé',              c: '#2980b9' },
+  maladie:    { label: '🤒 Maladie',            c: '#c0392b' },
+  intemperie: { label: '🌧️ Intempérie',         c: '#e67e22' },
+  fermeture:  { label: '🏢 Fermeture annuelle',  c: '#7f8c8d', adminOnly: true }
+};
+const CONGE_STATUTS = {
+  'en-attente': { label: '⏳ En attente', c: '#b9770e', bg: '#fd7e1418' },
+  'valide':     { label: '✅ Validé',     c: '#1e5631', bg: '#1e563115' },
+  'refuse':     { label: '❌ Refusé',     c: '#c0392b', bg: '#c0392b15' }
+};
+function tousMembres() { return [...new Set([...MEMBRES, ...MEMBRES_CREATION])]; }
+let currentCongeId = null;
+
+function ouvrirConge(id) {
+  currentCongeId = id || null;
+  const c = id ? appData.conges.find(x => x.id === id) : null;
+  const typeSel = document.getElementById('conge-type');
+  typeSel.innerHTML = Object.entries(CONGE_TYPES)
+    .filter(([k, t]) => !t.adminOnly || modeAdmin)
+    .map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('');
+  typeSel.value = c?.type || 'conge';
+  const persSel = document.getElementById('conge-personne');
+  persSel.innerHTML = tousMembres().map(n => `<option value="${n}">${n}</option>`).join('');
+  persSel.value = c?.personne || (currentUser ? currentUser.name : '');
+  document.getElementById('conge-debut').value = c?.dateDebut || formatDate(new Date());
+  document.getElementById('conge-fin').value = c?.dateFin || '';
+  document.getElementById('conge-motif').value = c?.motif || '';
+  document.getElementById('modal-conge-titre').textContent = c ? 'Modifier l\'absence' : 'Nouvelle demande / absence';
+  document.getElementById('btn-suppr-conge').style.display = (c && (modeAdmin || c.auteur === (currentUser && currentUser.name))) ? '' : 'none';
+  majFormConge();
+  document.getElementById('modal-conge').classList.remove('hidden');
+}
+function majFormConge() {
+  const type = document.getElementById('conge-type').value;
+  document.getElementById('conge-personne-group').style.display = type === 'fermeture' ? 'none' : '';
+  const info = document.getElementById('conge-info');
+  if (type === 'conge' && !(currentUser && currentUser.name === 'Marco')) info.textContent = 'ℹ️ Votre demande sera soumise à Marco pour validation.';
+  else if (type === 'fermeture') info.textContent = '🏢 Concerne toute l\'entreprise.';
+  else info.textContent = '';
+}
+function sauvegarderConge() {
+  const type = document.getElementById('conge-type').value;
+  const dateDebut = document.getElementById('conge-debut').value;
+  if (!dateDebut) { alert('Indiquez au moins une date de début.'); return; }
+  const ancien = appData.conges.find(c => c.id === currentCongeId) || {};
+  const moi = currentUser ? currentUser.name : '?';
+  const personne = type === 'fermeture' ? 'Toute l\'équipe' : document.getElementById('conge-personne').value;
+  let statut = ancien.statut;
+  if (!currentCongeId) statut = (type === 'conge' && moi !== 'Marco') ? 'en-attente' : 'valide';
+  saveDoc('conges', {
+    id: currentCongeId || uuid(),
+    type, personne, dateDebut,
+    dateFin: document.getElementById('conge-fin').value || '',
+    motif: document.getElementById('conge-motif').value.trim(),
+    statut, auteur: ancien.auteur || moi, ts: ancien.ts || new Date().toISOString()
+  });
+  fermerModal('modal-conge');
+}
+function supprimerConge() {
+  if (!currentCongeId) return;
+  const c = appData.conges.find(x => x.id === currentCongeId);
+  if (c && c.auteur !== (currentUser && currentUser.name) && !modeAdmin) return;
+  if (!confirm('Supprimer cette entrée ?')) return;
+  deleteDoc('conges', currentCongeId);
+  fermerModal('modal-conge');
+}
+function validerConge(id, ok) {
+  if (!(currentUser && currentUser.name === 'Marco')) return;
+  const c = appData.conges.find(x => x.id === id);
+  if (!c) return;
+  saveDoc('conges', { ...c, statut: ok ? 'valide' : 'refuse', valideePar: 'Marco' });
+}
+function updateCongesBadge() {
+  const n = (appData.conges || []).filter(c => c.statut === 'en-attente').length;
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const b = document.getElementById('conges-badge');
+  if (b) { b.style.display = (estMarco && n > 0) ? '' : 'none'; b.textContent = n; }
+}
+function periodeConge(c) {
+  return (c.dateFin && c.dateFin !== c.dateDebut) ? `${formatDateFR(c.dateDebut)} → ${formatDateFR(c.dateFin)}` : formatDateFR(c.dateDebut);
+}
+function renderConges() {
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const today = formatDate(new Date());
+  const conges = (appData.conges || []).slice();
+  updateCongesBadge();
+  // À valider (Marco)
+  const aVal = document.getElementById('conges-a-valider');
+  const enAttente = conges.filter(c => c.statut === 'en-attente').sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  if (aVal) {
+    aVal.innerHTML = (estMarco && enAttente.length) ? `<div class="card" style="border-left:5px solid #e67e22;margin-bottom:1rem">
+      <div class="card-title">⏳ Demandes à valider (${enAttente.length})</div>
+      ${enAttente.map(c => {
+        const t = CONGE_TYPES[c.type] || CONGE_TYPES.conge;
+        return `<div class="flex-between" style="gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div><strong>${esc(c.personne)}</strong> · ${t.label}<br><span style="font-size:0.82rem;color:var(--gris)">📅 ${periodeConge(c)}${c.motif ? ' · ' + esc(c.motif) : ''}</span></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary btn-sm" onclick="validerConge('${c.id}',true)">✅ Valider</button>
+            <button class="btn btn-danger btn-sm" onclick="validerConge('${c.id}',false)">❌ Refuser</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+  }
+  // Liste complète (plus récent en premier)
+  const liste = conges.sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
+  const cont = document.getElementById('conges-liste');
+  if (!cont) return;
+  if (!liste.length) { cont.innerHTML = `<div class="card"><div class="empty-state">Aucune absence enregistrée. Cliquez « + Demande / absence ».</div></div>`; return; }
+  const moi = currentUser ? currentUser.name : '';
+  cont.innerHTML = `<div class="card-title" style="margin-bottom:8px">📋 Toutes les absences</div>` + liste.map(c => {
+    const t = CONGE_TYPES[c.type] || CONGE_TYPES.conge;
+    const st = CONGE_STATUTS[c.statut] || CONGE_STATUTS.valide;
+    const passe = (c.dateFin || c.dateDebut) < today;
+    const peutEditer = estMarco || c.auteur === moi;
+    return `<div class="card" style="margin-bottom:8px;padding:12px;border-left:5px solid ${t.c};${passe ? 'opacity:0.6' : ''}">
+      <div class="flex-between" style="gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700">${t.label} — ${esc(c.personne)}</div>
+          <div style="font-size:0.82rem;color:var(--gris);margin-top:2px">📅 ${periodeConge(c)}${c.motif ? ' · ' + esc(c.motif) : ''}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex:none">
+          <span style="background:${st.bg};color:${st.c};font-weight:700;font-size:0.74rem;padding:3px 10px;border-radius:20px;white-space:nowrap">${st.label}</span>
+          ${peutEditer ? `<button onclick="ouvrirConge('${c.id}')" style="background:none;border:none;cursor:pointer">✏️</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function ajouterHeureChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-h-date').value;
@@ -4811,7 +4998,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, conges: appData.conges,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -4830,7 +5017,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'conges'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
