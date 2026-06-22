@@ -1322,8 +1322,9 @@
         <select class="form-control" id="conge-type" onchange="majFormConge()"></select>
       </div>
       <div class="form-group" id="conge-personne-group">
-        <label class="form-label">Personne concernée</label>
-        <select class="form-control" id="conge-personne"></select>
+        <label class="form-label">Personne(s) concernée(s)</label>
+        <div style="margin-bottom:6px"><button type="button" class="btn btn-secondary btn-sm" onclick="toggleTousConge()">☑️ Tout cocher / décocher</button></div>
+        <div class="equipe-toggle" id="conge-personnes"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Du *</label><input type="date" class="form-control" id="conge-debut"></div>
@@ -4297,19 +4298,22 @@ function renderChantierDetail() {
         <div style="font-weight:800;color:${barC}">${pct}%</div>
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
+      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:120px"></span><span style="width:66px;text-align:center">Qté devis</span><span style="width:66px;text-align:center">Qté réel</span><span style="width:16px"></span></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
-        ${ordonnees.map((e, idx) => `<div draggable="true" data-key="${e.key}"
-            ondragstart="dragEtapeStart('${e.key}')" ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')" ondragend="renderChantierDetail()"
-            style="display:flex;align-items:center;gap:8px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px">
+        ${ordonnees.map((e, idx) => { const q = (ch.etapesQte && ch.etapesQte[e.key]) || {}; return `<div data-key="${e.key}"
+            ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')"
+            style="display:flex;align-items:center;gap:6px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px;flex-wrap:wrap">
           <span style="display:flex;flex-direction:column;line-height:0.75">
             <span onclick="deplacerEtape('${e.key}',-1)" title="Monter" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === 0 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▲</span>
             <span onclick="deplacerEtape('${e.key}',1)" title="Descendre" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === ordonnees.length - 1 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▼</span>
           </span>
-          <span style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
+          <span draggable="true" ondragstart="dragEtapeStart('${e.key}')" ondragend="renderChantierDetail()" style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
-          <span style="flex:1;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
+          <span style="flex:1;min-width:120px;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
+          <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:66px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
+          <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:66px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
           <span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer ce poste" style="cursor:pointer;opacity:0.55">🗑️</span>
-        </div>`).join('')}
+        </div>`; }).join('')}
       </div>
       ${(ch.etapesMasquees && ch.etapesMasquees.length) ? `<div style="margin-top:6px"><span onclick="reinitialiserEtapesDefaut()" style="cursor:pointer;font-size:0.78rem;color:var(--vert)">↩️ Remettre les étapes par défaut</span></div>` : ''}
       <div style="display:flex;gap:8px;margin-top:10px">
@@ -4506,6 +4510,14 @@ function toggleEtapeChantier(key) {
   const set = new Set(ch.etapes || []);
   set.has(key) ? set.delete(key) : set.add(key);
   saveDoc('chantiers', { ...ch, etapes: [...set] });
+}
+// Quantité prévue (devis) / réelle (chantier) par poste d'avancement
+function setEtapeQte(key, champ, val) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const q = { ...(ch.etapesQte || {}) };
+  q[key] = { ...(q[key] || {}), [champ]: (val || '').trim() };
+  saveDoc('chantiers', { ...ch, etapesQte: q });
 }
 
 function ajouterEtapePerso() {
@@ -4880,9 +4892,10 @@ function ouvrirConge(id) {
     .filter(([k, t]) => !t.adminOnly || modeAdmin)
     .map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('');
   typeSel.value = c?.type || 'conge';
-  const persSel = document.getElementById('conge-personne');
-  persSel.innerHTML = tousMembres().map(n => `<option value="${n}">${n}</option>`).join('');
-  persSel.value = c?.personne || (currentUser ? currentUser.name : '');
+  const coches = c ? [c.personne] : [currentUser ? currentUser.name : ''];
+  document.getElementById('conge-personnes').innerHTML = tousMembres().map(n =>
+    `<div class="membre-chip${coches.includes(n) ? ' selected' : ''}" data-membre="${n}" onclick="toggleChip(this)">${n}</div>`
+  ).join('');
   document.getElementById('conge-debut').value = c?.dateDebut || formatDate(new Date());
   document.getElementById('conge-fin').value = c?.dateFin || '';
   document.getElementById('conge-motif').value = c?.motif || '';
@@ -4899,22 +4912,43 @@ function majFormConge() {
   else if (type === 'fermeture') info.textContent = '🏢 Concerne toute l\'entreprise.';
   else info.textContent = '';
 }
+function toggleTousConge() {
+  const chips = [...document.querySelectorAll('#conge-personnes .membre-chip')];
+  const allOn = chips.length && chips.every(c => c.classList.contains('selected'));
+  chips.forEach(c => c.classList.toggle('selected', !allOn));
+}
 function sauvegarderConge() {
   const type = document.getElementById('conge-type').value;
   const dateDebut = document.getElementById('conge-debut').value;
   if (!dateDebut) { alert('Indiquez au moins une date de début.'); return; }
-  const ancien = appData.conges.find(c => c.id === currentCongeId) || {};
+  const dateFin = document.getElementById('conge-fin').value || '';
+  const motif = document.getElementById('conge-motif').value.trim();
   const moi = currentUser ? currentUser.name : '?';
-  const personne = type === 'fermeture' ? 'Toute l\'équipe' : document.getElementById('conge-personne').value;
-  let statut = ancien.statut;
-  if (!currentCongeId) statut = (type === 'conge' && moi !== 'Marco') ? 'en-attente' : 'valide';
-  saveDoc('conges', {
-    id: currentCongeId || uuid(),
-    type, personne, dateDebut,
-    dateFin: document.getElementById('conge-fin').value || '',
-    motif: document.getElementById('conge-motif').value.trim(),
-    statut, auteur: ancien.auteur || moi, ts: ancien.ts || new Date().toISOString()
-  });
+  const statutDefaut = (type === 'conge' && moi !== 'Marco') ? 'en-attente' : 'valide';
+  const ancien = appData.conges.find(c => c.id === currentCongeId) || {};
+
+  // Fermeture annuelle = une seule entrée (toute l'équipe)
+  if (type === 'fermeture') {
+    saveDoc('conges', {
+      id: currentCongeId || uuid(), type, personne: 'Toute l\'équipe',
+      dateDebut, dateFin, motif,
+      statut: currentCongeId ? (ancien.statut || 'valide') : 'valide',
+      auteur: ancien.auteur || moi, ts: ancien.ts || new Date().toISOString()
+    });
+    fermerModal('modal-conge'); return;
+  }
+
+  const people = [...document.querySelectorAll('#conge-personnes .membre-chip.selected')].map(c => c.dataset.membre);
+  if (!people.length) { alert('Sélectionnez au moins une personne.'); return; }
+
+  if (currentCongeId) {
+    // Modifier l'entrée existante (1re personne cochée) + créer pour les éventuelles autres
+    saveDoc('conges', { ...ancien, id: currentCongeId, type, personne: people[0], dateDebut, dateFin, motif, statut: ancien.statut || statutDefaut });
+    people.slice(1).forEach(p => saveDoc('conges', { id: uuid(), type, personne: p, dateDebut, dateFin, motif, statut: statutDefaut, auteur: moi, ts: new Date().toISOString() }));
+  } else {
+    // Une entrée par personne cochée
+    people.forEach(p => saveDoc('conges', { id: uuid(), type, personne: p, dateDebut, dateFin, motif, statut: statutDefaut, auteur: moi, ts: new Date().toISOString() }));
+  }
   fermerModal('modal-conge');
 }
 function supprimerConge() {
