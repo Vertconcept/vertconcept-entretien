@@ -1776,7 +1776,7 @@
             <option value="termine">✅ Terminé</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Budget / montant (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-budget" placeholder="ex : 12000"></div>
+        <div class="form-group" id="ch-budget-group"><label class="form-label">Budget / montant (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-budget" placeholder="ex : 12000"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">👷 Chef d'équipe</label>
@@ -3872,7 +3872,7 @@ function renderCreation() {
       </div>
       ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
       ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
-      ${ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
+      ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
       ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
     </div>`;
   }).join('');
@@ -3970,6 +3970,8 @@ function ouvrirChantier(id) {
   document.getElementById('ch-fin').value = ch?.dateFin || '';
   document.getElementById('ch-statut').value = ch?.statut || 'devis';
   document.getElementById('ch-budget').value = ch?.budget ?? '';
+  // Budget = Marco uniquement (confidentiel)
+  document.getElementById('ch-budget-group').style.display = (currentUser && currentUser.name === 'Marco') ? '' : 'none';
   document.getElementById('ch-description').value = ch?.description || '';
   document.getElementById('ch-chef').value = ch?.chef || 'Thibaut';
   const equipe = ch?.equipe || [];
@@ -3992,7 +3994,7 @@ function sauvegarderChantier() {
     dateDebut: document.getElementById('ch-debut').value || '',
     dateFin: document.getElementById('ch-fin').value || '',
     statut: document.getElementById('ch-statut').value,
-    budget: parseFloat(document.getElementById('ch-budget').value) || null,
+    budget: (currentUser && currentUser.name === 'Marco') ? (parseFloat(document.getElementById('ch-budget').value) || null) : (ancien.budget ?? null),
     description: document.getElementById('ch-description').value.trim(),
     chef: document.getElementById('ch-chef').value,
     equipe: [...document.querySelectorAll('#ch-equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre)
@@ -4035,7 +4037,7 @@ function renderChantierDetail() {
       </div>
     </div>
     ${(ch.chef || (ch.equipe && ch.equipe.length)) ? `<div class="equipe-chips" style="margin-top:8px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 Chef : ${esc(ch.chef)}</span>` : ''}${(ch.equipe || []).filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
-    ${ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
+    ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
 
   // --- Avancement (étapes par défaut + postes personnalisés, cochables + barre) ---
@@ -4081,18 +4083,20 @@ function renderChantierDetail() {
       dvEl.innerHTML = `
         <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px">
           <div class="card-title" style="margin:0">📄 Devis du chantier</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="afficherDevisChantier('${ch.id}')">👁️ Consulter</button>
+          ${estMarcoDv ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="afficherDevisChantier('${ch.id}')">👁️ Consulter (avec prix)</button>
             <button class="btn btn-secondary btn-sm" onclick="extrairePostesDevis('${ch.id}')" title="Lire les postes du devis pour les ajouter à l'avancement">📋 Reprendre les postes</button>
-            ${estMarcoDv ? `<button class="btn btn-danger btn-sm" onclick="retirerDevisChantier('${ch.id}')">🗑️ Retirer</button>` : ''}
-          </div>
+            <button class="btn btn-danger btn-sm" onclick="retirerDevisChantier('${ch.id}')">🗑️ Retirer</button>
+          </div>` : ''}
         </div>
-        <div style="font-size:0.82rem;color:var(--gris);margin-top:4px">📎 ${esc(ch.devisNom)} — chaque poste des travaux à réaliser.</div>
+        ${estMarcoDv
+          ? `<div style="font-size:0.82rem;color:var(--gris);margin-top:4px">📎 ${esc(ch.devisNom)} — visible par vous uniquement (prix confidentiels). L'équipe voit les postes via l'Avancement.</div>`
+          : `<div style="font-size:0.82rem;color:var(--gris);margin-top:4px">📎 Un devis est joint à ce chantier (consultable par la direction). Les postes des travaux à réaliser sont listés dans l'<strong>Avancement</strong> ci-dessus.</div>`}
         <div id="ch-devis-viewer" style="margin-top:10px"></div>`;
     } else if (estMarcoDv) {
       dvEl.innerHTML = `
         <div class="card-title" style="margin:0 0 6px">📄 Devis du chantier</div>
-        <div style="font-size:0.82rem;color:var(--gris);margin-bottom:8px">Joignez le devis en PDF <strong>sans les prix</strong> pour que l'équipe consulte chaque poste à réaliser. (PDF, max ~700 Ko)</div>
+        <div style="font-size:0.82rem;color:var(--gris);margin-bottom:8px">Joignez le devis en PDF <strong>(avec les prix si vous voulez)</strong> : <strong>vous seul</strong> pourrez l'ouvrir. L'équipe verra uniquement les <strong>postes</strong> via l'Avancement. (PDF, max ~700 Ko)</div>
         <input type="file" accept="application/pdf,.pdf" id="ch-devis-input" onchange="televerserDevisChantier(this)">
         <div id="ch-devis-status" style="font-size:0.82rem;color:var(--gris);margin-top:6px"></div>`;
     } else {
