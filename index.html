@@ -3860,8 +3860,9 @@ function renderCreation() {
     const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
     const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
     const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
-    const totalEtapes = CHANTIER_ETAPES.length + (ch.etapesPerso || []).length;
-    const pct = totalEtapes ? Math.min(Math.round((ch.etapes || []).length / totalEtapes * 100), 100) : 0;
+    const ord = etapesOrdonnees(ch);
+    const faits = (ch.etapes || []).filter(k => ord.some(e => e.key === k)).length;
+    const pct = ord.length ? Math.round(faits / ord.length * 100) : 0;
     const today = formatDate(new Date());
     const retard = ch.statut !== 'termine' && ch.dateFin && ch.dateFin < today;
     return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
@@ -4066,9 +4067,10 @@ function renderChantierDetail() {
           <span style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
           <span style="flex:1;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
-          ${persoKeys.has(e.key) ? `<span onclick="supprimerEtapePerso('${e.key}')" title="Supprimer ce poste" style="cursor:pointer;opacity:0.6">🗑️</span>` : ''}
+          <span onclick="${persoKeys.has(e.key) ? `supprimerEtapePerso('${e.key}')` : `supprimerEtapeDefaut('${e.key}')`}" title="Supprimer ce poste" style="cursor:pointer;opacity:0.55">🗑️</span>
         </div>`).join('')}
       </div>
+      ${(ch.etapesMasquees && ch.etapesMasquees.length) ? `<div style="margin-top:6px"><span onclick="reinitialiserEtapesDefaut()" style="cursor:pointer;font-size:0.78rem;color:var(--vert)">↩️ Remettre les étapes par défaut</span></div>` : ''}
       <div style="display:flex;gap:8px;margin-top:10px">
         <input type="text" class="form-control" id="ch-etape-input" placeholder="Ajouter un poste (ex : Pose clôture, Éclairage…)" onkeydown="if(event.key==='Enter')ajouterEtapePerso()" style="flex:1">
         <button class="btn btn-secondary btn-sm" onclick="ajouterEtapePerso()" style="white-space:nowrap">+ Poste</button>
@@ -4205,9 +4207,30 @@ function supprimerEtapePerso(key) {
   });
 }
 
-// Liste des étapes (défaut + persos) dans l'ordre choisi pour le chantier
+// Masque une étape prédéfinie pour ce chantier (réversible)
+function supprimerEtapeDefaut(key) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  saveDoc('chantiers', {
+    ...ch,
+    etapesMasquees: [...new Set([...(ch.etapesMasquees || []), key])],
+    etapes: (ch.etapes || []).filter(k => k !== key),
+    etapesOrdre: (ch.etapesOrdre || []).filter(k => k !== key)
+  });
+}
+
+// Réaffiche toutes les étapes par défaut
+function reinitialiserEtapesDefaut() {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  saveDoc('chantiers', { ...ch, etapesMasquees: [] });
+}
+
+// Liste des étapes (défaut non masquées + persos) dans l'ordre choisi pour le chantier
 function etapesOrdonnees(ch) {
-  const toutes = [...CHANTIER_ETAPES, ...(ch.etapesPerso || [])];
+  const masquees = new Set(ch.etapesMasquees || []);
+  const defauts = CHANTIER_ETAPES.filter(e => !masquees.has(e.key));
+  const toutes = [...defauts, ...(ch.etapesPerso || [])];
   const map = new Map(toutes.map(e => [e.key, e]));
   const out = [];
   (ch.etapesOrdre || []).forEach(k => { if (map.has(k)) { out.push(map.get(k)); map.delete(k); } });
