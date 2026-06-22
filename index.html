@@ -553,13 +553,13 @@
 <header>
   <div class="logo">Vert<span>concept</span> — Entretien</div>
   <div class="header-nav">
-    <button onclick="showPage('planning')" id="nav-planning" class="active">Planning</button>
-    <button onclick="showPage('clients')" id="nav-clients">Clients</button>
+    <button onclick="showPage('creation')" id="nav-creation" style="display:none">🏗️ Création</button>
+    <button onclick="showPage('planning')" id="nav-planning" class="active">Entretien</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
-    <button onclick="showPage('creation')" id="nav-creation" style="display:none">🏗️ Création</button>
-    <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
+    <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
+    <button onclick="showPage('facturation')" id="nav-facturation">Facturation</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="notif-btn" id="notif-btn" onclick="ouvrirValidation()" title="Fiches en attente de validation" style="display:none">
@@ -582,7 +582,7 @@
 <!-- NAVIGATION BAS (mobile) -->
 <nav class="bottom-nav" id="bottom-nav">
   <button onclick="showPage('planning')" id="bnav-planning" class="active">
-    <span class="nav-icon">📅</span>Planning
+    <span class="nav-icon">📅</span>Entretien
   </button>
   <!-- Bouton central créer une fiche -->
   <button onclick="ouvrirFicheOuvrier()" id="bnav-creer" class="bnav-creer-btn">
