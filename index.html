@@ -594,10 +594,6 @@
   <button onclick="showPage('planning')" id="bnav-planning" class="active">
     <span class="nav-icon">📅</span>Entretien
   </button>
-  <!-- Bouton créer une fiche (entretien) -->
-  <button onclick="ouvrirFicheOuvrier()" id="bnav-creer" class="bnav-creer-btn">
-    <span class="nav-icon" style="font-size:1.6rem;line-height:1">✚</span>Fiche
-  </button>
   <button onclick="showPage('tontes')" id="bnav-tontes">
     <span class="nav-icon">🌿</span>Tontes
   </button>
@@ -2426,7 +2422,7 @@ function toggleMode() {
 // Création : onglet 🏗️ Création. Partagés (Clients, Matériel) : tout le monde.
 function appliquerVisibilitePoles() {
   const ent = voitEntretien(), cre = voitCreation();
-  ['nav-planning','bnav-planning','nav-tontes','bnav-tontes','nav-contrats','bnav-contrats','bnav-creer'].forEach(id => {
+  ['nav-planning','bnav-planning','nav-tontes','bnav-tontes','nav-contrats','bnav-contrats'].forEach(id => {
     const e = document.getElementById(id); if (e) e.style.display = ent ? '' : 'none';
   });
   ['nav-creation','bnav-creation'].forEach(id => {
