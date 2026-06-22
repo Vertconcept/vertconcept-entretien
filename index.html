@@ -720,6 +720,7 @@
     <div class="card" id="chantier-detail-entete"></div>
     <div class="card" id="chantier-detail-recap" style="display:none"></div>
     <div class="card" id="chantier-detail-avancement"></div>
+    <div class="card" id="chantier-detail-devis"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -4013,6 +4014,32 @@ function renderChantierDetail() {
       </div>`;
   }
 
+  // --- Devis joint (PDF sans prix) ---
+  const dvEl = document.getElementById('chantier-detail-devis');
+  if (dvEl) {
+    const estMarcoDv = currentUser && currentUser.name === 'Marco';
+    if (ch.devisNom) {
+      dvEl.innerHTML = `
+        <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="margin:0">📄 Devis du chantier</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="afficherDevisChantier('${ch.id}')">👁️ Consulter</button>
+            ${estMarcoDv ? `<button class="btn btn-danger btn-sm" onclick="retirerDevisChantier('${ch.id}')">🗑️ Retirer</button>` : ''}
+          </div>
+        </div>
+        <div style="font-size:0.82rem;color:var(--gris);margin-top:4px">📎 ${esc(ch.devisNom)} — chaque poste des travaux à réaliser.</div>
+        <div id="ch-devis-viewer" style="margin-top:10px"></div>`;
+    } else if (estMarcoDv) {
+      dvEl.innerHTML = `
+        <div class="card-title" style="margin:0 0 6px">📄 Devis du chantier</div>
+        <div style="font-size:0.82rem;color:var(--gris);margin-bottom:8px">Joignez le devis en PDF <strong>sans les prix</strong> pour que l'équipe consulte chaque poste à réaliser. (PDF, max ~700 Ko)</div>
+        <input type="file" accept="application/pdf,.pdf" id="ch-devis-input" onchange="televerserDevisChantier(this)">
+        <div id="ch-devis-status" style="font-size:0.82rem;color:var(--gris);margin-top:6px"></div>`;
+    } else {
+      dvEl.innerHTML = `<div class="card-title" style="margin:0 0 4px">📄 Devis du chantier</div><div class="empty-state" style="padding:10px">Aucun devis joint pour ce chantier.</div>`;
+    }
+  }
+
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
 
@@ -4150,6 +4177,63 @@ function deplacerEtape(key, sens) {
   if (i < 0 || j < 0 || j >= ordre.length) return;
   [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
   saveDoc('chantiers', { ...ch, etapesOrdre: ordre });
+}
+
+// --- Devis PDF (sans prix) joint au chantier ---
+const DEVIS_MAX_OCTETS = 700 * 1024; // ~700 Ko (limite doc Firestore 1 Mo après encodage)
+function televerserDevisChantier(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const statut = document.getElementById('ch-devis-status');
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Le fichier doit être un PDF.</span>';
+    input.value = ''; return;
+  }
+  if (file.size > DEVIS_MAX_OCTETS) {
+    if (statut) statut.innerHTML = `<span style="color:#c0392b">❌ PDF trop lourd (${Math.round(file.size / 1024)} Ko). Maximum ~700 Ko — compressez-le (ex : ilovepdf.com) puis réessayez.</span>`;
+    input.value = ''; return;
+  }
+  if (statut) statut.textContent = '⏳ Envoi en cours…';
+  const reader = new FileReader();
+  reader.onload = () => {
+    Promise.resolve(saveDoc('chantierDevis', { id: ch.id, nom: file.name, data: reader.result }))
+      .then(() => saveDoc('chantiers', { ...ch, devisNom: file.name }))
+      .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); })
+      .catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec de l\'envoi (fichier peut-être trop lourd).</span>'; });
+  };
+  reader.readAsDataURL(file);
+}
+
+function dataURLversBlob(dataurl) {
+  const virgule = dataurl.indexOf(',');
+  const entete = dataurl.slice(0, virgule);
+  const mime = (entete.match(/data:(.*?);/) || [])[1] || 'application/pdf';
+  const bin = atob(dataurl.slice(virgule + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+function afficherDevisChantier(id) {
+  const viewer = document.getElementById('ch-devis-viewer');
+  if (viewer) viewer.innerHTML = '<div style="color:var(--gris);font-size:0.85rem">⏳ Chargement du devis…</div>';
+  db.collection('chantierDevis').doc(id).get().then(doc => {
+    if (!doc.exists || !doc.data().data) { if (viewer) viewer.innerHTML = '<div class="empty-state">Devis introuvable.</div>'; return; }
+    const url = URL.createObjectURL(dataURLversBlob(doc.data().data));
+    if (viewer) viewer.innerHTML = `
+      <iframe src="${url}" style="width:100%;height:70vh;border:1px solid var(--border);border-radius:8px"></iframe>
+      <div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">🔍 Ouvrir en plein écran</a></div>`;
+  }).catch(e => { if (viewer) viewer.innerHTML = '<div class="empty-state">Erreur de chargement : ' + (e.message || e) + '</div>'; });
+}
+
+function retirerDevisChantier(id) {
+  if (!confirm('Retirer le devis joint à ce chantier ?')) return;
+  const ch = appData.chantiers.find(c => c.id === id);
+  Promise.resolve(deleteDoc('chantierDevis', id))
+    .then(() => { if (ch) return saveDoc('chantiers', { ...ch, devisNom: null }); })
+    .then(() => { if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail(); });
 }
 
 function envoyerMessageChantier() {
