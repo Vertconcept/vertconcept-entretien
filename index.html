@@ -3160,17 +3160,23 @@ function nbPassagesAn(client, saison) {
 }
 
 // --- Validation des tontes réellement effectuées (passages par client) ---
+// Horodatage d'un passage (ts si présent, sinon minuit de sa date)
+function tsPassage(p) { return p.ts || ((p.date || '') + 'T00:00:00'); }
 // Passage du tour en cours (depuis le début du tour, ou à défaut les 7 derniers jours)
 function passageRecentClient(clientId) {
-  const limite = tontesTourDebut || formatDate(new Date(Date.now() - 7 * 86400000));
-  return (appData.tontesPassages || [])
-    .filter(p => p.clientId === clientId && (p.date || '') >= limite)
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+  const passages = (appData.tontesPassages || []).filter(p => p.clientId === clientId);
+  if (tontesTourDebut) {
+    // tourDebut peut être une date (10 car.) ou un horodatage ISO
+    const limite = tontesTourDebut.length <= 10 ? tontesTourDebut + 'T00:00:00' : tontesTourDebut;
+    return passages.filter(p => tsPassage(p) >= limite).sort((a, b) => tsPassage(b).localeCompare(tsPassage(a)))[0] || null;
+  }
+  const limite7 = formatDate(new Date(Date.now() - 7 * 86400000));
+  return passages.filter(p => (p.date || '') >= limite7).sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
 }
 // Démarrer un nouveau tour : toutes les cases repassent à vide (l'historique des passages est conservé pour le bilan)
 function nouveauTourTonte() {
   if (!confirm('Démarrer un nouveau tour de tonte ?\n\nToutes les cases ✅ repassent à vide pour ce nouveau passage. L\'historique (compteur annuel, bilan) est conservé.')) return;
-  db.collection('config').doc('tontes').set({ tourDebut: formatDate(new Date()) }, { merge: true })
+  db.collection('config').doc('tontes').set({ tourDebut: new Date().toISOString() }, { merge: true })
     .catch(e => { console.error('nouveauTour', e); alert('Erreur, réessayez.'); });
 }
 // Nombre de tontes réellement faites cette année pour ce client
@@ -3182,7 +3188,7 @@ function nbPassagesClientAnnee(clientId) {
 function toggleTontePassage(clientId) {
   const recent = passageRecentClient(clientId);
   if (recent) deleteDoc('tontesPassages', recent.id);
-  else saveDoc('tontesPassages', { id: uuid(), clientId, date: formatDate(new Date()) });
+  else saveDoc('tontesPassages', { id: uuid(), clientId, date: formatDate(new Date()), ts: new Date().toISOString() });
 }
 
 // Nombre de jours de tonte sur la saison (jeudi + vendredi de chaque cycle)
@@ -4385,21 +4391,25 @@ function renderChantierDetail() {
         <div style="font-weight:800;color:${barC}">${pct}%</div>
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
-      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:120px"></span><span style="width:62px;text-align:center">Qté devis</span><span style="width:62px;text-align:center">Qté réel</span><span style="width:54px;text-align:center">Unité</span><span style="width:16px"></span></div>
+      <div style="display:flex;gap:6px;font-size:0.7rem;color:var(--gris);font-weight:700;padding:0 2px 3px"><span style="flex:1;min-width:170px"></span><span style="width:58px;text-align:center">devis</span><span style="width:58px;text-align:center">réel</span><span style="width:50px;text-align:center">unité</span><span style="width:42px"></span></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
         ${ordonnees.map((e, idx) => {
           const type = e.type || 'poste';
           if (type === 'titre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:6px 2px 3px;margin-top:8px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:800;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.3px;color:var(--vert);border-bottom:2px solid var(--vert-pale);padding-bottom:3px">${esc(e.label)}</span>${editBtn(e)}${delBtn(e)}</div>`;
           if (type === 'soustitre') return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;padding:4px 2px;border-top:2px solid transparent;flex-wrap:wrap">${ctrls(e, idx)}<span style="flex:1;min-width:120px;font-weight:700;color:#555;font-style:italic">↳ ${esc(e.label)}</span>${editBtn(e)}${delBtn(e)}</div>`;
           const q = (ch.etapesQte && ch.etapesQte[e.key]) || {};
-          return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px;flex-wrap:wrap">
-          ${ctrls(e, idx)}
-          <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
-          <span style="flex:1;min-width:120px;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
-          <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="–" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
-          <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="–" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center;background:#fff8e1">
-          <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="–" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:54px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-align:center">
-          ${editBtn(e)}${delBtn(e)}
+          return `<div ${rowAttrs(e)} style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px">
+          <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:170px">
+            ${ctrls(e, idx)}
+            <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
+            <span style="flex:1;min-width:60px;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex:none;margin-left:auto">
+            <input type="text" value="${esc(q.devis || '')}" onchange="setEtapeQte('${e.key}','devis',this.value)" placeholder="devis" title="Quantité prévue au devis" onclick="event.stopPropagation()" style="width:58px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center">
+            <input type="text" value="${esc(q.reel || '')}" onchange="setEtapeQte('${e.key}','reel',this.value)" placeholder="réel" title="Quantité réelle sur le chantier" onclick="event.stopPropagation()" style="width:58px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center;background:#fff8e1">
+            <input type="text" value="${esc(q.unite || '')}" onchange="setEtapeQte('${e.key}','unite',this.value)" placeholder="unité" title="Unité (m², ml, T…)" onclick="event.stopPropagation()" style="width:50px;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;text-align:center">
+            ${editBtn(e)}${delBtn(e)}
+          </div>
         </div>`;
         }).join('')}
       </div>
@@ -4798,16 +4808,43 @@ function televerserFichierChantier(input) {
 
 function voirFichierChantier(id, type) {
   const viewer = document.getElementById('ch-fichiers-viewer');
-  if (viewer) viewer.innerHTML = '<div style="color:var(--gris);font-size:0.85rem">⏳ Chargement…</div>';
+  if (viewer) viewer.innerHTML = '<div style="color:var(--gris);font-size:0.85rem">⏳ Ouverture…</div>';
   db.collection('chantierFichiers').doc(id).get().then(doc => {
-    if (!doc.exists || !doc.data().data) { if (viewer) viewer.innerHTML = '<div class="empty-state">Fichier introuvable.</div>'; return; }
+    if (viewer) viewer.innerHTML = '';
+    if (!doc.exists || !doc.data().data) { alert('Fichier introuvable.'); return; }
     const url = URL.createObjectURL(dataURLversBlob(doc.data().data));
     const isImg = (type || doc.data().type || '').startsWith('image/');
-    const plein = `<div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">🔍 Ouvrir en plein écran</a></div>`;
-    if (viewer) viewer.innerHTML = (isImg
-      ? `<img src="${url}" style="max-width:100%;border:1px solid var(--border);border-radius:8px">`
-      : `<iframe src="${url}" style="width:100%;height:70vh;border:1px solid var(--border);border-radius:8px"></iframe>`) + plein;
-  }).catch(e => { if (viewer) viewer.innerHTML = '<div class="empty-state">Erreur de chargement : ' + (e.message || e) + '</div>'; });
+    afficherFichierPleinEcran(url, isImg, doc.data().nom || 'Document');
+  }).catch(e => { if (viewer) viewer.innerHTML = ''; alert('Erreur de chargement : ' + (e.message || e)); });
+}
+// Visionneuse plein écran (plans, esquisses, photos…)
+function afficherFichierPleinEcran(url, isImg, nom) {
+  let ov = document.getElementById('fichier-fullscreen');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'fichier-fullscreen';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.93);display:flex;flex-direction:column';
+    document.body.appendChild(ov);
+  }
+  const escn = (nom || '').replace(/</g, '&lt;');
+  ov.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;color:#fff">
+      <span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escn}</span>
+      <div style="display:flex;gap:8px;flex:none">
+        <a href="${url}" target="_blank" rel="noopener" style="color:#fff;text-decoration:none;background:rgba(255,255,255,0.2);border-radius:8px;padding:6px 12px;font-size:0.85rem">↗ Onglet</a>
+        <button onclick="fermerFichierPleinEcran()" style="background:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer">✕ Fermer</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:0 8px 10px">
+      ${isImg
+        ? `<img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain">`
+        : `<iframe src="${url}" style="width:100%;height:100%;border:none;background:#fff;border-radius:6px"></iframe>`}
+    </div>`;
+  ov.style.display = 'flex';
+}
+function fermerFichierPleinEcran() {
+  const ov = document.getElementById('fichier-fullscreen');
+  if (ov) ov.style.display = 'none';
 }
 
 function supprimerFichierChantier(chId, fileId) {
