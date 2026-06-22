@@ -711,6 +711,7 @@
           <button id="creation-vue-mois" onclick="setVueCreation('mois')">Mois</button>
           <button id="creation-vue-annee" onclick="setVueCreation('annee')">Année</button>
         </div>
+        <button class="btn btn-secondary btn-sm" id="btn-samedi-creation" onclick="toggleSamediCreation()" title="Afficher / masquer le samedi">+ Samedi</button>
         <button class="btn btn-primary btn-sm" onclick="ouvrirChantier()" style="white-space:nowrap">+ Chantier</button>
       </div>
     </div>
@@ -3848,7 +3849,12 @@ function periodeCreation() {
   const dim = new Date(lundi); dim.setDate(lundi.getDate() + 6);
   return { debut: formatDate(lundi), fin: formatDate(dim), titre: `Semaine du ${lundi.getDate()}/${lundi.getMonth() + 1} au ${dim.getDate()}/${dim.getMonth() + 1}` };
 }
-function setVueCreation(v) { vueCreation = v; creationOffset = 0; renderCreation(); }
+function setVueCreation(v) {
+  vueCreation = v; creationOffset = 0;
+  const bs = document.getElementById('btn-samedi-creation');
+  if (bs) bs.style.display = v === 'semaine' ? '' : 'none';
+  renderCreation();
+}
 function navCreation(delta) { creationOffset += delta; renderCreation(); }
 function creationAujourdhui() { creationOffset = 0; renderCreation(); }
 
@@ -3884,39 +3890,63 @@ function renderCreation() {
   if (vueCreation === 'mois')  { renderCreationCalendrier(el, p, chantiers, clients); return; }
   if (vueCreation === 'annee') { renderCreationGantt(el, p, chantiers, clients); return; }
 
-  // Vue Semaine : liste détaillée
-  // Chantiers actifs sur la période : début ≤ fin de période ET fin ≥ début de période
-  const actifs = chantiers.filter(ch => {
-    const d = ch.dateDebut || '';
-    const f = ch.dateFin || ch.dateDebut || '';
-    return (!d || d <= p.fin) && (!f || f >= p.debut);
-  }).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
-  if (!actifs.length) {
-    el.innerHTML = `<div class="card"><div class="empty-state">Aucun chantier sur cette période.<br>Cliquez « + Chantier » pour en créer un.</div></div>`;
-    return;
-  }
-  el.innerHTML = actifs.map(ch => {
-    const client = clients.find(c => c.id === ch.clientId);
-    const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
-    const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
-    const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
-    const ord = etapesOrdonnees(ch);
-    const faits = (ch.etapes || []).filter(k => ord.some(e => e.key === k)).length;
-    const pct = ord.length ? Math.round(faits / ord.length * 100) : 0;
-    const today = formatDate(new Date());
-    const retard = ch.statut !== 'termine' && ch.dateFin && ch.dateFin < today;
-    return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
-      <div class="flex-between" style="gap:8px">
-        <div style="min-width:0"><div style="font-weight:800;font-size:1.05rem">${ch.nom || 'Chantier'}${retard ? ' <span style="color:#c0392b;font-size:0.78rem;font-weight:700">⚠️ en retard</span>' : ''}</div>
-          <div style="font-size:0.82rem;color:var(--gris)">${client ? client.nom : '— (sans client)'} · 📅 ${periode}</div></div>
-        <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.78rem;padding:3px 10px;border-radius:20px;white-space:nowrap;flex:none">${st.label}</span>
+  // Vue Semaine : tableau jour par jour (même présentation que l'entretien)
+  renderCreationSemaine(el, chantiers, clients);
+}
+
+// --- Vue SEMAINE : grille Lun→Ven (+ Samedi) avec les chantiers actifs chaque jour ---
+let afficherSamediCreation = false;
+function toggleSamediCreation() { afficherSamediCreation = !afficherSamediCreation; renderCreation(); }
+function majBoutonSamediCreation() {
+  const b = document.getElementById('btn-samedi-creation');
+  if (!b) return;
+  b.style.background = afficherSamediCreation ? 'var(--vert)' : '';
+  b.style.color = afficherSamediCreation ? '#fff' : '';
+  b.textContent = afficherSamediCreation ? '✓ Samedi' : '+ Samedi';
+}
+function ouvrirChantierJour(dateStr) {
+  ouvrirChantier();
+  const d = document.getElementById('ch-debut'); if (d) d.value = dateStr;
+}
+function renderCreationSemaine(el, chantiers, clients) {
+  const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const lundi = getLundiSemaine(creationOffset);
+  const today = formatDate(new Date());
+  const joursNoms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const actifsJour = dStr => chantiers.filter(ch => { const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut; return d && d <= dStr && f >= dStr; })
+    .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  const samedi = new Date(lundi); samedi.setDate(lundi.getDate() + 5);
+  const montrerSamedi = afficherSamediCreation || actifsJour(formatDate(samedi)).length > 0;
+  majBoutonSamediCreation();
+  const nbJours = montrerSamedi ? 6 : 5;
+
+  let cols = '';
+  for (let i = 0; i < nbJours; i++) {
+    const jour = new Date(lundi); jour.setDate(lundi.getDate() + i);
+    const dStr = formatDate(jour);
+    const isToday = dStr === today, estSamedi = i === 5;
+    const cartes = actifsJour(dStr).map(ch => {
+      const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+      const client = clients.find(c => c.id === ch.clientId);
+      const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+      const debutCh = ch.dateDebut === dStr, finCh = (ch.dateFin || ch.dateDebut) === dStr;
+      const bord = debutCh ? '▸ ' : finCh ? '◂ ' : '';
+      return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer">
+        <div class="client-name">${bord}${esc(ch.nom || 'Chantier')}</div>
+        <div class="interv-meta">${client ? esc(client.nom) : '—'}</div>
+        ${equipe.length ? `<div class="equipe-chips">${equipe.map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
+        <span style="display:inline-block;background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px;margin-top:3px">${st.label}</span>
+      </div>`;
+    }).join('');
+    cols += `<div class="jour-col">
+      <div class="jour-header${isToday ? ' today' : ''}"${estSamedi && !isToday ? ' style="background:#fff3cd;color:#7a5b00"' : ''}><div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth() + 1}</div></div>
+      <div class="jour-body">
+        ${cartes}
+        <button class="add-interv-btn" onclick="ouvrirChantierJour('${dStr}')">+ Chantier</button>
       </div>
-      ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
-      ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
-      ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
-      ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
     </div>`;
-  }).join('');
+  }
+  el.innerHTML = `<div class="jours-grid${montrerSamedi ? ' avec-samedi' : ''}">${cols}</div>`;
 }
 
 // --- Vue MOIS : calendrier (chantiers actifs chaque jour) ---
