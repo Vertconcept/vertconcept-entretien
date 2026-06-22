@@ -1882,6 +1882,7 @@
         </div>
       </div>
       <div class="form-group"><label class="form-label">Nom du chantier *</label><input type="text" class="form-control" id="ch-nom" placeholder="Ex : Aménagement jardin + terrasse"></div>
+      <div class="form-group"><label class="form-label">📍 Adresse du chantier</label><input type="text" class="form-control" id="ch-adresse" placeholder="Si différente de l'adresse du client (sinon laisser vide)"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Début</label><input type="date" class="form-control" id="ch-debut"></div>
         <div class="form-group"><label class="form-label">Fin prévue</label><input type="date" class="form-control" id="ch-fin"></div>
@@ -2280,9 +2281,18 @@ const NAV_TABS = [
 let navIcones = { ...NAV_ICONES_DEFAUT };
 function appliquerNavIcones() {
   NAV_TABS.forEach(t => {
-    const ic = document.querySelector('#bnav-' + t.key + ' .nav-icon');
-    if (ic) ic.textContent = navIcones[t.key] || NAV_ICONES_DEFAUT[t.key];
+    const ic = navIcones[t.key] || NAV_ICONES_DEFAUT[t.key];
+    // Barre du bas (mobile)
+    const bic = document.querySelector('#bnav-' + t.key + ' .nav-icon');
+    if (bic) bic.textContent = ic;
+    // Barre du haut (desktop) : emoji + libellé (le badge des congés est recréé)
+    const topBtn = document.getElementById('nav-' + t.key);
+    if (topBtn) {
+      if (t.key === 'conges') topBtn.innerHTML = ic + ' ' + t.label + ' <span id="conges-badge" style="display:none;background:#c0392b;color:#fff;border-radius:10px;font-size:0.68rem;font-weight:700;padding:0 5px;margin-left:2px"></span>';
+      else topBtn.textContent = ic + ' ' + t.label;
+    }
   });
+  updateCongesBadge();
 }
 function setNavIcone(key, val) {
   navIcones[key] = (val || '').trim() || NAV_ICONES_DEFAUT[key];
@@ -4250,6 +4260,7 @@ function ouvrirChantier(id) {
   resetClientSearch('ch');
   if (ch) setClientSearch('ch', ch.clientId);
   document.getElementById('ch-nom').value = ch?.nom || '';
+  document.getElementById('ch-adresse').value = ch?.adresse || '';
   document.getElementById('ch-debut').value = ch?.dateDebut || '';
   document.getElementById('ch-fin').value = ch?.dateFin || '';
   document.getElementById('ch-statut').value = ch?.statut || 'devis';
@@ -4275,6 +4286,7 @@ function sauvegarderChantier() {
     id: currentChantierId || uuid(),
     clientId: document.getElementById('ch-client-id').value || '',
     nom,
+    adresse: document.getElementById('ch-adresse').value.trim(),
     dateDebut: document.getElementById('ch-debut').value || '',
     dateFin: document.getElementById('ch-fin').value || '',
     statut: document.getElementById('ch-statut').value,
@@ -4314,6 +4326,9 @@ function renderChantierDetail() {
   if (!ch) { entete.innerHTML = '<div class="empty-state">Chantier introuvable.</div>'; return; }
   const client = appData.clients.find(c => c.id === ch.clientId);
   const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+  const adresseClient = client ? (client.adresse || [client.rue, [client.codePostal, client.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ')) : '';
+  const adresseChantier = ch.adresse || adresseClient;
+  const tel = (client && client.tel) ? client.tel : '';
   entete.innerHTML = `
     <div class="flex-between" style="gap:8px;flex-wrap:wrap">
       <div style="min-width:0"><div style="font-weight:800;font-size:1.15rem">${esc(ch.nom) || 'Chantier'}</div>
@@ -4323,6 +4338,7 @@ function renderChantierDetail() {
         <button class="btn btn-secondary btn-sm" onclick="ouvrirChantier('${ch.id}')">✏️ Modifier</button>
       </div>
     </div>
+    ${(adresseChantier || tel) ? `<div style="margin-top:6px;font-size:0.88rem">${adresseChantier ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresseChantier)}" target="_blank" rel="noopener" style="color:var(--vert);text-decoration:none">📍 ${esc(adresseChantier)}</a>` : ''}${adresseChantier && tel ? '<span style="color:var(--gris)"> · </span>' : ''}${tel ? `<a href="tel:${tel.replace(/[^0-9+]/g, '')}" style="color:var(--vert);text-decoration:none;white-space:nowrap">📞 ${esc(tel)}</a>` : ''}</div>` : ''}
     ${(ch.chef || (ch.equipe && ch.equipe.length)) ? `<div class="equipe-chips" style="margin-top:8px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 Chef : ${esc(ch.chef)}</span>` : ''}${(ch.equipe || []).filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
     ${voitChantierFinances() && ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
