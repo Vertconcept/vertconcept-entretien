@@ -3800,8 +3800,8 @@ function renderCreation() {
     const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
     const periode = `${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'}`;
     const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
-    const nbEtapes = (ch.etapes || []).length;
-    const pct = Math.round(nbEtapes / CHANTIER_ETAPES.length * 100);
+    const totalEtapes = CHANTIER_ETAPES.length + (ch.etapesPerso || []).length;
+    const pct = totalEtapes ? Math.min(Math.round((ch.etapes || []).length / totalEtapes * 100), 100) : 0;
     const today = formatDate(new Date());
     const retard = ch.statut !== 'termine' && ch.dateFin && ch.dateFin < today;
     return `<div class="card" onclick="ouvrirChantierDetail('${ch.id}')" style="cursor:pointer;border-left:5px solid ${st.c}">
@@ -3978,12 +3978,15 @@ function renderChantierDetail() {
     ${ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
 
-  // --- Avancement (étapes cochables + barre) ---
+  // --- Avancement (étapes par défaut + postes personnalisés, cochables + barre) ---
   const avEl = document.getElementById('chantier-detail-avancement');
   if (avEl) {
-    const faites = new Set(ch.etapes || []);
-    const pct = Math.round(faites.size / CHANTIER_ETAPES.length * 100);
+    const perso = ch.etapesPerso || [];
+    const toutes = [...CHANTIER_ETAPES, ...perso];
+    const faites = new Set((ch.etapes || []).filter(k => toutes.some(e => e.key === k)));
+    const pct = toutes.length ? Math.round(faites.size / toutes.length * 100) : 0;
     const barC = pct === 100 ? '#1e5631' : '#e67e22';
+    const persoKeys = new Set(perso.map(e => e.key));
     avEl.innerHTML = `
       <div class="flex-between" style="align-items:center;margin-bottom:8px">
         <div class="card-title" style="margin:0">📈 Avancement</div>
@@ -3991,10 +3994,15 @@ function renderChantierDetail() {
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
-        ${CHANTIER_ETAPES.map(e => `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;padding:3px 0">
+        ${toutes.map(e => `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;padding:3px 0">
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
-          <span style="${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}">${e.label}</span>
+          <span style="flex:1;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}">${esc(e.label)}</span>
+          ${persoKeys.has(e.key) ? `<span onclick="event.preventDefault();supprimerEtapePerso('${e.key}')" title="Supprimer ce poste" style="cursor:pointer;opacity:0.6">🗑️</span>` : ''}
         </label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input type="text" class="form-control" id="ch-etape-input" placeholder="Ajouter un poste (ex : Pose clôture, Éclairage…)" onkeydown="if(event.key==='Enter')ajouterEtapePerso()" style="flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="ajouterEtapePerso()" style="white-space:nowrap">+ Poste</button>
       </div>`;
   }
 
@@ -4077,6 +4085,27 @@ function toggleEtapeChantier(key) {
   const set = new Set(ch.etapes || []);
   set.has(key) ? set.delete(key) : set.add(key);
   saveDoc('chantiers', { ...ch, etapes: [...set] });
+}
+
+function ajouterEtapePerso() {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const input = document.getElementById('ch-etape-input');
+  const label = input.value.trim();
+  if (!label) return;
+  const perso = [...(ch.etapesPerso || []), { key: 'ep_' + uuid(), label }];
+  saveDoc('chantiers', { ...ch, etapesPerso: perso });
+  input.value = '';
+}
+
+function supprimerEtapePerso(key) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  saveDoc('chantiers', {
+    ...ch,
+    etapesPerso: (ch.etapesPerso || []).filter(e => e.key !== key),
+    etapes: (ch.etapes || []).filter(k => k !== key)
+  });
 }
 
 function envoyerMessageChantier() {
