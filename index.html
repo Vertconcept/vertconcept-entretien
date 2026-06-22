@@ -2046,6 +2046,8 @@ function voitCreation() { const p = poleUser(); return p === 'creation' || p ===
 function voitEntretien() { const p = poleUser(); return p === 'entretien' || p === 'direction'; }
 // Qui peut gérer les prix d'achat du stock (Marco + Justin)
 function peutPrixStock() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin'); }
+// Qui voit les finances des chantiers (budget + rentabilité) : Marco + Justin (devis Création)
+function voitChantierFinances() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin'); }
 // Adresse e-mail réelle de chaque compte Firebase Auth (les e-mails ne sont pas secrets)
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
@@ -4103,7 +4105,7 @@ function carteChantierDetaillee(ch, clients) {
       </div>
       ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
       ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
-      ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
+      ${voitChantierFinances() && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
       ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
     </div>`;
 }
@@ -4202,7 +4204,7 @@ function ouvrirChantier(id) {
   document.getElementById('ch-statut').value = ch?.statut || 'devis';
   document.getElementById('ch-budget').value = ch?.budget ?? '';
   // Budget = Marco uniquement (confidentiel)
-  document.getElementById('ch-budget-group').style.display = (currentUser && currentUser.name === 'Marco') ? '' : 'none';
+  document.getElementById('ch-budget-group').style.display = voitChantierFinances() ? '' : 'none';
   document.getElementById('ch-description').value = ch?.description || '';
   document.getElementById('ch-chef').value = ch?.chef || 'Thibaut';
   const equipe = ch?.equipe || [];
@@ -4225,7 +4227,7 @@ function sauvegarderChantier() {
     dateDebut: document.getElementById('ch-debut').value || '',
     dateFin: document.getElementById('ch-fin').value || '',
     statut: document.getElementById('ch-statut').value,
-    budget: (currentUser && currentUser.name === 'Marco') ? (parseFloat(document.getElementById('ch-budget').value) || null) : (ancien.budget ?? null),
+    budget: voitChantierFinances() ? (parseFloat(document.getElementById('ch-budget').value) || null) : (ancien.budget ?? null),
     description: document.getElementById('ch-description').value.trim(),
     chef: document.getElementById('ch-chef').value,
     equipe: [...document.querySelectorAll('#ch-equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre)
@@ -4247,7 +4249,7 @@ function ouvrirChantierDetail(id) {
   document.getElementById('ch-h-ouvrier').value = currentUser ? currentUser.name : '';
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
-  if (cg) cg.style.display = (currentUser && currentUser.name === 'Marco') ? '' : 'none';
+  if (cg) cg.style.display = voitChantierFinances() ? '' : 'none';
   // Suggestions de matériaux depuis le stock
   const dl = document.getElementById('stock-datalist');
   if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${(s.nom || '').replace(/"/g, '&quot;')}">`).join('');
@@ -4271,7 +4273,7 @@ function renderChantierDetail() {
       </div>
     </div>
     ${(ch.chef || (ch.equipe && ch.equipe.length)) ? `<div class="equipe-chips" style="margin-top:8px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 Chef : ${esc(ch.chef)}</span>` : ''}${(ch.equipe || []).filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
-    ${(currentUser && currentUser.name === 'Marco') && ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
+    ${voitChantierFinances() && ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
 
   // --- Avancement (étapes par défaut + postes personnalisés, cochables + barre) ---
@@ -4434,7 +4436,7 @@ function renderChantierDetail() {
     : '<div class="empty-state">Aucune heure encodée pour ce chantier.</div>';
 
   const mats = appData.chantierMateriaux.filter(m => m.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const estMarco = currentUser && currentUser.name === 'Marco';
+  const estMarco = voitChantierFinances();
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${estMarco ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
@@ -4462,7 +4464,7 @@ function renderChantierDetail() {
       const margePct = budget > 0 ? (marge / budget * 100) : null;
       const ligne = (label, val, fort) => `<div class="flex-between" style="padding:4px 0${fort ? ';border-top:2px solid var(--vert);margin-top:4px;font-weight:800' : ''}"><span>${label}</span><span>${val}</span></div>`;
       recap.innerHTML = `
-        <div class="card-title">📊 Rentabilité du chantier <span style="font-size:0.7rem;color:var(--gris);font-weight:400">(visible par Marco uniquement)</span></div>
+        <div class="card-title">📊 Rentabilité du chantier <span style="font-size:0.7rem;color:var(--gris);font-weight:400">(visible par la direction : Marco & Justin)</span></div>
         ${ligne(`👷 Main d'œuvre — ${totalH} h × ${eurFmt(tauxH)}/h`, eurFmt(coutMO))}
         ${ligne(`🧱 Matériaux${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat))}
         ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
