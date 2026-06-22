@@ -810,6 +810,7 @@
         </div>
       </div>
     </div>
+    <div class="card" id="card-icones" style="margin-bottom:1rem"></div>
     <div id="factu-contrats-rappel"></div>
     <div class="flex-between mb-1">
       <div class="factu-filters">
@@ -2229,6 +2230,12 @@ function initFirestore() {
   db.collection('config').doc('fraisFacturation').onSnapshot(snap => {
     fraisFactu = { ...FRAIS_FACTU_DEFAUT, ...(snap.exists ? snap.data() : {}) };
   });
+  // Icônes de navigation mobile (personnalisables)
+  db.collection('config').doc('navIcones').onSnapshot(snap => {
+    navIcones = { ...NAV_ICONES_DEFAUT, ...(snap.exists ? snap.data() : {}) };
+    appliquerNavIcones();
+    if (document.getElementById('page-facturation')?.classList.contains('active')) renderIconesSettings();
+  });
 }
 
 // =====================================================
@@ -2261,6 +2268,46 @@ const FRAIS_FACTU_DEFAUT = {
   coutTontePassage: 40, nbPassagesTonte: 16
 };
 let fraisFactu = { ...FRAIS_FACTU_DEFAUT };
+
+// Icônes de la barre de navigation mobile (personnalisables, stockées dans config/navIcones)
+const NAV_ICONES_DEFAUT = { creation: '🏗️', planning: '📅', tontes: '🌿', contrats: '📑', clients: '👥', materiel: '🔧', conges: '🏖️', facturation: '💶' };
+const NAV_TABS = [
+  { key: 'creation', label: 'Création' }, { key: 'planning', label: 'Entretien' },
+  { key: 'tontes', label: 'Tontes' }, { key: 'contrats', label: 'Contrats' },
+  { key: 'clients', label: 'Clients' }, { key: 'materiel', label: 'Matériel' },
+  { key: 'conges', label: 'Congés' }, { key: 'facturation', label: 'Facturation' }
+];
+let navIcones = { ...NAV_ICONES_DEFAUT };
+function appliquerNavIcones() {
+  NAV_TABS.forEach(t => {
+    const ic = document.querySelector('#bnav-' + t.key + ' .nav-icon');
+    if (ic) ic.textContent = navIcones[t.key] || NAV_ICONES_DEFAUT[t.key];
+  });
+}
+function setNavIcone(key, val) {
+  navIcones[key] = (val || '').trim() || NAV_ICONES_DEFAUT[key];
+  db.collection('config').doc('navIcones').set(navIcones).catch(e => console.error('navIcones', e));
+  appliquerNavIcones();
+}
+function resetNavIcones() {
+  navIcones = { ...NAV_ICONES_DEFAUT };
+  db.collection('config').doc('navIcones').set(navIcones).catch(() => {});
+  appliquerNavIcones();
+  renderIconesSettings();
+}
+function renderIconesSettings() {
+  const el = document.getElementById('card-icones');
+  if (!el) return;
+  el.innerHTML = `<div class="card-title">🎨 Icônes de la barre mobile</div>
+    <div style="font-size:0.82rem;color:var(--gris);margin-bottom:10px">Choisissez l'emoji affiché pour chaque onglet sur téléphone. Tapez ou collez un emoji (sur mobile, via le clavier emoji). Vide = icône par défaut.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${NAV_TABS.map(t => `<div style="display:flex;align-items:center;gap:10px">
+        <input type="text" value="${navIcones[t.key] || ''}" onchange="setNavIcone('${t.key}',this.value)" style="width:54px;text-align:center;font-size:1.35rem;padding:4px;border:1px solid var(--border);border-radius:8px">
+        <span style="font-weight:600">${t.label}</span>
+      </div>`).join('')}
+    </div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="resetNavIcones()">↩️ Remettre les icônes par défaut</button>`;
+}
 
 // =====================================================
 // NAVIGATION
@@ -2364,6 +2411,7 @@ function applyUser(user) {
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
   appliquerVisibilitePoles();
+  appliquerNavIcones();
   updateCongesBadge();
   // Un ouvrier Création atterrit directement sur son pôle
   if (!voitEntretien() && voitCreation()) showPage('creation');
@@ -5259,6 +5307,7 @@ async function importerSauvegarde(input) {
 // FACTURATION
 // =====================================================
 function renderFacturation() {
+  renderIconesSettings();
   renderContratsAFacturer();
   const { interventions, clients } = getData();
   const terminées = interventions.filter(iv => iv.statut === 'termine');
