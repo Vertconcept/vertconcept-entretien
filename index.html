@@ -4203,6 +4203,16 @@ function setPlacementHommes(placementId, n) {
   if (!p) return;
   saveDoc('chantierPlanning', { ...p, nbHommes: (n || '').toString().trim() });
 }
+// Ajouter / retirer un homme sur ce chantier CE JOUR (indépendant des autres jours)
+function togglePlacementMembre(placementId, membre) {
+  const p = appData.chantierPlanning.find(x => x.id === placementId);
+  if (!p) return;
+  const ch = appData.chantiers.find(c => c.id === p.chantierId);
+  const base = p.equipe || (ch ? (ch.equipe || []) : []);
+  const set = new Set(base);
+  set.has(membre) ? set.delete(membre) : set.add(membre);
+  saveDoc('chantierPlanning', { ...p, equipe: [...set] });
+}
 function renderCreationSemaine(el, chantiers, clients) {
   const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const lundi = getLundiSemaine(creationOffset);
@@ -4232,15 +4242,16 @@ function renderCreationSemaine(el, chantiers, clients) {
       if (!ch || idsRange.includes(ch.id)) return '';
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
       const client = clients.find(c => c.id === ch.clientId);
-      const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+      const pool = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+      const plEquipe = pl.equipe || pool; // équipe DU JOUR (par défaut = équipe du chantier)
       return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer;position:relative">
         <span onclick="event.stopPropagation();retirerPlacementChantier('${pl.id}')" title="Retirer ce chantier de ce jour" style="position:absolute;top:1px;right:4px;cursor:pointer;color:var(--gris);font-weight:700;font-size:0.95rem;line-height:1">✕</span>
         <div class="client-name" style="padding-right:14px">${esc(ch.nom || 'Chantier')}</div>
         <div class="interv-meta">${client ? esc(client.nom) : '—'}</div>
-        ${equipe.length ? `<div class="equipe-chips">${equipe.map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
+        ${pool.length ? `<div class="equipe-chips" onclick="event.stopPropagation()" title="Cliquez un homme pour l'ajouter/retirer ce jour">${pool.map(m => `<span onclick="togglePlacementMembre('${pl.id}','${m}')" class="equipe-chip-sm" style="cursor:pointer;${plEquipe.includes(m) ? '' : 'opacity:0.35;text-decoration:line-through'}">${esc(m)}</span>`).join('')}</div>` : ''}
         <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
           <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px">${st.label}</span>
-          <label onclick="event.stopPropagation()" style="font-size:0.68rem;color:var(--gris);display:inline-flex;align-items:center;gap:2px">👷 <input type="number" min="0" value="${esc(pl.nbHommes || '')}" onchange="setPlacementHommes('${pl.id}',this.value)" placeholder="–" style="width:34px;padding:1px 3px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;text-align:center"></label>
+          ${pool.length ? `<span style="font-size:0.68rem;color:var(--gris)">👷 ${plEquipe.length}</span>` : `<label onclick="event.stopPropagation()" style="font-size:0.68rem;color:var(--gris);display:inline-flex;align-items:center;gap:2px">👷 <input type="number" min="0" value="${esc(pl.nbHommes || '')}" onchange="setPlacementHommes('${pl.id}',this.value)" placeholder="–" style="width:34px;padding:1px 3px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;text-align:center"></label>`}
         </div>
       </div>`;
     }).join('');
@@ -4351,7 +4362,8 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
       const ch = chantiers.find(c => c.id === pl.chantierId);
       if (!ch || idsActifs.includes(ch.id)) return '';
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
-      return `<div class="mois-interv-dot" onclick="event.stopPropagation();ouvrirChantierDetail('${ch.id}')" title="${esc(ch.nom)}${pl.nbHommes ? ' · ' + pl.nbHommes + ' h' : ''}" style="background:${st.c}18;border-left-color:${st.c}">${esc(ch.nom)}${pl.nbHommes ? ` <span style="opacity:0.7">(${esc(pl.nbHommes)}👷)</span>` : ''}</div>`;
+      const nb = pl.equipe ? pl.equipe.length : ((ch.equipe && ch.equipe.length) ? ch.equipe.length : (pl.nbHommes || ''));
+      return `<div class="mois-interv-dot" onclick="event.stopPropagation();ouvrirChantierDetail('${ch.id}')" title="${esc(ch.nom)}${nb ? ' · ' + nb + ' 👷' : ''}" style="background:${st.c}18;border-left-color:${st.c}">${esc(ch.nom)}${nb ? ` <span style="opacity:0.7">(${esc(nb.toString())}👷)</span>` : ''}</div>`;
     }).join(''));
     const fermeTag = (ferme && !autreMois) ? `<div style="font-size:0.62rem;font-weight:800;color:#b9560a;background:#e67e2222;border-radius:4px;padding:0 4px;text-align:center">🏢 Fermé</div>` : '';
     html += `<div class="mois-jour${autreMois ? ' autre-mois' : ''}${dStr === today ? ' today' : ''}${weekend ? ' weekend' : ''}">
