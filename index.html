@@ -4054,6 +4054,8 @@ function supprimerContrat() {
 let vueCreation = 'semaine';
 let creationOffset = 0;
 let currentChantierId = null;
+let creationRecapFiltre = null; // tuile du tableau de bord dépliée (en-cours / a-venir / en-retard / termine)
+function setRecapCreation(f) { creationRecapFiltre = (creationRecapFiltre === f) ? null : f; renderCreation(); }
 const STATUTS_CHANTIER = {
   devis:      { label: '📝 Devis',     c: '#7f8c8d' },
   planifie:   { label: '📅 Planifié',  c: '#2980b9' },
@@ -4108,19 +4110,34 @@ function renderCreation() {
   const dash = document.getElementById('creation-dashboard');
   if (dash) {
     const today = formatDate(new Date());
-    const enCours = chantiers.filter(c => c.statut === 'en-cours').length;
-    const aVenir = chantiers.filter(c => (c.statut === 'planifie' || c.statut === 'devis') && (!c.dateDebut || c.dateDebut >= today)).length;
-    const enRetard = chantiers.filter(c => c.statut !== 'termine' && c.dateFin && c.dateFin < today).length;
-    const termines = chantiers.filter(c => c.statut === 'termine').length;
-    const tuile = (n, lbl, c) => `<div style="flex:1;min-width:110px;background:${c}12;border:1px solid ${c}33;border-left:5px solid ${c};border-radius:10px;padding:10px 12px">
-      <div style="font-size:1.5rem;font-weight:800;color:${c};line-height:1">${n}</div>
-      <div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${lbl}</div></div>`;
+    const critere = {
+      'en-cours': c => c.statut === 'en-cours',
+      'a-venir':  c => (c.statut === 'planifie' || c.statut === 'devis') && (!c.dateDebut || c.dateDebut >= today),
+      'en-retard': c => c.statut !== 'termine' && c.dateFin && c.dateFin < today,
+      'termine':  c => c.statut === 'termine'
+    };
+    const tuile = (key, lbl, c) => {
+      const n = chantiers.filter(critere[key]).length;
+      const on = creationRecapFiltre === key;
+      return `<div onclick="setRecapCreation('${key}')" style="flex:1;min-width:110px;background:${on ? c + '26' : c + '12'};border:1px solid ${c}33;border-left:5px solid ${c};border-radius:10px;padding:10px 12px;cursor:pointer;${on ? 'box-shadow:0 0 0 2px ' + c + '66' : ''}">
+        <div style="font-size:1.5rem;font-weight:800;color:${c};line-height:1">${n}</div>
+        <div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${lbl}</div></div>`;
+    };
+    let recapHtml = '';
+    if (creationRecapFiltre && critere[creationRecapFiltre]) {
+      const titres = { 'en-cours': '🔧 Chantiers en cours', 'a-venir': '📅 Chantiers à venir', 'en-retard': '⚠️ Chantiers en retard', 'termine': '✅ Chantiers terminés' };
+      const liste = chantiers.filter(critere[creationRecapFiltre]).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+      recapHtml = `<div style="margin:-0.4rem 0 1rem">
+        <div class="flex-between" style="align-items:center;margin-bottom:6px"><div class="card-title" style="margin:0">${titres[creationRecapFiltre]} (${liste.length})</div><button class="btn btn-secondary btn-sm" onclick="setRecapCreation(null)">✕ Fermer</button></div>
+        ${liste.length ? liste.map(ch => carteChantierDetaillee(ch, clients)).join('') : '<div class="empty-state" style="padding:10px">Aucun chantier.</div>'}
+      </div>`;
+    }
     dash.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
-      ${tuile(enCours, '🔧 En cours', '#e67e22')}
-      ${tuile(aVenir, '📅 À venir', '#2980b9')}
-      ${tuile(enRetard, '⚠️ En retard', '#c0392b')}
-      ${tuile(termines, '✅ Terminés', '#1e5631')}
-    </div>`;
+      ${tuile('en-cours', '🔧 En cours', '#e67e22')}
+      ${tuile('a-venir', '📅 À venir', '#2980b9')}
+      ${tuile('en-retard', '⚠️ En retard', '#c0392b')}
+      ${tuile('termine', '✅ Terminés', '#1e5631')}
+    </div>${recapHtml}`;
   }
 
   // Vues calendrier : Mois = grille, Année = frise chronologique (étalement)
