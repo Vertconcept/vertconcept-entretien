@@ -79,7 +79,8 @@
   .semaine-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
   .semaine-nav h2 { font-size: 1rem; font-weight: 700; flex: 1; text-align: center; }
   .jours-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  @media (max-width: 700px) { .jours-grid { grid-template-columns: repeat(2, 1fr); } }
+  .jours-grid.avec-samedi { grid-template-columns: repeat(6, 1fr); }
+  @media (max-width: 700px) { .jours-grid, .jours-grid.avec-samedi { grid-template-columns: repeat(2, 1fr); } }
   .jour-col { background: white; border-radius: 10px; overflow: hidden; box-shadow: var(--ombre); }
   .jour-header { background: var(--vert); color: white; padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 700; }
   .jour-header.today { background: var(--vert-clair); }
@@ -623,6 +624,7 @@
           <button id="vue-btn-semaine" class="active" onclick="setVuePlanning('semaine')">Semaine</button>
           <button id="vue-btn-mois" onclick="setVuePlanning('mois')">Mois</button>
         </div>
+        <button class="btn btn-secondary btn-sm" id="btn-samedi" onclick="toggleSamedi()" title="Afficher / masquer la colonne du samedi">+ Samedi</button>
         <button class="btn btn-primary btn-sm" id="btn-nouvelle-interv" onclick="ouvrirNouvelleIntervention()">+ Intervention</button>
       </div>
     </div>
@@ -2369,7 +2371,24 @@ function setVuePlanning(vue) {
   document.getElementById('vue-btn-mois').classList.toggle('active', vue === 'mois');
   document.getElementById('planning-semaine-view').style.display = vue === 'semaine' ? '' : 'none';
   document.getElementById('planning-mois-view').style.display = vue === 'mois' ? '' : 'none';
+  // Le bouton Samedi n'a de sens qu'en vue semaine (le mois montre déjà tous les jours)
+  const bs = document.getElementById('btn-samedi');
+  if (bs) bs.style.display = vue === 'semaine' ? '' : 'none';
   renderPlanning();
+}
+
+// Colonne du samedi (les ouvriers ne travaillent normalement pas le week-end)
+let afficherSamedi = false;
+function toggleSamedi() {
+  afficherSamedi = !afficherSamedi;
+  renderPlanning();
+}
+function majBoutonSamedi() {
+  const b = document.getElementById('btn-samedi');
+  if (!b) return;
+  b.style.background = afficherSamedi ? 'var(--vert)' : '';
+  b.style.color = afficherSamedi ? '#fff' : '';
+  b.textContent = afficherSamedi ? '✓ Samedi' : '+ Samedi';
 }
 
 function navPlanning(delta) {
@@ -2449,20 +2468,30 @@ function renderPlanningSemail() {
 
   const { clients, interventions } = getData();
 
-  const joursNoms = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const joursNoms = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const grid = document.getElementById('planning-grid');
   grid.innerHTML = '';
 
-  for (let i = 0; i < 5; i++) {
+  // Samedi affiché si demandé (bouton) ou s'il contient déjà une intervention. Dimanche jamais.
+  const samediStr = formatDate((d => { d.setDate(lundi.getDate() + 5); return d; })(new Date(lundi)));
+  const samediOccupe = interventions.some(iv => iv.date === samediStr);
+  const montrerSamedi = afficherSamedi || samediOccupe;
+  grid.classList.toggle('avec-samedi', montrerSamedi);
+  majBoutonSamedi();
+  const nbJours = montrerSamedi ? 6 : 5;
+
+  for (let i = 0; i < nbJours; i++) {
     const jour = new Date(lundi); jour.setDate(lundi.getDate() + i);
     const dateStr = formatDate(jour);
     const isToday = dateStr === today;
+    const estSamedi = i === 5;
 
     const col = document.createElement('div');
     col.className = 'jour-col';
 
     const header = document.createElement('div');
     header.className = 'jour-header' + (isToday ? ' today' : '');
+    if (estSamedi && !isToday) { header.style.background = '#fff3cd'; header.style.color = '#7a5b00'; }
     header.innerHTML = `<div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth()+1}</div>`;
 
     const body = document.createElement('div');
