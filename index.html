@@ -4115,13 +4115,27 @@ function ouvrirChantierJour(dateStr) {
   ouvrirChantier();
   const d = document.getElementById('ch-debut'); if (d) d.value = dateStr;
 }
+// Retirer / remettre un chantier d'un jour précis du planning (les hommes n'y vont pas)
+function exclureChantierJour(chId, dateStr) {
+  const ch = appData.chantiers.find(c => c.id === chId);
+  if (!ch) return;
+  const set = new Set(ch.joursExclus || []); set.add(dateStr);
+  saveDoc('chantiers', { ...ch, joursExclus: [...set] });
+}
+function reinclureChantierJour(chId, dateStr) {
+  const ch = appData.chantiers.find(c => c.id === chId);
+  if (!ch) return;
+  saveDoc('chantiers', { ...ch, joursExclus: (ch.joursExclus || []).filter(d => d !== dateStr) });
+}
 function renderCreationSemaine(el, chantiers, clients) {
   const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const lundi = getLundiSemaine(creationOffset);
   const today = formatDate(new Date());
   const joursNoms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  const actifsJour = dStr => chantiers.filter(ch => { const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut; return d && d <= dStr && f >= dStr; })
+  const couvreJour = (ch, dStr) => { const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut; return d && d <= dStr && f >= dStr; };
+  const actifsJour = dStr => chantiers.filter(ch => couvreJour(ch, dStr) && !(ch.joursExclus || []).includes(dStr))
     .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  const exclusJour = dStr => chantiers.filter(ch => couvreJour(ch, dStr) && (ch.joursExclus || []).includes(dStr));
   // Les ouvriers ne travaillent pas le week-end : le samedi ne s'affiche que via le bouton, jamais en prolongeant un chantier
   const montrerSamedi = afficherSamediCreation;
   majBoutonSamediCreation();
@@ -4138,13 +4152,15 @@ function renderCreationSemaine(el, chantiers, clients) {
       const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
       const debutCh = ch.dateDebut === dStr, finCh = (ch.dateFin || ch.dateDebut) === dStr;
       const bord = debutCh ? '▸ ' : finCh ? '◂ ' : '';
-      return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer">
-        <div class="client-name">${bord}${esc(ch.nom || 'Chantier')}</div>
+      return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer;position:relative">
+        <span onclick="event.stopPropagation();exclureChantierJour('${ch.id}','${dStr}')" title="Les hommes ne viennent pas ce jour — retirer du planning" style="position:absolute;top:1px;right:4px;cursor:pointer;color:var(--gris);font-weight:700;font-size:0.95rem;line-height:1">✕</span>
+        <div class="client-name" style="padding-right:14px">${bord}${esc(ch.nom || 'Chantier')}</div>
         <div class="interv-meta">${client ? esc(client.nom) : '—'}</div>
         ${equipe.length ? `<div class="equipe-chips">${equipe.map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
         <span style="display:inline-block;background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px;margin-top:3px">${st.label}</span>
       </div>`;
-    }).join('');
+    }).join('')
+    + exclusJour(dStr).map(ch => `<div onclick="reinclureChantierJour('${ch.id}','${dStr}')" title="Remettre ce chantier ce jour" style="font-size:0.74rem;color:var(--gris);background:#f1f3f5;border:1px dashed var(--border);border-radius:6px;padding:4px 6px;margin-bottom:4px;cursor:pointer">↩️ ${esc(ch.nom || 'Chantier')} <span style="font-style:italic">— pas ce jour</span></div>`).join('');
     cols += `<div class="jour-col">
       <div class="jour-header${isToday ? ' today' : ''}"${estSamedi && !isToday ? ' style="background:#fff3cd;color:#7a5b00"' : ''}><div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth() + 1}</div></div>
       <div class="jour-body">
@@ -4213,10 +4229,10 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
     const dStr = formatDate(jour);
     const autreMois = jour.getMonth() !== mois;
     const weekend = jour.getDay() === 0 || jour.getDay() === 6;
-    // Les ouvriers ne travaillent pas le week-end : on ne pré-remplit pas samedi/dimanche
+    // Les ouvriers ne travaillent pas le week-end ; on retire aussi les jours exclus du chantier
     const actifs = weekend ? [] : chantiers.filter(ch => {
       const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut;
-      return d && d <= dStr && f >= dStr;
+      return d && d <= dStr && f >= dStr && !(ch.joursExclus || []).includes(dStr);
     });
     const dots = actifs.map(ch => {
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
