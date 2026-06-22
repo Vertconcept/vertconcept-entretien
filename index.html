@@ -4976,7 +4976,39 @@ function renderCongesMois(el, conges) {
     html += `<div class="mois-jour${autreMois ? ' autre-mois' : ''}${dStr === today ? ' today' : ''}${weekend ? ' weekend' : ''}"><div class="mois-jour-num"><span>${jour.getDate()}</span></div>${dots}</div>`;
   }
   html += '</div>';
-  el.innerHTML = html;
+
+  // --- Récap du mois par personne (jours ouvrés) — pour encoder les prestations ---
+  const valides = conges.filter(c => c.statut === 'valide');
+  const parPersonne = {};
+  let fermetureJours = 0;
+  valides.forEach(c => {
+    const n = joursOuvresDansMois(c, an, mois);
+    if (n <= 0) return;
+    if (c.type === 'fermeture') { fermetureJours = Math.max(fermetureJours, n); return; }
+    const p = c.personne || '?';
+    if (!parPersonne[p]) parPersonne[p] = { conge: 0, maladie: 0, intemperie: 0, total: 0 };
+    if (parPersonne[p][c.type] !== undefined) parPersonne[p][c.type] += n;
+    parPersonne[p].total += n;
+  });
+  const persons = Object.keys(parPersonne).sort();
+  const cell = v => `<td style="padding:5px;text-align:center">${v || '—'}</td>`;
+  const recap = `<div style="margin-top:1.25rem">
+    <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <div class="card-title" style="margin:0">📊 Récap du mois <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— jours ouvrés (Lun→Ven), absences validées</span></div>
+      <button class="btn btn-secondary btn-sm" onclick="exporterCongesMois()">📊 Export Excel</button>
+    </div>
+    ${persons.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:380px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:5px;text-align:left">Personne</th><th style="padding:5px;text-align:center">🏖️ Congé</th><th style="padding:5px;text-align:center">🤒 Maladie</th><th style="padding:5px;text-align:center">🌧️ Intemp.</th><th style="padding:5px;text-align:center">Total</th>
+      </tr></thead>
+      <tbody>${persons.map(p => `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px;font-weight:600">${esc(p)}</td>${cell(parPersonne[p].conge)}${cell(parPersonne[p].maladie)}${cell(parPersonne[p].intemperie)}<td style="padding:5px;text-align:center;font-weight:800">${parPersonne[p].total}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-state" style="padding:10px">Aucune absence validée ce mois.</div>'}
+    ${fermetureJours ? `<div style="margin-top:8px;font-size:0.84rem;color:var(--gris)">🏢 Fermeture annuelle : <strong>${fermetureJours} jour(s) ouvré(s)</strong> — toute l'équipe</div>` : ''}
+  </div>`;
+
+  el.innerHTML = html + recap;
 }
 function renderCongesGantt(el, conges) {
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -5007,6 +5039,51 @@ function renderCongesGantt(el, conges) {
     <div style="display:flex;align-items:center;margin-bottom:8px"><div style="width:140px;flex:none"></div><div style="flex:1;display:grid;grid-template-columns:repeat(12,1fr)">${moisNoms.map(m => `<div style="text-align:center;font-size:0.7rem;color:var(--gris);font-weight:700">${m}</div>`).join('')}</div></div>
     ${rows}
   </div></div>`;
+}
+
+// Nb de jours ouvrés (Lun→Ven) d'une absence à l'intérieur d'un mois donné
+function joursOuvresDansMois(c, an, mois) {
+  const d0 = new Date(c.dateDebut + 'T00:00:00');
+  const d1 = new Date((c.dateFin || c.dateDebut) + 'T00:00:00');
+  const debutMois = new Date(an, mois, 1), finMois = new Date(an, mois + 1, 0);
+  let cur = new Date(Math.max(d0.getTime(), debutMois.getTime()));
+  const end = new Date(Math.min(d1.getTime(), finMois.getTime()));
+  let n = 0;
+  for (let day = new Date(cur); day <= end; day.setDate(day.getDate() + 1)) {
+    const wd = day.getDay();
+    if (wd !== 0 && wd !== 6) n++;
+  }
+  return n;
+}
+function congesMoisCourant() {
+  const ref = new Date(new Date().getFullYear(), new Date().getMonth() + congesOffset, 1);
+  return { an: ref.getFullYear(), mois: ref.getMonth(), label: ref.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) };
+}
+// Export Excel des absences du mois affiché (pour encoder les prestations)
+function exporterCongesMois() {
+  const { an, mois, label } = congesMoisCourant();
+  const valides = (appData.conges || []).filter(c => c.statut === 'valide');
+  const lignes = [];
+  valides.forEach(c => {
+    const n = joursOuvresDansMois(c, an, mois);
+    if (n <= 0) return;
+    const t = CONGE_TYPES[c.type] || CONGE_TYPES.conge;
+    lignes.push({
+      'Personne': c.personne || '',
+      'Type': t.label.replace(/^\S+\s/, ''),
+      'Du': c.dateDebut ? formatDateFR(c.dateDebut) : '',
+      'Au': c.dateFin ? formatDateFR(c.dateFin) : (c.dateDebut ? formatDateFR(c.dateDebut) : ''),
+      'Jours ouvrés (mois)': n,
+      'Motif': c.motif || ''
+    });
+  });
+  if (!lignes.length) { alert('Aucune absence validée pour ' + label + '.'); return; }
+  lignes.sort((a, b) => (a.Personne || '').localeCompare(b.Personne || ''));
+  const ws = XLSX.utils.json_to_sheet(lignes);
+  ws['!cols'] = [{ wch: 16 }, { wch: 18 }, { wch: 13 }, { wch: 13 }, { wch: 18 }, { wch: 28 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Absences');
+  XLSX.writeFile(wb, 'absences-' + an + '-' + String(mois + 1).padStart(2, '0') + '.xlsx');
 }
 
 function renderConges() {
