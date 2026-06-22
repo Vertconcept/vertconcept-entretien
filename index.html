@@ -770,6 +770,14 @@
         <label class="form-label">Ouvrier(s) — cochez tous ceux qui ont fait ces heures ce jour</label>
         <div class="equipe-toggle" id="ch-h-ouvriers"></div>
       </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2"><label class="form-label">🚜 Engin utilisé ce jour <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(facultatif)</span></label>
+          <select class="form-control" id="ch-h-engin"></select>
+        </div>
+        <div class="form-group"><label class="form-label">Durée engin</label>
+          <select class="form-control" id="ch-h-engin-duree"><option value="jour">🌞 Journée</option><option value="demi">🌗 Demi-journée</option></select>
+        </div>
+      </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterHeureChantier()">+ Ajouter les heures</button>
       <div id="ch-heures-list" style="margin-top:12px"></div>
     </div>
@@ -4581,6 +4589,9 @@ function ouvrirChantierDetail(id) {
   const pool = [...new Set([...((chOuv && chOuv.equipe) || []), ...MEMBRES_CREATION, moi].filter(Boolean))];
   const ouvEl = document.getElementById('ch-h-ouvriers');
   if (ouvEl) ouvEl.innerHTML = pool.map(m => `<div class="membre-chip${m === moi ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`).join('');
+  // Sélecteur d'engin (facultatif) dans le formulaire heures
+  const enginSel = document.getElementById('ch-h-engin');
+  if (enginSel) enginSel.innerHTML = '<option value="">— aucun</option>' + (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<option value="${m.id}">${(m.nom || '').replace(/</g, '&lt;')}</option>`).join('');
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
   if (cg) cg.style.display = voitChantierFinances() ? '' : 'none';
@@ -5795,6 +5806,15 @@ function ajouterHeureChantier() {
   if (!date || !ouvriers.length || !heures) { alert('Date, au moins un ouvrier et les heures sont requis.'); return; }
   const poste = document.getElementById('ch-h-poste').value;
   ouvriers.forEach(ouvrier => saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures, poste }));
+  // Engin éventuellement utilisé ce jour (ajouté en même temps que les heures)
+  const enginSel = document.getElementById('ch-h-engin');
+  const machineId = enginSel ? enginSel.value : '';
+  if (machineId) {
+    const m = appData.machines.find(x => x.id === machineId);
+    const duree = document.getElementById('ch-h-engin-duree').value;
+    saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur: currentUser ? currentUser.name : '', ts: new Date().toISOString() });
+    enginSel.value = '';
+  }
   document.getElementById('ch-h-heures').value = '';
 }
 function supprimerHeureChantier(id) { deleteDoc('chantierHeures', id); }
