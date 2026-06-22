@@ -3994,10 +3994,14 @@ function renderChantierDetail() {
       </div>
       <div style="height:9px;background:#eee;border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${barC};transition:width 0.25s"></div></div>
       <div style="display:flex;flex-direction:column;gap:2px" id="ch-etapes-liste">
-        ${ordonnees.map(e => `<div draggable="true" data-key="${e.key}"
+        ${ordonnees.map((e, idx) => `<div draggable="true" data-key="${e.key}"
             ondragstart="dragEtapeStart('${e.key}')" ondragover="event.preventDefault();this.style.borderTop='2px solid var(--vert)'" ondragleave="this.style.borderTop='2px solid transparent'" ondrop="this.style.borderTop='2px solid transparent';dropEtape('${e.key}')" ondragend="renderChantierDetail()"
             style="display:flex;align-items:center;gap:8px;font-size:0.9rem;padding:4px 2px;border-top:2px solid transparent;border-radius:4px">
-          <span style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner">⠿</span>
+          <span style="display:flex;flex-direction:column;line-height:0.75">
+            <span onclick="deplacerEtape('${e.key}',-1)" title="Monter" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === 0 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▲</span>
+            <span onclick="deplacerEtape('${e.key}',1)" title="Descendre" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === ordonnees.length - 1 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▼</span>
+          </span>
+          <span style="cursor:grab;color:var(--gris);font-size:1.05rem;user-select:none" title="Glisser pour réordonner (ordinateur)">⠿</span>
           <input type="checkbox" ${faites.has(e.key) ? 'checked' : ''} onchange="toggleEtapeChantier('${e.key}')">
           <span style="flex:1;cursor:pointer;${faites.has(e.key) ? 'text-decoration:line-through;color:var(--gris)' : ''}" onclick="toggleEtapeChantier('${e.key}')">${esc(e.label)}</span>
           ${persoKeys.has(e.key) ? `<span onclick="supprimerEtapePerso('${e.key}')" title="Supprimer ce poste" style="cursor:pointer;opacity:0.6">🗑️</span>` : ''}
@@ -4134,6 +4138,17 @@ function dropEtape(targetKey) {
   ordre.splice(from, 1);
   ordre.splice(to, 0, dragEtapeKey);
   dragEtapeKey = null;
+  saveDoc('chantiers', { ...ch, etapesOrdre: ordre });
+}
+
+// Réordonner via les flèches ▲▼ (fonctionne sur téléphone)
+function deplacerEtape(key, sens) {
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const ordre = etapesOrdonnees(ch).map(e => e.key);
+  const i = ordre.indexOf(key), j = i + sens;
+  if (i < 0 || j < 0 || j >= ordre.length) return;
+  [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
   saveDoc('chantiers', { ...ch, etapesOrdre: ordre });
 }
 
