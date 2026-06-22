@@ -2649,6 +2649,27 @@ function supprimerBacklogCreation(id) {
   deleteDoc('backlogCreation', id);
 }
 
+// --- Absences/fermetures pour les plannings (congés validés) ---
+function congesValidesJour(dStr) {
+  return (appData.conges || []).filter(c => c.statut === 'valide' && c.dateDebut && c.dateDebut <= dStr && (c.dateFin || c.dateDebut) >= dStr);
+}
+function fermetureJour(dStr) { return congesValidesJour(dStr).some(c => c.type === 'fermeture'); }
+function absentsJour(dStr) { return congesValidesJour(dStr).filter(c => c.type !== 'fermeture'); }
+// Bandeau « fermé / absents » à insérer en haut d'une colonne de jour
+function bandeauAbsencesJour(dStr) {
+  const e = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ferme = fermetureJour(dStr);
+  const abs = absentsJour(dStr);
+  if (!ferme && !abs.length) return '';
+  let h = '';
+  if (ferme) h += `<div style="background:#e67e2222;color:#b9560a;font-weight:800;font-size:0.72rem;padding:2px 6px;border-radius:6px;margin-bottom:4px;text-align:center">🏢 Fermé</div>`;
+  if (abs.length) h += `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px">${abs.map(c => {
+    const t = (typeof CONGE_TYPES !== 'undefined' && CONGE_TYPES[c.type]) || { label: '🚫', c: '#c0392b' };
+    return `<span title="${e(t.label)}" style="background:${t.c}1f;color:${t.c};font-size:0.66rem;font-weight:700;padding:1px 6px;border-radius:10px;white-space:nowrap">${t.label.split(' ')[0]} ${e(c.personne)}</span>`;
+  }).join('')}</div>`;
+  return h;
+}
+
 function renderPlanningSemail() {
   const lundi = getLundiSemaine(currentWeekOffset);
   const today = formatDate(new Date());
@@ -2683,10 +2704,12 @@ function renderPlanningSemail() {
     const header = document.createElement('div');
     header.className = 'jour-header' + (isToday ? ' today' : '');
     if (estSamedi && !isToday) { header.style.background = '#fff3cd'; header.style.color = '#7a5b00'; }
+    if (fermetureJour(dateStr) && !isToday) { header.style.background = '#e67e2233'; header.style.color = '#a65b00'; }
     header.innerHTML = `<div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth()+1}</div>`;
 
     const body = document.createElement('div');
     body.className = 'jour-body';
+    body.innerHTML = bandeauAbsencesJour(dateStr);
 
     interventions.filter(iv => iv.date === dateStr).forEach(iv => {
       const card = document.createElement('div');
@@ -2773,6 +2796,13 @@ function renderPlanningMois() {
       numDiv.appendChild(addBtn);
     }
     cell.appendChild(numDiv);
+
+    if (fermetureJour(dateStr) && !autreMois) {
+      const fTag = document.createElement('div');
+      fTag.style.cssText = 'font-size:0.62rem;font-weight:800;color:#b9560a;background:#e67e2222;border-radius:4px;padding:0 4px;text-align:center;margin-bottom:2px';
+      fTag.textContent = '🏢 Fermé';
+      cell.appendChild(fTag);
+    }
 
     const intervsDuJour = interventions.filter(iv => iv.date === dateStr);
     const MAX_VISIBLE = 3;
@@ -4161,10 +4191,13 @@ function renderCreationSemaine(el, chantiers, clients) {
       </div>`;
     }).join('')
     + exclusJour(dStr).map(ch => `<div onclick="reinclureChantierJour('${ch.id}','${dStr}')" title="Remettre ce chantier ce jour" style="font-size:0.74rem;color:var(--gris);background:#f1f3f5;border:1px dashed var(--border);border-radius:6px;padding:4px 6px;margin-bottom:4px;cursor:pointer">↩️ ${esc(ch.nom || 'Chantier')} <span style="font-style:italic">— pas ce jour</span></div>`).join('');
+    const ferme = fermetureJour(dStr);
+    const headStyle = (ferme && !isToday) ? ' style="background:#e67e2233;color:#a65b00"' : (estSamedi && !isToday ? ' style="background:#fff3cd;color:#7a5b00"' : '');
     cols += `<div class="jour-col">
-      <div class="jour-header${isToday ? ' today' : ''}"${estSamedi && !isToday ? ' style="background:#fff3cd;color:#7a5b00"' : ''}><div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth() + 1}</div></div>
+      <div class="jour-header${isToday ? ' today' : ''}"${headStyle}><div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth() + 1}</div></div>
       <div class="jour-body">
-        ${cartes}
+        ${bandeauAbsencesJour(dStr)}
+        ${ferme ? '' : cartes}
         <button class="add-interv-btn" onclick="ouvrirChantierJour('${dStr}')">+ Chantier</button>
       </div>
     </div>`;
@@ -4229,8 +4262,9 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
     const dStr = formatDate(jour);
     const autreMois = jour.getMonth() !== mois;
     const weekend = jour.getDay() === 0 || jour.getDay() === 6;
-    // Les ouvriers ne travaillent pas le week-end ; on retire aussi les jours exclus du chantier
-    const actifs = weekend ? [] : chantiers.filter(ch => {
+    // Pas de chantier le week-end, les jours exclus, ni les jours de fermeture
+    const ferme = fermetureJour(dStr);
+    const actifs = (weekend || ferme) ? [] : chantiers.filter(ch => {
       const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut;
       return d && d <= dStr && f >= dStr && !(ch.joursExclus || []).includes(dStr);
     });
@@ -4240,8 +4274,9 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
       const marque = debutCh ? '▸ ' : finCh ? '◂ ' : '';
       return `<div class="mois-interv-dot" onclick="event.stopPropagation();ouvrirChantierDetail('${ch.id}')" title="${esc(ch.nom)} (${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'})" style="background:${st.c}18;border-left-color:${st.c}">${marque}${esc(ch.nom)}</div>`;
     }).join('');
+    const fermeTag = (ferme && !autreMois) ? `<div style="font-size:0.62rem;font-weight:800;color:#b9560a;background:#e67e2222;border-radius:4px;padding:0 4px;text-align:center">🏢 Fermé</div>` : '';
     html += `<div class="mois-jour${autreMois ? ' autre-mois' : ''}${dStr === today ? ' today' : ''}${weekend ? ' weekend' : ''}">
-      <div class="mois-jour-num"><span>${jour.getDate()}</span></div>${dots}</div>`;
+      <div class="mois-jour-num"><span>${jour.getDate()}</span></div>${fermeTag}${dots}</div>`;
   }
   html += '</div>';
   el.innerHTML = html;
