@@ -1283,6 +1283,7 @@
             <option value=""></option><option>m³</option><option>T</option><option>kg</option><option>sac(s)</option><option>palette(s)</option><option>pièce(s)</option><option>ml</option><option>m²</option><option>L</option>
           </select>
         </div>
+        <div class="form-group" id="appro-prix-group" style="display:none"><label class="form-label">💰 Prix achat unitaire HTVA (€)</label><input type="number" step="0.01" min="0" class="form-control" id="appro-prix" placeholder="confidentiel"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Statut</label>
@@ -4509,16 +4510,19 @@ function renderChantierDetail() {
   // --- Approvisionnement : matériaux à prévoir/commander pour le chantier ---
   const apEl = document.getElementById('chantier-detail-appro');
   if (apEl) {
+    const fin = voitChantierFinances();
     const items = appData.chantierAppro.filter(a => a.chantierId === ch.id)
       .sort((a, b) => (APPRO_STATUTS_ORDRE[a.statut] ?? 9) - (APPRO_STATUTS_ORDRE[b.statut] ?? 9) || (a.datePrevue || '').localeCompare(b.datePrevue || ''));
+    const valAppro = a => (parseFloat(a.quantite) || 0) * (parseFloat(a.prix) || 0);
+    const totalAppro = items.reduce((s, a) => s + valAppro(a), 0);
     apEl.innerHTML = `
       <div class="flex-between" style="align-items:center;flex-wrap:wrap;gap:8px">
         <div class="card-title" style="margin:0">🧱 Matériaux à prévoir / commander</div>
         <button class="btn btn-primary btn-sm" onclick="ouvrirAppro()">+ Matériau</button>
       </div>
-      ${items.length ? `<div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:420px">
+      ${items.length ? `<div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:${fin ? 480 : 420}px">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
-          <th style="padding:5px">Matériau</th><th style="padding:5px">Qté</th><th style="padding:5px">Statut</th><th style="padding:5px">Prévu le</th><th></th>
+          <th style="padding:5px">Matériau</th><th style="padding:5px">Qté</th><th style="padding:5px">Statut</th><th style="padding:5px">Prévu le</th>${fin ? '<th style="padding:5px;text-align:right">Coût</th>' : ''}<th></th>
         </tr></thead>
         <tbody>${items.map(a => {
           const st = APPRO_STATUTS[a.statut] || APPRO_STATUTS['a-commander'];
@@ -4528,9 +4532,11 @@ function renderChantierDetail() {
             <td style="padding:5px;white-space:nowrap">${esc(qte) || '—'}</td>
             <td style="padding:5px"><button onclick="cyclerStatutAppro('${a.id}')" title="Cliquer pour changer le statut" style="border:none;cursor:pointer;font-weight:700;font-size:0.74rem;padding:4px 9px;border-radius:20px;background:${st.bg};color:${st.c};white-space:nowrap">${st.label}</button></td>
             <td style="padding:5px;white-space:nowrap">${a.datePrevue ? '📅 ' + formatDateFR(a.datePrevue) : '—'}</td>
+            ${fin ? `<td style="padding:5px;text-align:right;white-space:nowrap">${a.prix != null && a.prix !== '' ? eurFmt(valAppro(a)) : '—'}</td>` : ''}
             <td style="padding:5px;text-align:right;white-space:nowrap"><button onclick="ouvrirAppro('${a.id}')" style="background:none;border:none;cursor:pointer">✏️</button></td>
           </tr>`;
         }).join('')}</tbody>
+        ${fin && totalAppro ? `<tfoot><tr style="border-top:2px solid var(--vert)"><td colspan="4" style="padding:6px 5px;font-weight:800">Total matériaux à commander</td><td style="padding:6px 5px;text-align:right;font-weight:800">${eurFmt(totalAppro)}</td><td></td></tr></tfoot>` : ''}
       </table></div>` : '<div class="empty-state" style="padding:10px">Aucun matériau prévu. Listez ici ce qu\'il faut commander/sortir du stock pour ce chantier.</div>'}`;
   }
 
@@ -4567,7 +4573,9 @@ function renderChantierDetail() {
       const coutMO = totalH * tauxH;
       const coutMat = mats.reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
       const matSansCout = mats.filter(m => !m.cout).length;
-      const coutTotal = coutMO + coutMat;
+      const appros = appData.chantierAppro.filter(a => a.chantierId === ch.id);
+      const coutAppro = appros.reduce((s, a) => s + (parseFloat(a.quantite) || 0) * (parseFloat(a.prix) || 0), 0);
+      const coutTotal = coutMO + coutMat + coutAppro;
       // Part « hors devis » (supplément) à refacturer en plus
       const coutMOSupp = totalHSupp * tauxH;
       const coutMatSupp = mats.filter(m => supp(m.poste)).reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
@@ -4579,7 +4587,8 @@ function renderChantierDetail() {
       recap.innerHTML = `
         <div class="card-title">📊 Rentabilité du chantier <span style="font-size:0.7rem;color:var(--gris);font-weight:400">(visible par la direction : Marco & Justin)</span></div>
         ${ligne(`👷 Main d'œuvre — ${totalH} h × ${eurFmt(tauxH)}/h`, eurFmt(coutMO))}
-        ${ligne(`🧱 Matériaux${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat))}
+        ${(coutMat || !coutAppro) ? ligne(`🧱 Matériaux emportés${matSansCout ? ` <span style="color:#e67e22">(${matSansCout} sans coût)</span>` : ''}`, eurFmt(coutMat)) : ''}
+        ${coutAppro ? ligne('📦 Matériaux à commander', eurFmt(coutAppro)) : ''}
         ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
         ${coutSupp > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:#fd7e1418;color:#e67e22;font-weight:800"><span>🆕 Suppléments hors devis<br><span style="font-weight:400;font-size:0.75rem">à refacturer en plus du devis (${totalHSupp ? totalHSupp + ' h' : ''}${totalHSupp && coutMatSupp ? ' + ' : ''}${coutMatSupp ? 'matériaux' : ''})</span></span><span>${eurFmt(coutSupp)}</span></div>` : ''}
         ${budget > 0 ? ligne('💰 Budget devis / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
@@ -5027,6 +5036,9 @@ function ouvrirAppro(id) {
   document.getElementById('appro-statut').value = a?.statut || 'a-commander';
   document.getElementById('appro-date').value = a?.datePrevue || '';
   document.getElementById('appro-notes').value = a?.notes || '';
+  // Prix d'achat = Marco + Justin uniquement
+  document.getElementById('appro-prix-group').style.display = voitChantierFinances() ? '' : 'none';
+  document.getElementById('appro-prix').value = (a && a.prix != null) ? a.prix : '';
   // datalist depuis le stock
   const dl = document.getElementById('stock-datalist');
   if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${(s.nom || '').replace(/"/g, '&quot;')}">`).join('');
@@ -5035,7 +5047,11 @@ function ouvrirAppro(id) {
 function sauvegarderAppro() {
   const designation = document.getElementById('appro-designation').value.trim();
   if (!designation) { alert('Indiquez le matériau.'); return; }
+  const ancien = appData.chantierAppro.find(a => a.id === currentApproId) || {};
+  const prixRaw = document.getElementById('appro-prix').value;
+  const prix = voitChantierFinances() ? (prixRaw !== '' ? (parseFloat(prixRaw) || 0) : null) : (ancien.prix ?? null);
   saveDoc('chantierAppro', {
+    ...ancien,
     id: currentApproId || uuid(),
     chantierId: currentApproChantier,
     designation,
@@ -5043,7 +5059,8 @@ function sauvegarderAppro() {
     unite: document.getElementById('appro-unite').value,
     statut: document.getElementById('appro-statut').value,
     datePrevue: document.getElementById('appro-date').value || '',
-    notes: document.getElementById('appro-notes').value.trim()
+    notes: document.getElementById('appro-notes').value.trim(),
+    prix
   });
   fermerModal('modal-appro');
 }
