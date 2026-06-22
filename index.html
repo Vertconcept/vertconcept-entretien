@@ -752,6 +752,7 @@
     <div class="card" id="chantier-detail-fichiers"></div>
     <div class="card" id="chantier-detail-supplements"></div>
     <div class="card" id="chantier-detail-appro"></div>
+    <div class="card" id="chantier-detail-degats"></div>
 
     <div class="card">
       <div class="card-title">⏱️ Heures du jour</div>
@@ -2093,7 +2094,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], conges: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], conges: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2226,6 +2227,10 @@ function initFirestore() {
   db.collection('chantierPlanning').onSnapshot(snap => {
     appData.chantierPlanning = snap.docs.map(d => d.data());
     if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
+  });
+  db.collection('chantierDegats').onSnapshot(snap => {
+    appData.chantierDegats = snap.docs.map(d => d.data());
+    if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
   });
   db.collection('conges').onSnapshot(snap => {
     appData.conges = snap.docs.map(d => d.data());
@@ -4768,6 +4773,36 @@ function renderChantierDetail() {
       </table></div>` : '<div class="empty-state" style="padding:10px">Aucun matériau prévu. Listez ici ce qu\'il faut commander/sortir du stock pour ce chantier.</div>'}`;
   }
 
+  // --- Dégâts / incidents du chantier (photo + description) ---
+  const dgEl = document.getElementById('chantier-detail-degats');
+  if (dgEl) {
+    const items = appData.chantierDegats.filter(d => d.chantierId === ch.id).sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    const moi = currentUser ? currentUser.name : '';
+    dgEl.innerHTML = `
+      <div class="card-title">🛠️ Dégâts / incidents <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— en cas de problème (photo + description)</span></div>
+      ${items.length ? `<div style="display:flex;flex-direction:column;gap:8px;margin:8px 0">
+        ${items.map(d => {
+          const quand = d.ts ? new Date(d.ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+          return `<div style="display:flex;gap:10px;padding:8px 10px;background:#fff5f5;border-left:4px solid #c0392b;border-radius:8px">
+            ${d.photoId ? `<div onclick="voirPhotoDegat('${d.photoId}','${(d.photoType || '').replace(/'/g, '')}')" style="flex:none;width:54px;height:54px;border-radius:6px;background:#f1d6d6 url() center/cover;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.4rem" title="Voir la photo">🖼️</div>` : ''}
+            <div style="flex:1;min-width:0">
+              <div style="white-space:pre-wrap">${esc(d.texte || '')}</div>
+              <div style="font-size:0.72rem;color:var(--gris);margin-top:3px">${esc(d.auteur || '')}${quand ? ' · ' + quand : ''}${d.photoId ? ' · 📷 photo' : ''}</div>
+            </div>
+            ${(d.auteur === moi || modeAdmin) ? `<button onclick="supprimerDegatChantier('${d.id}','${d.photoId || ''}')" title="Supprimer" style="background:none;border:none;cursor:pointer;flex:none">🗑️</button>` : ''}
+          </div>`;
+        }).join('')}
+      </div>` : '<div class="empty-state" style="padding:10px">Aucun dégât signalé. 👍</div>'}
+      <div style="margin-top:6px">
+        <textarea class="form-control" id="degat-texte" rows="2" placeholder="Décrire le problème (ex : clôture du voisin abîmée, tuyau d'arrosage sectionné…)"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <input type="file" accept="image/*" id="degat-photo" capture="environment">
+          <button class="btn btn-primary btn-sm" onclick="ajouterDegatChantier('${ch.id}')">+ Signaler</button>
+        </div>
+        <div id="degat-status" style="font-size:0.8rem;color:var(--gris);margin-top:4px"></div>
+      </div>`;
+  }
+
   const supp = p => p === 'supplement';
   const suppBadge = '<span style="background:#fd7e1422;color:#e67e22;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap">🆕 Supp.</span>';
 
@@ -5131,6 +5166,47 @@ function supprimerFichierIntervention(ivId, fileId) {
   Promise.resolve(deleteDoc('interventionFichiers', fileId))
     .then(() => { if (iv) return saveDoc('interventions', { ...iv, fichiers: (iv.fichiers || []).filter(f => f.id !== fileId) }); })
     .then(() => ouvrirDetailIntervention(ivId));
+}
+
+// --- Dégâts / incidents d'un chantier (photo + description) ---
+function ajouterDegatChantier(chId) {
+  const texteEl = document.getElementById('degat-texte');
+  const photoEl = document.getElementById('degat-photo');
+  const statut = document.getElementById('degat-status');
+  const texte = texteEl ? texteEl.value.trim() : '';
+  const file = photoEl && photoEl.files && photoEl.files[0];
+  if (!texte && !file) { if (statut) statut.innerHTML = '<span style="color:#c0392b">Ajoutez une description ou une photo.</span>'; return; }
+  const finir = (photo) => {
+    saveDoc('chantierDegats', {
+      id: uuid(), chantierId: chId, texte,
+      photoId: photo ? photo.id : '', photoNom: photo ? photo.nom : '', photoType: photo ? photo.type : '',
+      auteur: currentUser ? currentUser.name : '?', ts: new Date().toISOString()
+    });
+    if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
+  };
+  if (!file) { finir(null); return; }
+  if (file.size > FICHIER_MAX_OCTETS) { if (statut) statut.innerHTML = `<span style="color:#c0392b">❌ Photo trop lourde (${Math.round(file.size / 1024)} Ko). Max ~700 Ko — réduisez la résolution.</span>`; return; }
+  if (statut) statut.textContent = '⏳ Envoi de la photo…';
+  const r = new FileReader();
+  r.onload = () => {
+    const photo = { id: 'dg_' + uuid(), nom: file.name, type: file.type || 'image/jpeg', data: r.result };
+    Promise.resolve(saveDoc('chantierDegatPhotos', { id: photo.id, chantierId: chId, data: photo.data, type: photo.type, nom: photo.nom }))
+      .then(() => finir(photo))
+      .catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec (photo trop lourde ?).</span>'; });
+  };
+  r.readAsDataURL(file);
+}
+function voirPhotoDegat(photoId, type) {
+  db.collection('chantierDegatPhotos').doc(photoId).get().then(doc => {
+    if (!doc.exists || !doc.data().data) { alert('Photo introuvable.'); return; }
+    const url = URL.createObjectURL(dataURLversBlob(doc.data().data));
+    afficherFichierPleinEcran(url, (type || doc.data().type || 'image/').startsWith('image/'), doc.data().nom || 'Photo');
+  }).catch(e => alert('Erreur de chargement : ' + (e.message || e)));
+}
+function supprimerDegatChantier(id, photoId) {
+  if (!confirm('Supprimer ce signalement ?')) return;
+  if (photoId) deleteDoc('chantierDegatPhotos', photoId);
+  deleteDoc('chantierDegats', id);
 }
 
 // Lit le texte du PDF du devis et pré-remplit la zone d'édition des postes
@@ -5701,7 +5777,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, chantierPlanning: appData.chantierPlanning, conges: appData.conges,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, chantierPlanning: appData.chantierPlanning, chantierDegats: appData.chantierDegats, conges: appData.conges,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -5720,7 +5796,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'conges'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'chantierDegats', 'conges'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
