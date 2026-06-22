@@ -2080,7 +2080,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], conges: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], conges: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2209,6 +2209,10 @@ function initFirestore() {
   db.collection('chantierAppro').onSnapshot(snap => {
     appData.chantierAppro = snap.docs.map(d => d.data());
     if (document.getElementById('page-chantier-detail')?.classList.contains('active')) renderChantierDetail();
+  });
+  db.collection('chantierPlanning').onSnapshot(snap => {
+    appData.chantierPlanning = snap.docs.map(d => d.data());
+    if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
   });
   db.collection('conges').onSnapshot(snap => {
     appData.conges = snap.docs.map(d => d.data());
@@ -4174,6 +4178,22 @@ function reinclureChantierJour(chId, dateStr) {
   if (!ch) return;
   saveDoc('chantiers', { ...ch, joursExclus: (ch.joursExclus || []).filter(d => d !== dateStr) });
 }
+// Placer un chantier (pré-encodé) sur un jour précis du planning, via le menu déroulant
+function placerChantierJour(val, dateStr) {
+  if (!val) return;
+  if (val === '__new__') { ouvrirChantierJour(dateStr); return; }
+  // éviter un doublon le même jour
+  if ((appData.chantierPlanning || []).some(p => p.chantierId === val && p.date === dateStr)) return;
+  saveDoc('chantierPlanning', { id: uuid(), chantierId: val, date: dateStr, nbHommes: '' });
+}
+function retirerPlacementChantier(placementId) {
+  deleteDoc('chantierPlanning', placementId);
+}
+function setPlacementHommes(placementId, n) {
+  const p = appData.chantierPlanning.find(x => x.id === placementId);
+  if (!p) return;
+  saveDoc('chantierPlanning', { ...p, nbHommes: (n || '').toString().trim() });
+}
 function renderCreationSemaine(el, chantiers, clients) {
   const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const lundi = getLundiSemaine(creationOffset);
@@ -4187,12 +4207,34 @@ function renderCreationSemaine(el, chantiers, clients) {
   const montrerSamedi = afficherSamediCreation;
   majBoutonSamediCreation();
   const nbJours = montrerSamedi ? 6 : 5;
+  // Options du menu déroulant (chantiers pré-encodés, non terminés)
+  const optionsChantiers = [...chantiers].filter(c => c.statut !== 'termine')
+    .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''))
+    .map(c => `<option value="${c.id}">${esc(c.nom || 'Chantier')}${c.dateDebut ? '' : ' (sans dates)'}</option>`).join('');
 
   let cols = '';
   for (let i = 0; i < nbJours; i++) {
     const jour = new Date(lundi); jour.setDate(lundi.getDate() + i);
     const dStr = formatDate(jour);
     const isToday = dStr === today, estSamedi = i === 5;
+    const idsRange = actifsJour(dStr).map(c => c.id);
+    const placeCards = (appData.chantierPlanning || []).filter(p => p.date === dStr).map(pl => {
+      const ch = chantiers.find(c => c.id === pl.chantierId);
+      if (!ch || idsRange.includes(ch.id)) return '';
+      const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+      const client = clients.find(c => c.id === ch.clientId);
+      const equipe = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+      return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer;position:relative">
+        <span onclick="event.stopPropagation();retirerPlacementChantier('${pl.id}')" title="Retirer ce chantier de ce jour" style="position:absolute;top:1px;right:4px;cursor:pointer;color:var(--gris);font-weight:700;font-size:0.95rem;line-height:1">✕</span>
+        <div class="client-name" style="padding-right:14px">${esc(ch.nom || 'Chantier')}</div>
+        <div class="interv-meta">${client ? esc(client.nom) : '—'}</div>
+        ${equipe.length ? `<div class="equipe-chips">${equipe.map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
+          <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px">${st.label}</span>
+          <label onclick="event.stopPropagation()" style="font-size:0.68rem;color:var(--gris);display:inline-flex;align-items:center;gap:2px">👷 <input type="number" min="0" value="${esc(pl.nbHommes || '')}" onchange="setPlacementHommes('${pl.id}',this.value)" placeholder="–" style="width:34px;padding:1px 3px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;text-align:center"></label>
+        </div>
+      </div>`;
+    }).join('');
     const cartes = actifsJour(dStr).map(ch => {
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
       const client = clients.find(c => c.id === ch.clientId);
@@ -4214,8 +4256,12 @@ function renderCreationSemaine(el, chantiers, clients) {
       <div class="jour-header${isToday ? ' today' : ''}"${headStyle}><div>${joursNoms[i]}</div><div style="opacity:0.85;font-size:0.75rem">${jour.getDate()}/${jour.getMonth() + 1}</div></div>
       <div class="jour-body">
         ${bandeauAbsencesJour(dStr)}
-        ${ferme ? '' : cartes}
-        <button class="add-interv-btn" onclick="ouvrirChantierJour('${dStr}')">+ Chantier</button>
+        ${ferme ? '' : cartes + placeCards}
+        ${ferme ? '' : `<select onchange="placerChantierJour(this.value,'${dStr}');this.value=''" style="width:100%;margin-top:2px;padding:6px;border:1px dashed var(--vert-clair);border-radius:8px;background:white;color:var(--vert);font-weight:600;font-size:0.8rem;cursor:pointer">
+          <option value="">+ Chantier ▾</option>
+          <option value="__new__">➕ Nouveau chantier…</option>
+          ${optionsChantiers}
+        </select>`}
       </div>
     </div>`;
   }
@@ -4285,12 +4331,19 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
       const d = ch.dateDebut, f = ch.dateFin || ch.dateDebut;
       return d && d <= dStr && f >= dStr && !(ch.joursExclus || []).includes(dStr);
     });
+    const idsActifs = actifs.map(c => c.id);
     const dots = actifs.map(ch => {
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
       const debutCh = ch.dateDebut === dStr, finCh = (ch.dateFin || ch.dateDebut) === dStr;
       const marque = debutCh ? '▸ ' : finCh ? '◂ ' : '';
       return `<div class="mois-interv-dot" onclick="event.stopPropagation();ouvrirChantierDetail('${ch.id}')" title="${esc(ch.nom)} (${ch.dateDebut ? formatDateFR(ch.dateDebut) : '?'} → ${ch.dateFin ? formatDateFR(ch.dateFin) : '…'})" style="background:${st.c}18;border-left-color:${st.c}">${marque}${esc(ch.nom)}</div>`;
-    }).join('');
+    }).join('')
+    + ((weekend || ferme) ? '' : (appData.chantierPlanning || []).filter(p => p.date === dStr).map(pl => {
+      const ch = chantiers.find(c => c.id === pl.chantierId);
+      if (!ch || idsActifs.includes(ch.id)) return '';
+      const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
+      return `<div class="mois-interv-dot" onclick="event.stopPropagation();ouvrirChantierDetail('${ch.id}')" title="${esc(ch.nom)}${pl.nbHommes ? ' · ' + pl.nbHommes + ' h' : ''}" style="background:${st.c}18;border-left-color:${st.c}">${esc(ch.nom)}${pl.nbHommes ? ` <span style="opacity:0.7">(${esc(pl.nbHommes)}👷)</span>` : ''}</div>`;
+    }).join(''));
     const fermeTag = (ferme && !autreMois) ? `<div style="font-size:0.62rem;font-weight:800;color:#b9560a;background:#e67e2222;border-radius:4px;padding:0 4px;text-align:center">🏢 Fermé</div>` : '';
     html += `<div class="mois-jour${autreMois ? ' autre-mois' : ''}${dStr === today ? ' today' : ''}${weekend ? ' weekend' : ''}">
       <div class="mois-jour-num"><span>${jour.getDate()}</span></div>${fermeTag}${dots}</div>`;
@@ -5500,7 +5553,7 @@ function exporterSauvegarde() {
     _app: 'Vertconcept Entretien', _version: 1, _date: new Date().toISOString(),
     clients: appData.clients, interventions: appData.interventions, contrats: appData.contrats,
     machines: appData.machines, pannes: appData.pannes, achats: appData.achats, stock: appData.stock, backlog: appData.backlog, backlogCreation: appData.backlogCreation,
-    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, conges: appData.conges,
+    chantiers: appData.chantiers, chantierHeures: appData.chantierHeures, chantierMateriaux: appData.chantierMateriaux, chantierMessages: appData.chantierMessages, chantierSupplements: appData.chantierSupplements, chantierAppro: appData.chantierAppro, chantierPlanning: appData.chantierPlanning, conges: appData.conges,
     config: { fraisTontes, fraisFacturation: fraisFactu }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -5519,7 +5572,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'conges'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'conges'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
