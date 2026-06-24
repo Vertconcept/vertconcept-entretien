@@ -4887,7 +4887,7 @@ function renderChantierDetail() {
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${estMarco ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right">${m.cout ? eurFmt(m.cout) : '—'}</td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -5859,6 +5859,18 @@ function ajouterMateriauChantier() {
   if (coutEl) coutEl.value = '';
 }
 function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
+function modifierCoutMateriau(id) {
+  if (!voitChantierFinances()) return;
+  const m = appData.chantierMateriaux.find(x => x.id === id);
+  if (!m) return;
+  const actuel = (m.cout != null && m.cout !== '') ? m.cout : '';
+  const saisie = prompt(`Prix total (€) pour « ${m.designation} » (${m.quantite} ${m.unite || ''}) :\n\nLaissez vide pour retirer le prix.`, actuel);
+  if (saisie === null) return;
+  const v = ('' + saisie).trim().replace(',', '.');
+  const doc = { ...m };
+  if (v === '') delete doc.cout; else doc.cout = parseFloat(v) || 0;
+  saveDoc('chantierMateriaux', doc);
+}
 
 // =====================================================
 // SAUVEGARDE / RESTAURATION (Marco)
