@@ -3565,6 +3565,14 @@ function ouvrirEditionIntervention(id) {
   document.getElementById('interv-demandes').value = iv.demandes || '';
   document.getElementById('interv-remarques-client').value = iv.remarquesClient || '';
   document.getElementById('interv-statut').value = iv.statut || 'planifie';
+
+  // Sélectionner l'équipe AVANT de construire le tableau des heures,
+  // sinon il manque des ouvriers (il reflète l'intervention précédente).
+  const membres = iv.membres || [iv.chef];
+  document.querySelectorAll('#equipe-toggle .membre-chip').forEach(chip => {
+    chip.classList.toggle('selected', membres.includes(chip.dataset.membre));
+  });
+
   onStatutChange(iv.statut || 'planifie');
   if (iv.statut === 'termine') buildHeuresTable(iv.heuresParMembre);
   const isPulve = iv.type === 'pulverisation';
@@ -3573,11 +3581,6 @@ function ouvrirEditionIntervention(id) {
 
   setClientSearch('interv', iv.clientId);
   majRappelRemarque('interv', iv.clientId, iv.id);
-
-  const membres = iv.membres || [iv.chef];
-  document.querySelectorAll('.membre-chip').forEach(chip => {
-    chip.classList.toggle('selected', membres.includes(chip.dataset.membre));
-  });
 
   remplirIvStockSection(iv);
   fermerModal('modal-detail');
