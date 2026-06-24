@@ -1799,6 +1799,30 @@
           <tbody id="heures-tbody"></tbody>
         </table>
         <div class="heures-totaux" id="heures-totaux"></div>
+
+        <hr>
+        <div class="form-label" style="margin-bottom:6px">🧱 Matériel / fournitures utilisés <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(gestion du stock)</span></div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:2;margin-bottom:6px"><input type="text" class="form-control" id="iv-mat-nom" list="iv-stock-datalist" placeholder="Ex : Engrais, terreau, sac déchets…"><datalist id="iv-stock-datalist"></datalist></div>
+          <div class="form-group" style="max-width:90px;margin-bottom:6px"><input type="number" step="0.01" min="0" class="form-control" id="iv-mat-qte" placeholder="Qté"></div>
+          <div class="form-group" style="max-width:120px;margin-bottom:6px"><input type="text" class="form-control" id="iv-mat-unite" placeholder="unité"></div>
+          <div class="form-group" style="margin-bottom:6px"><button type="button" class="btn btn-secondary btn-sm" onclick="ajouterMatInterv()">+ Ajouter</button></div>
+        </div>
+        <div id="iv-mat-list" style="margin-bottom:10px"></div>
+
+        <div class="form-label" style="margin-bottom:6px">🚜 Engins / machines utilisés <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(menu déroulant — cochez-en plusieurs)</span></div>
+        <div class="ms-wrap" style="margin-bottom:8px">
+          <button type="button" class="form-control ms-toggle" id="iv-engins-btn" onclick="toggleIvEnginsMenu()">— Choisir les engins — ▾</button>
+          <div class="equipe-toggle ms-menu" id="iv-engins" style="display:none"></div>
+        </div>
+
+        <div class="form-label" style="margin-bottom:6px">🔑 Machine de location <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(facultatif)</span></div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:2;margin-bottom:6px"><input type="text" class="form-control" id="iv-louee" placeholder="Ex : Broyeur, nacelle…"></div>
+          <div class="form-group" style="max-width:180px;margin-bottom:6px"><input type="number" step="0.01" min="0" class="form-control" id="iv-louee-cout" placeholder="Prix location (€)"></div>
+          <div class="form-group" style="margin-bottom:6px"><button type="button" class="btn btn-secondary btn-sm" onclick="ajouterLoueeInterv()">+ Ajouter</button></div>
+        </div>
+        <div id="iv-mach-list"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2324,6 +2348,9 @@ let modeAdmin = true;
 let ficheEquipe = 'Jimi';
 let currentIntervId = null;
 let currentClientId = null;
+// Encodage matériel / machines de location pour une intervention Entretien (stocké sur le doc)
+let ivMatTemp = [];
+let ivMachLoueeTemp = [];
 let currentRemarqueIntervId = null;
 let excelRows = [];
 let excelHeaders = [];
@@ -3514,6 +3541,7 @@ function ouvrirNouvelleIntervention(dateStr) {
     if (chip.dataset.membre === 'Jimi') chip.classList.add('selected');
   });
 
+  remplirIvStockSection(null);
   document.getElementById('modal-intervention').classList.remove('hidden');
 }
 
@@ -3551,6 +3579,7 @@ function ouvrirEditionIntervention(id) {
     chip.classList.toggle('selected', membres.includes(chip.dataset.membre));
   });
 
+  remplirIvStockSection(iv);
   fermerModal('modal-detail');
   document.getElementById('modal-intervention').classList.remove('hidden');
 }
@@ -3567,7 +3596,7 @@ function sauvegarderIntervention() {
   const date = document.getElementById('interv-date').value;
   if (!date) { alert('Veuillez choisir une date.'); return; }
 
-  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const membres = [...document.querySelectorAll('#equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre);
   const chef = document.getElementById('interv-chef').value;
   if (!membres.includes(chef)) membres.unshift(chef);
 
@@ -3589,6 +3618,8 @@ function sauvegarderIntervention() {
     remarquesClient: document.getElementById('interv-remarques-client').value,
     statut,
     heuresParMembre: heuresParMembre || null,
+    materiaux: ivMatTemp.map(x => ({ ...x })),
+    machines: getIvMachinesFromForm(),
     pulve: document.getElementById('interv-type').value === 'pulverisation' ? getPulveFromForm('') : null,
     facturee: prev?.facturee || false,
     soumisePar: prev?.soumisePar || null,
@@ -3679,6 +3710,10 @@ function ouvrirDetailIntervention(id) {
       <div style="grid-column:1/-1"><div class="fiche-field-label">💬 Remarques client (prochaine fois)</div><div>${iv.remarquesClient || '—'}</div></div>
       ${iv.pulve ? pulveFicheHtml(iv.pulve) : ''}
     </div>
+    ${((iv.materiaux && iv.materiaux.length) || (iv.machines && iv.machines.length)) ? `<hr>
+      ${iv.materiaux && iv.materiaux.length ? `<div class="fiche-field-label">🧱 Matériel / fournitures utilisés</div><div style="margin:2px 0 8px">${iv.materiaux.map(x => `<div style="padding:2px 0">🧱 ${('' + (x.designation || '')).replace(/</g, '&lt;')}${(x.quantite !== '' && x.quantite != null) ? ` <span style="color:var(--gris);font-size:0.85rem">· ${('' + x.quantite).replace(/</g, '&lt;')} ${(x.unite || '').replace(/</g, '&lt;')}</span>` : ''}</div>`).join('')}</div>` : ''}
+      ${iv.machines && iv.machines.length ? `<div class="fiche-field-label">🚜 Engins / machines utilisés</div><div style="margin:2px 0 0">${iv.machines.map(x => `<div style="padding:2px 0">${x.louee ? '🔑' : '🚜'} ${(x.machineNom || '').replace(/</g, '&lt;')}${x.louee ? ' <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>' : ''}${(x.louee && x.coutLocation != null && x.coutLocation !== '') ? ` <span style="color:var(--gris);font-size:0.85rem">· ${eurFmt(x.coutLocation)}</span>` : ''}</div>`).join('')}</div>` : ''}
+    ` : ''}
     ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
     <hr>
     <div class="fiche-field-label">📁 Documents (plan de plantation, d'implantation…)</div>
@@ -3908,8 +3943,75 @@ function onStatutChange(val) {
   if (show) buildHeuresTable();
 }
 
+// ===== Encodage matériel / machines / location d'une intervention Entretien =====
+function remplirIvStockSection(iv) {
+  const escAttr = s => (s || '').replace(/"/g, '&quot;');
+  const dl = document.getElementById('iv-stock-datalist');
+  if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${escAttr(s.nom)}">`).join('');
+  const selIds = ((iv && iv.machines) || []).filter(x => !x.louee && x.machineId).map(x => x.machineId);
+  const el = document.getElementById('iv-engins');
+  if (el) {
+    el.innerHTML = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<div class="membre-chip${selIds.includes(m.id) ? ' selected' : ''}" data-machine="${m.id}" onclick="toggleIvEnginChip(this)">🚜 ${(m.nom || '').replace(/</g, '&lt;')}</div>`).join('') || '<span style="color:var(--gris);font-size:0.85rem">Aucune machine — créez-en dans Matériel</span>';
+    el.style.display = 'none';
+  }
+  majIvEnginsLabel();
+  ivMatTemp = ((iv && iv.materiaux) || []).map(x => ({ ...x }));
+  ivMachLoueeTemp = ((iv && iv.machines) || []).filter(x => x.louee).map(x => ({ ...x }));
+  renderIvMatList();
+  renderIvMachLoueeList();
+  ['iv-mat-nom', 'iv-mat-qte', 'iv-mat-unite', 'iv-louee', 'iv-louee-cout'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+}
+function toggleIvEnginsMenu() { const menu = document.getElementById('iv-engins'); if (menu) menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'flex' : 'none'; }
+function toggleIvEnginChip(el) { el.classList.toggle('selected'); majIvEnginsLabel(); }
+function majIvEnginsLabel() {
+  const btn = document.getElementById('iv-engins-btn');
+  if (!btn) return;
+  const n = document.querySelectorAll('#iv-engins .membre-chip.selected').length;
+  btn.textContent = (n ? `🚜 ${n} engin(s) sélectionné(s)` : '— Choisir les engins —') + ' ▾';
+}
+function ajouterMatInterv() {
+  const nom = document.getElementById('iv-mat-nom').value.trim();
+  const qteRaw = document.getElementById('iv-mat-qte').value.trim();
+  const unite = document.getElementById('iv-mat-unite').value.trim();
+  if (!nom) { alert('Indiquez le matériel / la fourniture.'); return; }
+  ivMatTemp.push({ designation: nom, quantite: qteRaw !== '' ? (parseFloat(qteRaw) || qteRaw) : '', unite });
+  document.getElementById('iv-mat-nom').value = '';
+  document.getElementById('iv-mat-qte').value = '';
+  document.getElementById('iv-mat-unite').value = '';
+  renderIvMatList();
+}
+function supprimerMatInterv(i) { ivMatTemp.splice(i, 1); renderIvMatList(); }
+function renderIvMatList() {
+  const el = document.getElementById('iv-mat-list');
+  if (!el) return;
+  const esc = s => ('' + (s ?? '')).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  el.innerHTML = ivMatTemp.map((x, i) => `<div class="flex-between" style="gap:8px;padding:5px 8px;background:#f8f9fa;border-radius:8px;margin-bottom:4px"><div style="flex:1;min-width:0">🧱 ${esc(x.designation)}${(x.quantite !== '' && x.quantite != null) ? ` <span style="color:var(--gris);font-size:0.8rem">· ${esc(x.quantite)} ${esc(x.unite || '')}</span>` : ''}</div><button type="button" onclick="supprimerMatInterv(${i})" title="Retirer" style="background:none;border:none;cursor:pointer">🗑️</button></div>`).join('');
+}
+function ajouterLoueeInterv() {
+  const nom = document.getElementById('iv-louee').value.trim();
+  const coutRaw = document.getElementById('iv-louee-cout').value;
+  if (!nom) { alert('Indiquez le nom de la machine louée.'); return; }
+  const o = { louee: true, machineNom: nom };
+  if (coutRaw !== '') o.coutLocation = parseFloat(coutRaw) || 0;
+  ivMachLoueeTemp.push(o);
+  document.getElementById('iv-louee').value = '';
+  document.getElementById('iv-louee-cout').value = '';
+  renderIvMachLoueeList();
+}
+function supprimerLoueeInterv(i) { ivMachLoueeTemp.splice(i, 1); renderIvMachLoueeList(); }
+function renderIvMachLoueeList() {
+  const el = document.getElementById('iv-mach-list');
+  if (!el) return;
+  const esc = s => ('' + (s ?? '')).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  el.innerHTML = ivMachLoueeTemp.map((x, i) => `<div class="flex-between" style="gap:8px;padding:5px 8px;background:#f8f9fa;border-radius:8px;margin-bottom:4px"><div style="flex:1;min-width:0">🔑 ${esc(x.machineNom)} <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>${(x.coutLocation != null && x.coutLocation !== '') ? ` <span style="color:var(--gris);font-size:0.8rem">· ${eurFmt(x.coutLocation)}</span>` : ''}</div><button type="button" onclick="supprimerLoueeInterv(${i})" title="Retirer" style="background:none;border:none;cursor:pointer">🗑️</button></div>`).join('');
+}
+function getIvMachinesFromForm() {
+  const fleet = [...document.querySelectorAll('#iv-engins .membre-chip.selected')].map(c => { const m = (appData.machines || []).find(x => x.id === c.dataset.machine); return { machineId: c.dataset.machine, machineNom: m ? m.nom : '' }; });
+  return [...fleet, ...ivMachLoueeTemp.map(x => ({ ...x }))];
+}
+
 function buildHeuresTable(existing) {
-  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const membres = [...document.querySelectorAll('#equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre);
   const tbody = document.getElementById('heures-tbody');
   tbody.innerHTML = membres.map(m => {
     const h = existing?.[m]?.heures ?? (document.getElementById('interv-duree')?.value || '');
@@ -3928,7 +4030,7 @@ function buildHeuresTable(existing) {
 }
 
 function recalcTotaux() {
-  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const membres = [...document.querySelectorAll('#equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre);
   let totalH = 0, totalMontant = 0, hasRate = false;
   membres.forEach(m => {
     const h = parseFloat(document.getElementById('h-'+m)?.value) || 0;
@@ -3943,7 +4045,7 @@ function recalcTotaux() {
 }
 
 function getHeuresFromForm() {
-  const membres = [...document.querySelectorAll('.membre-chip.selected')].map(c => c.dataset.membre);
+  const membres = [...document.querySelectorAll('#equipe-toggle .membre-chip.selected')].map(c => c.dataset.membre);
   const result = {};
   membres.forEach(m => {
     result[m] = {
