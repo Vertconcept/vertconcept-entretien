@@ -137,6 +137,10 @@
   .equipe-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
   .membre-chip { padding: 5px 12px; border-radius: 20px; border: 2px solid var(--border); background: white; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; }
   .membre-chip.selected { border-color: var(--vert); background: var(--vert-pale); color: var(--vert); }
+  /* MULTI-SELECT DEROULANT */
+  .ms-wrap { position: relative; }
+  .ms-toggle { text-align: left; cursor: pointer; background: white; }
+  .ms-menu { margin-top: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: white; max-height: 240px; overflow-y: auto; box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
   .membre-chip.chef { border-color: var(--vert); }
 
   /* TONTE SCHEDULE */
@@ -771,11 +775,21 @@
         <div class="equipe-toggle" id="ch-h-ouvriers"></div>
       </div>
       <div class="form-group">
-        <label class="form-label">🚜 Engin(s) utilisé(s) ce jour <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(facultatif — cochez-en plusieurs)</span></label>
-        <div class="equipe-toggle" id="ch-h-engins"></div>
+        <label class="form-label">🚜 Engins utilisés ce jour <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(menu déroulant — cochez-en plusieurs)</span></label>
+        <div class="ms-wrap">
+          <button type="button" class="form-control ms-toggle" id="ch-h-engins-btn" onclick="toggleEnginsMenu()">— Choisir les engins — ▾</button>
+          <div class="equipe-toggle ms-menu" id="ch-h-engins" style="display:none"></div>
+        </div>
       </div>
       <div class="form-group" style="max-width:260px"><label class="form-label">Durée des engins</label>
         <select class="form-control" id="ch-h-engin-duree"><option value="jour">🌞 Journée</option><option value="demi">🌗 Demi-journée</option></select>
+      </div>
+      <div class="form-group" id="ch-h-louee-group">
+        <label class="form-label">🔑 Machine de location utilisée ce jour <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(facultatif)</span></label>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:2;margin-bottom:0"><input type="text" class="form-control" id="ch-h-louee" placeholder="Ex : Mini-pelle, nacelle…"></div>
+          <div class="form-group" style="margin-bottom:0;max-width:200px"><input type="number" step="0.01" min="0" class="form-control" id="ch-h-louee-cout" placeholder="Prix location (€)"></div>
+        </div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="ajouterHeureChantier()">+ Ajouter les heures</button>
       <div id="ch-heures-list" style="margin-top:12px"></div>
@@ -4520,6 +4534,14 @@ function ouvrirChantier(id) {
   document.getElementById('modal-chantier').classList.remove('hidden');
 }
 function toggleChip(el) { el.classList.toggle('selected'); }
+function toggleEnginsMenu() { const menu = document.getElementById('ch-h-engins'); if (menu) menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'flex' : 'none'; }
+function toggleEnginChip(el) { el.classList.toggle('selected'); majEnginsBtnLabel(); }
+function majEnginsBtnLabel() {
+  const btn = document.getElementById('ch-h-engins-btn');
+  if (!btn) return;
+  const n = document.querySelectorAll('#ch-h-engins .membre-chip.selected').length;
+  btn.textContent = (n ? `🚜 ${n} engin(s) sélectionné(s)` : '— Choisir les engins —') + ' ▾';
+}
 // Mini calendrier de sélection des jours du chantier
 function chCalNav(delta) { chCalRef = new Date(chCalRef.getFullYear(), chCalRef.getMonth() + delta, 1); renderChCalendrier(); }
 function toggleChJour(dStr) { if (chJoursSel.has(dStr)) chJoursSel.delete(dStr); else chJoursSel.add(dStr); renderChCalendrier(); }
@@ -4594,9 +4616,15 @@ function ouvrirChantierDetail(id) {
   const pool = [...new Set([...((chOuv && chOuv.equipe) || []), ...MEMBRES_CREATION, moi].filter(Boolean))];
   const ouvEl = document.getElementById('ch-h-ouvriers');
   if (ouvEl) ouvEl.innerHTML = pool.map(m => `<div class="membre-chip${m === moi ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`).join('');
-  // Cases engins (facultatif, multi-sélection) dans le formulaire heures
+  // Cases engins (facultatif, multi-sélection) dans le menu déroulant du formulaire heures
   const enginEl = document.getElementById('ch-h-engins');
-  if (enginEl) enginEl.innerHTML = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<div class="membre-chip" data-machine="${m.id}" onclick="toggleChip(this)">🚜 ${(m.nom || '').replace(/</g, '&lt;')}</div>`).join('') || '<span style="color:var(--gris);font-size:0.85rem">Aucune machine — créez-en dans Matériel</span>';
+  if (enginEl) { enginEl.innerHTML = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<div class="membre-chip" data-machine="${m.id}" onclick="toggleEnginChip(this)">🚜 ${(m.nom || '').replace(/</g, '&lt;')}</div>`).join('') || '<span style="color:var(--gris);font-size:0.85rem">Aucune machine — créez-en dans Matériel</span>'; enginEl.style.display = 'none'; }
+  majEnginsBtnLabel();
+  // Ligne machine de location (nom + prix) réservée à ceux qui peuvent saisir des coûts
+  const loueeGrp = document.getElementById('ch-h-louee-group');
+  if (loueeGrp) loueeGrp.style.display = peutSaisirCouts() ? '' : 'none';
+  const loueeIn = document.getElementById('ch-h-louee'); if (loueeIn) loueeIn.value = '';
+  const loueeCoutIn = document.getElementById('ch-h-louee-cout'); if (loueeCoutIn) loueeCoutIn.value = '';
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
   if (cg) cg.style.display = peutSaisirCouts() ? '' : 'none';
@@ -5821,16 +5849,29 @@ function ajouterHeureChantier() {
   if (!date || !ouvriers.length || !heures) { alert('Date, au moins un ouvrier et les heures sont requis.'); return; }
   const poste = document.getElementById('ch-h-poste').value;
   ouvriers.forEach(ouvrier => saveDoc('chantierHeures', { id: uuid(), chantierId: currentChantierDetailId, date, ouvrier, heures, poste }));
-  // Engin(s) éventuellement utilisé(s) ce jour (ajoutés en même temps que les heures)
+  // Engin(s) + machine de location éventuellement utilisés ce jour (ajoutés avec les heures)
+  const auteur = currentUser ? currentUser.name : '';
+  const duree = document.getElementById('ch-h-engin-duree').value;
   const enginChips = [...document.querySelectorAll('#ch-h-engins .membre-chip.selected')];
-  if (enginChips.length) {
-    const duree = document.getElementById('ch-h-engin-duree').value;
-    enginChips.forEach(chip => {
-      const machineId = chip.dataset.machine;
-      const m = appData.machines.find(x => x.id === machineId);
-      saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur: currentUser ? currentUser.name : '', ts: new Date().toISOString() });
-      chip.classList.remove('selected');
-    });
+  enginChips.forEach(chip => {
+    const machineId = chip.dataset.machine;
+    const m = appData.machines.find(x => x.id === machineId);
+    saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur, ts: new Date().toISOString() });
+    chip.classList.remove('selected');
+  });
+  majEnginsBtnLabel();
+  const enginMenu = document.getElementById('ch-h-engins'); if (enginMenu) enginMenu.style.display = 'none';
+  // Machine de location ce jour (nom + prix) → entre dans la rentabilité
+  const loueeIn = document.getElementById('ch-h-louee');
+  const loueeCoutIn = document.getElementById('ch-h-louee-cout');
+  const louee = loueeIn ? loueeIn.value.trim() : '';
+  const coutLoc = (loueeCoutIn && loueeCoutIn.value !== '') ? (parseFloat(loueeCoutIn.value) || 0) : null;
+  if (louee) {
+    const docLoc = { id: uuid(), chantierId: currentChantierDetailId, machineId: '', machineNom: louee, louee: true, date, duree, auteur, ts: new Date().toISOString() };
+    if (coutLoc !== null) docLoc.coutLocation = coutLoc;
+    saveDoc('chantierMachines', docLoc);
+    loueeIn.value = '';
+    if (loueeCoutIn) loueeCoutIn.value = '';
   }
   document.getElementById('ch-h-heures').value = '';
 }
