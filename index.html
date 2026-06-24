@@ -2085,8 +2085,11 @@ function voitCreation() { const p = poleUser(); return p === 'creation' || p ===
 function voitEntretien() { const p = poleUser(); return p === 'entretien' || p === 'direction'; }
 // Qui peut gérer les prix d'achat du stock (Marco + Justin)
 function peutPrixStock() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin'); }
-// Qui voit les finances des chantiers (budget + rentabilité) : Marco + Justin (devis Création)
+// Qui voit les finances des chantiers (budget + rentabilité + coûts internes du parc) : Marco + Justin (devis Création)
 function voitChantierFinances() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin'); }
+// Qui peut SAISIR les coûts terrain (prix matériaux utilisés, machine louée à la journée) : Marco + Justin + Thibaut (chef).
+// Thibaut peut indiquer ces coûts pour alimenter la rentabilité, mais ne voit pas la rentabilité globale ni les coûts internes du parc.
+function peutSaisirCouts() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin' || currentUser.name === 'Thibaut'); }
 // Adresse e-mail réelle de chaque compte Firebase Auth (les e-mails ne sont pas secrets)
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
@@ -4596,7 +4599,7 @@ function ouvrirChantierDetail(id) {
   if (enginEl) enginEl.innerHTML = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<div class="membre-chip" data-machine="${m.id}" onclick="toggleChip(this)">🚜 ${(m.nom || '').replace(/</g, '&lt;')}</div>`).join('') || '<span style="color:var(--gris);font-size:0.85rem">Aucune machine — créez-en dans Matériel</span>';
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
-  if (cg) cg.style.display = voitChantierFinances() ? '' : 'none';
+  if (cg) cg.style.display = peutSaisirCouts() ? '' : 'none';
   // Suggestions de matériaux depuis le stock
   const dl = document.getElementById('stock-datalist');
   if (dl) dl.innerHTML = (appData.stock || []).map(s => `<option value="${(s.nom || '').replace(/"/g, '&quot;')}">`).join('');
@@ -4838,9 +4841,11 @@ function renderChantierDetail() {
   const mcEl = document.getElementById('chantier-detail-machines');
   if (mcEl) {
     const finM = voitChantierFinances();
+    const peutCoutM = peutSaisirCouts(); // Marco/Justin + Thibaut : saisie d'une machine louée
     const machinesDispo = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
     const items = appData.chantierMachines.filter(x => x.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    const coutMachine = x => { const m = (appData.machines || []).find(mm => mm.id === x.machineId); return (m && parseFloat(m.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); };
+    const estLouee = x => x.coutLocation != null && x.coutLocation !== '';
+    const coutMachine = x => { if (estLouee(x)) return parseFloat(x.coutLocation) || 0; const m = (appData.machines || []).find(mm => mm.id === x.machineId); return (m && parseFloat(m.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); };
     const totalM = items.reduce((s, x) => s + coutMachine(x), 0);
     mcEl.innerHTML = `
       <div class="card-title">🚜 Engins / machines utilisés <span style="font-size:0.74rem;font-weight:600;color:var(--gris)">— journée ou demi-journée</span></div>
@@ -4854,13 +4859,19 @@ function renderChantierDetail() {
         <label class="form-label">Engin(s) <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— cochez-en un ou plusieurs</span></label>
         <div class="equipe-toggle" id="ch-mc-machines">${machinesDispo.length ? machinesDispo.map(m => `<div class="membre-chip" data-machine="${m.id}" onclick="toggleChip(this)">🚜 ${esc(m.nom)}</div>`).join('') : '<span style="color:var(--gris);font-size:0.85rem">(aucune machine — créez-en dans Matériel)</span>'}</div>
       </div>
+      ${peutCoutM ? `<div class="form-row" style="margin-top:2px;align-items:flex-end">
+        <div class="form-group" style="flex:2"><label class="form-label">🔑 …ou machine louée <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(nom)</span></label><input type="text" class="form-control" id="ch-mc-louee" placeholder="Ex : Mini-pelle, nacelle…"></div>
+        <div class="form-group"><label class="form-label">💶 Coût location (€)</label><input type="number" step="0.01" min="0" class="form-control" id="ch-mc-cout" placeholder="prix payé"></div>
+      </div>` : ''}
       <button class="btn btn-primary btn-sm" onclick="ajouterMachineChantier()">+ Ajouter l'engin</button>
       ${items.length ? `<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
         ${items.map(x => {
           const m = (appData.machines || []).find(mm => mm.id === x.machineId);
+          const loc = estLouee(x);
+          const montreCout = finM || (peutCoutM && loc);
           return `<div class="flex-between" style="gap:8px;padding:6px 8px;background:#f8f9fa;border-radius:8px">
-            <div style="min-width:0;flex:1">🚜 ${esc(m ? m.nom : (x.machineNom || 'Engin supprimé'))} <span style="color:var(--gris);font-size:0.8rem">· ${x.duree === 'demi' ? '½ journée' : 'journée'} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
-            ${finM ? `<span style="font-weight:700;color:#1e5631;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
+            <div style="min-width:0;flex:1">${loc ? '🔑' : '🚜'} ${esc(m ? m.nom : (x.machineNom || 'Engin supprimé'))}${loc ? ' <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>' : ''} <span style="color:var(--gris);font-size:0.8rem">· ${x.duree === 'demi' ? '½ journée' : 'journée'} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
+            ${montreCout ? `<span style="font-weight:700;color:#1e5631;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
             <button onclick="supprimerMachineChantier('${x.id}')" title="Retirer" style="background:none;border:none;cursor:pointer;flex:none">🗑️</button>
           </div>`;
         }).join('')}
@@ -4884,10 +4895,11 @@ function renderChantierDetail() {
 
   const mats = appData.chantierMateriaux.filter(m => m.chantierId === ch.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const estMarco = voitChantierFinances();
+  const peutCout = peutSaisirCouts(); // Marco/Justin + Thibaut : peuvent saisir/voir le coût des matériaux
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
-        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${estMarco ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${estMarco ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${peutCout ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -4903,7 +4915,7 @@ function renderChantierDetail() {
       const matSansCout = mats.filter(m => !m.cout).length;
       const appros = appData.chantierAppro.filter(a => a.chantierId === ch.id);
       const coutAppro = appros.reduce((s, a) => s + (parseFloat(a.quantite) || 0) * (parseFloat(a.prix) || 0), 0);
-      const coutMachines = (appData.chantierMachines || []).filter(x => x.chantierId === ch.id).reduce((s, x) => { const mm = (appData.machines || []).find(m => m.id === x.machineId); return s + (mm && parseFloat(mm.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); }, 0);
+      const coutMachines = (appData.chantierMachines || []).filter(x => x.chantierId === ch.id).reduce((s, x) => { if (x.coutLocation != null && x.coutLocation !== '') return s + (parseFloat(x.coutLocation) || 0); const mm = (appData.machines || []).find(m => m.id === x.machineId); return s + (mm && parseFloat(mm.coutJour) || 0) * (x.duree === 'demi' ? 0.5 : 1); }, 0);
       const coutTotal = coutMO + coutMat + coutAppro + coutMachines;
       // Part « hors devis » (supplément) à refacturer en plus
       const coutMOSupp = totalHSupp * tauxH;
@@ -5828,12 +5840,24 @@ function ajouterMachineChantier() {
   const machineIds = [...document.querySelectorAll('#ch-mc-machines .membre-chip.selected')].map(c => c.dataset.machine);
   const date = document.getElementById('ch-mc-date').value;
   const duree = document.getElementById('ch-mc-duree').value;
-  if (!machineIds.length) { alert('Cochez au moins un engin (créez-en dans Matériel si besoin).'); return; }
+  const loueeEl = document.getElementById('ch-mc-louee');
+  const coutEl = document.getElementById('ch-mc-cout');
+  const louee = loueeEl ? loueeEl.value.trim() : '';
+  const coutLoc = (coutEl && coutEl.value !== '') ? (parseFloat(coutEl.value) || 0) : null;
+  if (!machineIds.length && !louee) { alert('Cochez au moins un engin, ou indiquez le nom d\'une machine louée.'); return; }
   if (!date) { alert('Indiquez la date.'); return; }
+  const auteur = currentUser ? currentUser.name : '';
   machineIds.forEach(machineId => {
     const m = appData.machines.find(x => x.id === machineId);
-    saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur: currentUser ? currentUser.name : '', ts: new Date().toISOString() });
+    saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId, machineNom: m ? m.nom : '', date, duree, auteur, ts: new Date().toISOString() });
   });
+  if (louee) {
+    const doc = { id: uuid(), chantierId: currentChantierDetailId, machineId: '', machineNom: louee, louee: true, date, duree, auteur, ts: new Date().toISOString() };
+    if (coutLoc !== null) doc.coutLocation = coutLoc;
+    saveDoc('chantierMachines', doc);
+    if (loueeEl) loueeEl.value = '';
+    if (coutEl) coutEl.value = '';
+  }
 }
 function supprimerMachineChantier(id) { deleteDoc('chantierMachines', id); }
 function ajouterMateriauChantier() {
@@ -5860,7 +5884,7 @@ function ajouterMateriauChantier() {
 }
 function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
 function modifierCoutMateriau(id) {
-  if (!voitChantierFinances()) return;
+  if (!peutSaisirCouts()) return;
   const m = appData.chantierMateriaux.find(x => x.id === id);
   if (!m) return;
   const actuel = (m.cout != null && m.cout !== '') ? m.cout : '';
