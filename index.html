@@ -784,6 +784,13 @@
       <div class="form-group" style="max-width:260px"><label class="form-label">Durée des engins</label>
         <select class="form-control" id="ch-h-engin-duree"><option value="jour">🌞 Journée</option><option value="demi">🌗 Demi-journée</option></select>
       </div>
+      <div class="form-group" style="max-width:320px"><label class="form-label">🚚 Transport camion <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(90 €/h)</span></label>
+        <select class="form-control" id="ch-h-transport">
+          <option value="0">— aucun —</option>
+          <option value="1">1 h</option><option value="2">2 h</option><option value="3">3 h</option><option value="4">4 h</option><option value="5">5 h</option>
+          <option value="6">6 h</option><option value="7">7 h</option><option value="8">8 h</option><option value="9">9 h</option><option value="10">10 h</option>
+        </select>
+      </div>
       <div class="form-group" id="ch-h-louee-group">
         <label class="form-label">🔑 Machine de location utilisée ce jour <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(facultatif)</span></label>
         <div class="form-row" style="align-items:flex-end">
@@ -4157,6 +4164,8 @@ const STATUTS_CHANTIER = {
 };
 // Unités proposées dans l'avancement
 const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
+// Tarif horaire du transport camion (entre dans la rentabilité du chantier)
+const TRANSPORT_TARIF = 90;
 // Équipe Création (pour affecter les ouvriers à un chantier)
 const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
 // Étapes d'avancement type d'un chantier d'aménagement
@@ -4625,6 +4634,7 @@ function ouvrirChantierDetail(id) {
   if (loueeGrp) loueeGrp.style.display = peutSaisirCouts() ? '' : 'none';
   const loueeIn = document.getElementById('ch-h-louee'); if (loueeIn) loueeIn.value = '';
   const loueeCoutIn = document.getElementById('ch-h-louee-cout'); if (loueeCoutIn) loueeCoutIn.value = '';
+  const transIn = document.getElementById('ch-h-transport'); if (transIn) transIn.value = '0';
   // Champ coût matériau réservé à Marco
   const cg = document.getElementById('ch-m-cout-group');
   if (cg) cg.style.display = peutSaisirCouts() ? '' : 'none';
@@ -4880,10 +4890,14 @@ function renderChantierDetail() {
       ${items.length ? `<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
         ${items.map(x => {
           const m = (appData.machines || []).find(mm => mm.id === x.machineId);
-          const loc = estLouee(x);
-          const montreCout = finM || (peutCoutM && loc);
+          const trans = !!x.transport;
+          const loc = !trans && estLouee(x);
+          const montreCout = finM || (peutCoutM && (loc || trans));
+          const icone = trans ? '🚚' : (loc ? '🔑' : '🚜');
+          const nom = trans ? 'Transport camion' : (m ? m.nom : (x.machineNom || 'Engin supprimé'));
+          const meta = trans ? `${x.heuresTransport || '?'} h` : `${x.duree === 'demi' ? '½ journée' : 'journée'}`;
           return `<div class="flex-between" style="gap:8px;padding:6px 8px;background:#f8f9fa;border-radius:8px">
-            <div style="min-width:0;flex:1">${loc ? '🔑' : '🚜'} ${esc(m ? m.nom : (x.machineNom || 'Engin supprimé'))}${loc ? ' <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>' : ''} <span style="color:var(--gris);font-size:0.8rem">· ${x.duree === 'demi' ? '½ journée' : 'journée'} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
+            <div style="min-width:0;flex:1">${icone} ${esc(nom)}${loc ? ' <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>' : ''} <span style="color:var(--gris);font-size:0.8rem">· ${meta} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
             ${montreCout ? `<span style="font-weight:700;color:#1e5631;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
             <button onclick="supprimerMachineChantier('${x.id}')" title="Retirer" style="background:none;border:none;cursor:pointer;flex:none">🗑️</button>
           </div>`;
@@ -5857,6 +5871,13 @@ function ajouterHeureChantier() {
     saveDoc('chantierMachines', docLoc);
     loueeIn.value = '';
     if (loueeCoutIn) loueeCoutIn.value = '';
+  }
+  // Transport camion (90 €/h) → entre dans la rentabilité
+  const transEl = document.getElementById('ch-h-transport');
+  const transH = transEl ? parseInt(transEl.value, 10) || 0 : 0;
+  if (transH > 0) {
+    saveDoc('chantierMachines', { id: uuid(), chantierId: currentChantierDetailId, machineId: '', machineNom: 'Transport camion', transport: true, heuresTransport: transH, coutLocation: +(transH * TRANSPORT_TARIF), date, auteur, ts: new Date().toISOString() });
+    transEl.value = '0';
   }
   document.getElementById('ch-h-heures').value = '';
 }
