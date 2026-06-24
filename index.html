@@ -4927,7 +4927,7 @@ function renderChantierDetail() {
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${peutCout ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right"><button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right;white-space:nowrap">${peutCout && m.cout ? `<button onclick="memoriserPrixMateriau('${m.id}')" title="Mémoriser ce prix dans le Stock (repris automatiquement la prochaine fois)" style="background:none;border:none;cursor:pointer">💾</button>` : ''}<button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -5924,6 +5924,29 @@ function ajouterMateriauChantier() {
   if (coutEl) coutEl.value = '';
 }
 function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
+function memoriserPrixMateriau(id) {
+  if (!peutSaisirCouts()) return;
+  const m = appData.chantierMateriaux.find(x => x.id === id);
+  if (!m) return;
+  const cout = parseFloat(m.cout);
+  const qte = parseFloat(m.quantite);
+  if (!cout || !qte) { alert('Indiquez d\'abord un coût et une quantité sur ce matériau pour mémoriser son prix.'); return; }
+  const nom = (m.designation || '').trim();
+  if (!nom) return;
+  const prixUnit = +(cout / qte).toFixed(2);
+  const unite = m.unite || 'unité';
+  const existant = appData.stock.find(s => (s.nom || '').toLowerCase() === nom.toLowerCase());
+  if (existant) {
+    const actuel = (existant.prixAchat != null && existant.prixAchat !== '') ? `\n(prix actuel enregistré : ${existant.prixAchat} €)` : '';
+    if (!confirm(`Mettre à jour le prix d'achat de « ${nom} » dans le Stock à ${prixUnit} €/${existant.unite || unite} ?${actuel}`)) return;
+    saveDoc('stock', { ...existant, prixAchat: prixUnit, unite: existant.unite || m.unite || '' });
+    alert(`✅ Prix mis à jour dans le Stock : ${nom} → ${prixUnit} €/${existant.unite || unite}`);
+  } else {
+    if (!confirm(`« ${nom} » n'est pas encore dans le Stock.\nL'ajouter avec un prix d'achat de ${prixUnit} €/${unite} ?\n(Il sera repris automatiquement la prochaine fois.)`)) return;
+    saveDoc('stock', { id: uuid(), nom, categorie: 'materiaux', statut: 'dispo', quantite: '', unite: m.unite || '', emplacement: '', fournisseur: '', notes: 'Prix mémorisé depuis un chantier', prixAchat: prixUnit });
+    alert(`✅ Ajouté au Stock : ${nom} → ${prixUnit} €/${unite}`);
+  }
+}
 function modifierCoutMateriau(id) {
   if (!peutSaisirCouts()) return;
   const m = appData.chantierMateriaux.find(x => x.id === id);
