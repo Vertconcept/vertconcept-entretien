@@ -3183,6 +3183,10 @@ function renderTontes() {
         <div class="name">${c.nom}</div>
         <div class="info">📍 ${c.adresse || '—'}</div>
         ${estMarco ? `<div class="info" style="color:var(--vert);font-weight:700">${c.tontePrix ? `💶 ${eur(c.tontePrix)}/tonte · ${eur(montantClient(c))}/an` : '💶 prix à définir'}</div>` : ''}
+        ${modeAdmin ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="ouvrirFormClient('${c.id}')" title="Modifier la fiche (prix, infos…)">✏️ Modifier</button>
+          <button class="btn btn-danger btn-sm" onclick="arreterTonte('${c.id}')" title="Retirer du tour de tonte (la fiche client est conservée)">🚫 Arrêter la tonte</button>
+        </div>` : ''}
       </div>`).join('')
     : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
 
@@ -3335,6 +3339,12 @@ function nbPassagesClientAnnee(clientId) {
   return (appData.tontesPassages || []).filter(p => p.clientId === clientId && (p.date || '').startsWith(annee)).length;
 }
 // Cocher / décocher une tonte : ajoute un passage aujourd'hui, ou retire celui de la semaine
+function arreterTonte(id) {
+  const c = appData.clients.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`Arrêter le contrat de tonte de « ${c.nom} » ?\n\n• Il sera retiré du tour de tonte et du budget.\n• Sa fiche client est conservée (vous pourrez réactiver la tonte plus tard via ✏️ Modifier).`)) return;
+  saveDoc('clients', { ...c, tonte: false });
+}
 function toggleTontePassage(clientId) {
   const recent = passageRecentClient(clientId);
   if (recent) deleteDoc('tontesPassages', recent.id);
