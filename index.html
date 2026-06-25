@@ -3620,6 +3620,12 @@ function sauvegarderIntervention() {
   const statut = document.getElementById('interv-statut').value;
   const heuresParMembre = statut === 'termine' ? getHeuresFromForm() : (currentIntervId ? data.interventions.find(i=>i.id===currentIntervId)?.heuresParMembre : null);
   const prev = currentIntervId ? data.interventions.find(i=>i.id===currentIntervId) : null;
+  // Lier la conso de stock : déstocker les nouvelles lignes, recréditer celles retirées (pas pour une récurrence)
+  if (!(document.getElementById('interv-recurrent').checked && !currentIntervId)) {
+    const prevMats = (prev && prev.materiaux) || [];
+    prevMats.forEach(pm => { if (pm.stockConsoId && !ivMatTemp.some(nm => nm.id === pm.id)) recrediterStock(pm.stockConsoId, pm.stockConsoQte); });
+    ivMatTemp.forEach(nm => { if (!nm.stockConsoId) { const sid = consommerStock(nm.designation, nm.quantite); if (sid) { nm.stockConsoId = sid; nm.stockConsoQte = nm.quantite; } } });
+  }
   const iv = {
     id: currentIntervId || uuid(),
     clientId,
@@ -3980,7 +3986,7 @@ function remplirIvStockSection(iv) {
     el.style.display = 'none';
   }
   majIvEnginsLabel();
-  ivMatTemp = ((iv && iv.materiaux) || []).map(x => ({ ...x }));
+  ivMatTemp = ((iv && iv.materiaux) || []).map(x => ({ id: x.id || uuid(), ...x }));
   ivMachLoueeTemp = ((iv && iv.machines) || []).filter(x => x.louee).map(x => ({ ...x }));
   renderIvMatList();
   renderIvMachLoueeList();
@@ -3999,7 +4005,7 @@ function ajouterMatInterv() {
   const qteRaw = document.getElementById('iv-mat-qte').value.trim();
   const unite = document.getElementById('iv-mat-unite').value.trim();
   if (!nom) { alert('Indiquez le matériel / la fourniture.'); return; }
-  ivMatTemp.push({ designation: nom, quantite: qteRaw !== '' ? (parseFloat(qteRaw) || qteRaw) : '', unite });
+  ivMatTemp.push({ id: uuid(), designation: nom, quantite: qteRaw !== '' ? (parseFloat(qteRaw) || qteRaw) : '', unite });
   document.getElementById('iv-mat-nom').value = '';
   document.getElementById('iv-mat-qte').value = '';
   document.getElementById('iv-mat-unite').value = '';
@@ -5053,7 +5059,7 @@ function renderChantierDetail() {
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${peutCout ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right;white-space:nowrap">${peutCout && m.cout ? `<button onclick="memoriserPrixMateriau('${m.id}')" title="Mémoriser ce prix dans le Stock (repris automatiquement la prochaine fois)" style="background:none;border:none;cursor:pointer">💾</button>` : ''}<button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}${m.stockConsoId ? ' <span title="Quantité retirée du stock" style="font-size:0.72rem;color:#1e5631;white-space:nowrap">📦➖</span>' : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right;white-space:nowrap">${peutCout && m.cout ? `<button onclick="memoriserPrixMateriau('${m.id}')" title="Mémoriser ce prix dans le Stock (repris automatiquement la prochaine fois)" style="background:none;border:none;cursor:pointer">💾</button>` : ''}<button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -6034,6 +6040,35 @@ function ajouterMachineChantier() {
   }
 }
 function supprimerMachineChantier(id) { deleteDoc('chantierMachines', id); }
+// ===== Lien matériaux ↔ stock : déduire la conso, recréditer si la ligne est retirée =====
+// Retire `qte` de l'article du stock portant ce nom (quantité numérique requise). Renvoie l'id du stock si appliqué.
+function consommerStock(nom, qte) {
+  const used = parseFloat(qte);
+  if (!nom || !used || isNaN(used)) return null;
+  const art = appData.stock.find(s => (s.nom || '').toLowerCase() === ('' + nom).toLowerCase().trim());
+  if (!art) return null;
+  if ((art.categorie || '') === 'marchandise') return null; // hors stock : pas d'inventaire à décompter
+  const q = ('' + (art.quantite ?? '')).trim();
+  const mm = q.match(/^(-?\d+(?:[.,]\d+)?)(.*)$/);
+  if (!mm) return null; // quantité non numérique → on ne touche pas le stock
+  const suffix = mm[2] || '';
+  let nv = +(parseFloat(mm[1].replace(',', '.')) - used).toFixed(3);
+  if (nv < 0) nv = 0;
+  saveDoc('stock', { ...art, quantite: (suffix.trim() ? (nv + suffix) : ('' + nv)) });
+  return art.id;
+}
+// Recrédite `qte` à l'article (par id) — quand on supprime une ligne déjà déstockée.
+function recrediterStock(stockId, qte) {
+  const used = parseFloat(qte);
+  if (!stockId || !used || isNaN(used)) return;
+  const art = appData.stock.find(s => s.id === stockId);
+  if (!art) return;
+  const q = ('' + (art.quantite ?? '')).trim();
+  const mm = q.match(/^(-?\d+(?:[.,]\d+)?)(.*)$/);
+  const suffix = mm ? (mm[2] || '') : '';
+  const base = mm ? parseFloat(mm[1].replace(',', '.')) : 0;
+  saveDoc('stock', { ...art, quantite: (suffix.trim() ? (+(base + used).toFixed(3) + suffix) : ('' + +(base + used).toFixed(3))) });
+}
 function ajouterMateriauChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-m-date').value;
@@ -6051,12 +6086,19 @@ function ajouterMateriauChantier() {
   const poste = document.getElementById('ch-m-poste').value;
   const doc = { id: uuid(), chantierId: currentChantierDetailId, date, designation, quantite, unite, poste };
   if (cout !== null) doc.cout = cout;
+  // Lier au stock : retirer la quantité utilisée de l'inventaire (si l'article y existe)
+  const sid = consommerStock(designation, quantite);
+  if (sid) { doc.stockConsoId = sid; doc.stockConsoQte = quantite; }
   saveDoc('chantierMateriaux', doc);
   document.getElementById('ch-m-designation').value = '';
   document.getElementById('ch-m-qte').value = '';
   if (coutEl) coutEl.value = '';
 }
-function supprimerMateriauChantier(id) { deleteDoc('chantierMateriaux', id); }
+function supprimerMateriauChantier(id) {
+  const m = appData.chantierMateriaux.find(x => x.id === id);
+  if (m && m.stockConsoId) recrediterStock(m.stockConsoId, m.stockConsoQte);
+  deleteDoc('chantierMateriaux', id);
+}
 function memoriserPrixMateriau(id) {
   if (!peutSaisirCouts()) return;
   const m = appData.chantierMateriaux.find(x => x.id === id);
