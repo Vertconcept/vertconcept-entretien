@@ -1243,6 +1243,7 @@
             <option value="phyto">🧪 Produits phyto</option>
             <option value="materiaux">🧱 Matériaux</option>
             <option value="autre">📦 Autre</option>
+            <option value="marchandise">🚚 Marchandise (hors stock — ex : stabilisé centrale béton)</option>
           </select>
         </div>
         <div class="form-group">
@@ -6069,14 +6070,21 @@ function memoriserPrixMateriau(id) {
   const unite = m.unite || 'unité';
   const existant = appData.stock.find(s => (s.nom || '').toLowerCase() === nom.toLowerCase());
   if (existant) {
+    const ouMarch = (existant.categorie || '') === 'marchandise' ? ' (Marchandise hors stock)' : ' (Stock)';
     const actuel = (existant.prixAchat != null && existant.prixAchat !== '') ? `\n(prix actuel enregistré : ${existant.prixAchat} €)` : '';
-    if (!confirm(`Mettre à jour le prix d'achat de « ${nom} » dans le Stock à ${prixUnit} €/${existant.unite || unite} ?${actuel}`)) return;
+    if (!confirm(`Mettre à jour le prix d'achat de « ${nom} »${ouMarch} à ${prixUnit} €/${existant.unite || unite} ?${actuel}`)) return;
     saveDoc('stock', { ...existant, prixAchat: prixUnit, unite: existant.unite || m.unite || '' });
-    alert(`✅ Prix mis à jour dans le Stock : ${nom} → ${prixUnit} €/${existant.unite || unite}`);
+    alert(`✅ Prix mis à jour : ${nom} → ${prixUnit} €/${existant.unite || unite}`);
   } else {
-    if (!confirm(`« ${nom} » n'est pas encore dans le Stock.\nL'ajouter avec un prix d'achat de ${prixUnit} €/${unite} ?\n(Il sera repris automatiquement la prochaine fois.)`)) return;
-    saveDoc('stock', { id: uuid(), nom, categorie: 'materiaux', statut: 'dispo', quantite: '', unite: m.unite || '', emplacement: '', fournisseur: '', notes: 'Prix mémorisé depuis un chantier', prixAchat: prixUnit });
-    alert(`✅ Ajouté au Stock : ${nom} → ${prixUnit} €/${unite}`);
+    // Nouveau produit : choisir Stock (inventaire) ou Marchandise (hors stock, ex : stabilisé centrale béton)
+    const march = confirm(`Enregistrer le prix de « ${nom} » (${prixUnit} €/${unite}) où ?\n\n• OK = 🚚 MARCHANDISE hors stock (achat journalier, ex : stabilisé / centrale béton)\n• Annuler = 📦 STOCK (inventaire du dépôt)`);
+    if (march) {
+      saveDoc('stock', { id: uuid(), nom, categorie: 'marchandise', statut: 'dispo', quantite: '', unite: m.unite || '', emplacement: '', fournisseur: '', notes: 'Marchandise hors stock — prix mémorisé depuis un chantier', prixAchat: prixUnit });
+      alert(`✅ Ajouté aux Marchandises (hors stock) : ${nom} → ${prixUnit} €/${unite}`);
+    } else {
+      saveDoc('stock', { id: uuid(), nom, categorie: 'materiaux', statut: 'dispo', quantite: '', unite: m.unite || '', emplacement: '', fournisseur: '', notes: 'Prix mémorisé depuis un chantier', prixAchat: prixUnit });
+      alert(`✅ Ajouté au Stock : ${nom} → ${prixUnit} €/${unite}`);
+    }
   }
 }
 function modifierCoutMateriau(id) {
@@ -6710,7 +6718,8 @@ const STOCK_CATEGORIES = {
   amendements: { label: '🪴 Amendements',     c: '#8d6e63' },
   phyto:       { label: '🧪 Produits phyto',  c: '#c0392b' },
   materiaux:   { label: '🧱 Matériaux',       c: '#5d6d7e' },
-  autre:       { label: '📦 Autre',           c: '#7f8c8d' }
+  autre:       { label: '📦 Autre',           c: '#7f8c8d' },
+  marchandise: { label: '🚚 Marchandise (hors stock)', c: '#e67e22', horsStock: true }
 };
 const STOCK_STATUTS = {
   dispo:   { label: '✅ En stock',     c: '#1e5631', bg: '#1e563118' },
@@ -6729,7 +6738,8 @@ function renderStock() {
   const chips = document.getElementById('stock-filtres');
   if (chips) {
     const cats = ['tout', ...Object.keys(STOCK_CATEGORIES)];
-    const compteur = c => c === 'tout' ? stock.length : stock.filter(i => (i.categorie || 'autre') === c).length;
+    const estMarch = i => (i.categorie || 'autre') === 'marchandise';
+    const compteur = c => c === 'tout' ? stock.filter(i => !estMarch(i)).length : stock.filter(i => (i.categorie || 'autre') === c).length;
     chips.innerHTML = cats.map(c => {
       const lbl = c === 'tout' ? '📋 Tout' : STOCK_CATEGORIES[c].label;
       return `<button onclick="setStockFiltre('${c}')" class="membre-chip${stockFiltre === c ? ' selected' : ''}">${lbl} <span style="opacity:0.6">(${compteur(c)})</span></button>`;
@@ -6737,7 +6747,9 @@ function renderStock() {
   }
   const q = (document.getElementById('stock-search')?.value || '').toLowerCase().trim();
   let items = [...stock];
-  if (stockFiltre !== 'tout') items = items.filter(i => (i.categorie || 'autre') === stockFiltre);
+  // « Tout » = inventaire réel uniquement ; les marchandises (hors stock) ne s'affichent que via leur filtre dédié.
+  if (stockFiltre === 'tout') items = items.filter(i => (i.categorie || 'autre') !== 'marchandise');
+  else items = items.filter(i => (i.categorie || 'autre') === stockFiltre);
   if (q) items = items.filter(i => (i.nom || '').toLowerCase().includes(q) || (i.notes || '').toLowerCase().includes(q) || (i.fournisseur || '').toLowerCase().includes(q));
   const ordreStatut = { rupture: 0, bas: 1, dispo: 2 };
   items.sort((a, b) => (ordreStatut[a.statut] ?? 2) - (ordreStatut[b.statut] ?? 2) || (a.nom || '').localeCompare(b.nom || ''));
@@ -6758,9 +6770,10 @@ function renderStock() {
   // Bandeau valeur totale + export (Marco uniquement, sur tout le stock)
   let enteteMarco = '';
   if (estMarco) {
-    const valorises = stock.filter(it => it.prixAchat != null && it.prixAchat !== '');
+    const stockReel = stock.filter(it => (it.categorie || 'autre') !== 'marchandise');
+    const valorises = stockReel.filter(it => it.prixAchat != null && it.prixAchat !== '');
     const total = valorises.reduce((s, it) => s + valeurLigne(it), 0);
-    const sansPrix = stock.length - valorises.length;
+    const sansPrix = stockReel.length - valorises.length;
     enteteMarco = `<div class="card" style="margin-bottom:10px;border-left:5px solid #1e5631;background:#1e56310d">
       <div class="flex-between" style="flex-wrap:wrap;gap:8px;align-items:center">
         <div><strong>💰 Valeur totale du stock : ${eurFmt(total)}</strong> <span style="font-size:0.8rem;color:var(--gris)">HTVA · ${valorises.length} article(s) valorisé(s)${sansPrix ? ` · ${sansPrix} sans prix` : ''}</span></div>
@@ -6769,10 +6782,12 @@ function renderStock() {
     </div>`;
   }
 
-  list.innerHTML = enteteMarco + rappel + items.map(i => {
+  const noteMarch = stockFiltre === 'marchandise' ? `<div class="card" style="margin-bottom:10px;border-left:5px solid #e67e22;background:#e67e220d;font-size:0.85rem">🚚 <strong>Marchandises hors stock</strong> — produits achetés à la journée (ex : stabilisé à la centrale béton). Leur prix sert à la rentabilité des chantiers mais ils ne comptent PAS dans la valeur du stock.</div>` : '';
+  list.innerHTML = enteteMarco + rappel + noteMarch + items.map(i => {
     const cat = STOCK_CATEGORIES[i.categorie] || STOCK_CATEGORIES.autre;
+    const march = (i.categorie || 'autre') === 'marchandise';
     const st = STOCK_STATUTS[i.statut] || STOCK_STATUTS.dispo;
-    const qte = i.quantite ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '';
+    const qte = (!march && i.quantite) ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '';
     const sousLigne = [cat.label, i.emplacement ? `📍 ${esc(i.emplacement)}` : '', i.fournisseur ? `🏪 ${esc(i.fournisseur)}` : ''].filter(Boolean).join(' · ');
     const lignePrix = (estMarco && i.prixAchat != null && i.prixAchat !== '')
       ? `<div style="font-size:0.8rem;color:#1e5631;margin-top:2px">💰 ${eurFmt(i.prixAchat)}/u${valeurLigne(i) ? ` · valeur ${eurFmt(valeurLigne(i))}` : ''}</div>` : '';
@@ -6785,9 +6800,11 @@ function renderStock() {
           ${i.notes ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:2px">📝 ${esc(i.notes)}</div>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-          <button onclick="cyclerStatutStock('${i.id}')" title="Cliquer pour changer la disponibilité" style="border:none;cursor:pointer;font-weight:800;font-size:0.8rem;padding:6px 13px;border-radius:20px;background:${st.bg};color:${st.c};white-space:nowrap">${st.label}</button>
+          ${march
+            ? `<span style="font-weight:800;font-size:0.74rem;padding:5px 11px;border-radius:20px;background:#e67e2222;color:#e67e22;white-space:nowrap">🚚 hors stock</span>`
+            : `<button onclick="cyclerStatutStock('${i.id}')" title="Cliquer pour changer la disponibilité" style="border:none;cursor:pointer;font-weight:800;font-size:0.8rem;padding:6px 13px;border-radius:20px;background:${st.bg};color:${st.c};white-space:nowrap">${st.label}</button>`}
           <div style="display:flex;gap:6px">
-            ${i.statut === 'rupture' ? `<button class="btn btn-secondary btn-sm" onclick="ajouterStockACommander('${i.id}')" title="Ajouter à la liste À commander">🛒 À commander</button>` : ''}
+            ${(!march && i.statut === 'rupture') ? `<button class="btn btn-secondary btn-sm" onclick="ajouterStockACommander('${i.id}')" title="Ajouter à la liste À commander">🛒 À commander</button>` : ''}
             <button class="btn btn-secondary btn-sm" onclick="ouvrirStock('${i.id}')">✏️</button>
           </div>
         </div>
@@ -6877,7 +6894,7 @@ function exporterStockComptable() {
   const num = v => (v === null || v === undefined || v === '') ? '' : (parseFloat(v) || 0);
   let total = 0;
   const lignes = stock
-    .slice()
+    .filter(i => (i.categorie || 'autre') !== 'marchandise') // marchandises = achats journaliers, pas de l'inventaire
     .sort((a, b) => (a.categorie || '').localeCompare(b.categorie || '') || (a.nom || '').localeCompare(b.nom || ''))
     .map(i => {
       const q = parseFloat(i.quantite) || 0;
