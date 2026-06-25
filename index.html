@@ -3055,7 +3055,7 @@ function renderFiche() {
       <div class="fiche-interv-body">
         <div class="fiche-field">
           <div class="fiche-field-label">📍 Adresse</div>
-          <div class="fiche-field-value">${adresse}</div>
+          <div class="fiche-field-value">${lienAdresse(adresse)}</div>
         </div>
         <div class="fiche-field">
           <div class="fiche-field-label">👷 Équipe</div>
@@ -3703,6 +3703,14 @@ function prevenirWhatsApp(id) {
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
+// Adresse cliquable → ouvre Google Maps (itinéraire) + lien Waze. Renvoie du HTML.
+function lienAdresse(adresse) {
+  const a = ('' + (adresse || '')).trim();
+  if (!a || a === '—') return a || '—';
+  const q = encodeURIComponent(a);
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<a href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener" title="Ouvrir dans Google Maps / Plans" style="color:var(--vert);font-weight:600;text-decoration:underline">${esc(a)}</a> <a href="https://waze.com/ul?q=${q}" target="_blank" rel="noopener" title="Ouvrir dans Waze" style="white-space:nowrap;font-size:0.78rem;text-decoration:none;margin-left:6px">🧭 Waze</a>`;
+}
 function ouvrirDetailIntervention(id) {
   const { interventions, clients } = getData();
   const iv = interventions.find(i => i.id === id);
@@ -3718,7 +3726,7 @@ function ouvrirDetailIntervention(id) {
       <div><div class="fiche-field-label">📅 Date</div><div>${formatDateFR(iv.date)}</div></div>
       <div><div class="fiche-field-label">Type / Statut</div><div><span class="badge badge-${iv.type}">${iv.type}</span> ${statutBadgeHtml(iv.statut)}</div></div>
       ${iv.statut === 'en-attente' ? `<div style="grid-column:1/-1"><div style="background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:8px 12px;font-size:0.85rem">⏳ Fiche soumise par <strong>${iv.soumisePar || '?'}</strong> le ${iv.soumiseDate ? formatDateFR(iv.soumiseDate) : '?'} — en attente de validation admin</div></div>` : ''}
-      <div><div class="fiche-field-label">📍 Adresse</div><div>${adresse}</div></div>
+      <div><div class="fiche-field-label">📍 Adresse</div><div>${lienAdresse(adresse)}</div></div>
       <div><div class="fiche-field-label">👷 Équipe</div><div>${membres}</div></div>
       <div><div class="fiche-field-label">🔧 Matériel</div><div>${iv.materiel || '—'}</div></div>
       <div><div class="fiche-field-label">🌿 Déchets verts</div><div>${iv.dechets ? iv.dechets + ' m³' : '—'}</div></div>
@@ -6366,7 +6374,7 @@ function ouvrirFicheFacturation(id) {
 
       <div class="ff-grid">
         <div class="ff-field"><div class="lbl">Client</div><div class="val"><strong>${client?.nom || '—'}</strong></div></div>
-        <div class="ff-field"><div class="lbl">Adresse</div><div class="val">${iv.adresse || client?.adresse || '—'}</div></div>
+        <div class="ff-field"><div class="lbl">Adresse</div><div class="val">${lienAdresse(iv.adresse || client?.adresse || '')}</div></div>
         <div class="ff-field"><div class="lbl">Type d'intervention</div><div class="val">${iv.type}</div></div>
         <div class="ff-field"><div class="lbl">Chef d'équipe</div><div class="val">${iv.chef}</div></div>
         ${iv.materiel ? `<div class="ff-field" style="grid-column:1/-1"><div class="lbl">Matériel utilisé</div><div class="val">${iv.materiel}</div></div>` : ''}
@@ -7208,7 +7216,7 @@ function renderValidationList() {
         </div>
       </div>
       <div class="validation-item-body">
-        <div><div class="field-lbl">📍 Adresse</div>${client ? client.adresse : '—'}</div>
+        <div><div class="field-lbl">📍 Adresse</div>${lienAdresse(client ? client.adresse : '')}</div>
         <div><div class="field-lbl">🔧 Matériel</div>${iv.materiel || '—'}</div>
         <div><div class="field-lbl">🌿 Déchets verts</div>${iv.dechets ? iv.dechets + ' m³' : '—'}</div>
         <div><div class="field-lbl">⏱️ Durée estimée</div>${iv.duree ? iv.duree + ' h' : '—'}</div>
