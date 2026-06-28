@@ -804,6 +804,13 @@
 
     <div class="card">
       <div class="card-title">🧱 Matériaux emportés / utilisés</div>
+      <div class="ms-wrap" style="margin-bottom:8px">
+        <button type="button" class="form-control ms-toggle" id="ch-m-articles-btn" onclick="toggleArticlesPicker()">📋 Choisir un article préencodé (stock / marchandises) ▾</button>
+        <div class="ms-menu" id="ch-m-articles-menu" style="display:none">
+          <input type="text" class="form-control" id="ch-m-articles-search" placeholder="🔎 Rechercher un article…" oninput="renderArticlesPicker()" style="margin-bottom:8px">
+          <div id="ch-m-articles-list"></div>
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-control" id="ch-m-date"></div>
         <div class="form-group" style="flex:2"><label class="form-label">Matériau</label><input type="text" class="form-control" id="ch-m-designation" list="stock-datalist" placeholder="Ex : Stabilisé, gravier, dalles, sable…"><datalist id="stock-datalist"></datalist></div>
@@ -6084,6 +6091,44 @@ function recrediterStock(stockId, qte) {
   const base = mm ? parseFloat(mm[1].replace(',', '.')) : 0;
   saveDoc('stock', { ...art, quantite: (suffix.trim() ? (+(base + used).toFixed(3) + suffix) : ('' + +(base + used).toFixed(3))) });
 }
+// ===== Sélecteur d'articles préencodés (stock + marchandises) avec recherche =====
+function toggleArticlesPicker() {
+  const menu = document.getElementById('ch-m-articles-menu');
+  if (!menu) return;
+  const show = (menu.style.display === 'none' || !menu.style.display);
+  menu.style.display = show ? 'block' : 'none';
+  if (show) {
+    const s = document.getElementById('ch-m-articles-search');
+    if (s) s.value = '';
+    renderArticlesPicker();
+    setTimeout(() => { if (s) s.focus(); }, 50);
+  }
+}
+function renderArticlesPicker() {
+  const list = document.getElementById('ch-m-articles-list');
+  if (!list) return;
+  const q = (document.getElementById('ch-m-articles-search')?.value || '').toLowerCase().trim();
+  const fin = peutSaisirCouts();
+  const esc = s => ('' + (s ?? '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let arts = (appData.stock || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+  if (q) arts = arts.filter(a => (a.nom || '').toLowerCase().includes(q) || (a.fournisseur || '').toLowerCase().includes(q));
+  if (!arts.length) { list.innerHTML = '<div style="color:var(--gris);font-size:0.85rem;padding:6px">Aucun article trouvé. Encodez-les dans Matériel → Stock (ou Marchandise).</div>'; return; }
+  list.innerHTML = arts.slice(0, 60).map(a => {
+    const march = (a.categorie || '') === 'marchandise';
+    const prix = (fin && a.prixAchat != null && a.prixAchat !== '') ? ` · 💰 ${eurFmt(a.prixAchat)}/${esc(a.unite || 'u')}` : '';
+    return `<div onclick="choisirArticleMateriau('${a.id}')" style="padding:8px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px">${march ? '🚚' : '📦'} <strong>${esc(a.nom)}</strong>${a.unite ? ` <span style="color:var(--gris);font-size:0.8rem">(${esc(a.unite)})</span>` : ''}${prix}</div>`;
+  }).join('') + (arts.length > 60 ? `<div style="color:var(--gris);font-size:0.78rem;padding:6px">… affinez la recherche (${arts.length} résultats au total)</div>` : '');
+}
+function choisirArticleMateriau(id) {
+  const a = (appData.stock || []).find(s => s.id === id);
+  if (!a) return;
+  const desEl = document.getElementById('ch-m-designation');
+  if (desEl) desEl.value = a.nom || '';
+  if (a.unite) { const sel = document.getElementById('ch-m-unite'); if (sel) { const opt = [...sel.options].find(o => o.value === a.unite || o.text === a.unite); if (opt) sel.value = opt.value; } }
+  const menu = document.getElementById('ch-m-articles-menu'); if (menu) menu.style.display = 'none';
+  const btn = document.getElementById('ch-m-articles-btn'); if (btn) btn.textContent = `📋 ${a.nom} ▾`;
+  const qEl = document.getElementById('ch-m-qte'); if (qEl) qEl.focus();
+}
 function ajouterMateriauChantier() {
   if (!currentChantierDetailId) return;
   const date = document.getElementById('ch-m-date').value;
@@ -6108,6 +6153,7 @@ function ajouterMateriauChantier() {
   document.getElementById('ch-m-designation').value = '';
   document.getElementById('ch-m-qte').value = '';
   if (coutEl) coutEl.value = '';
+  const apBtn = document.getElementById('ch-m-articles-btn'); if (apBtn) apBtn.textContent = '📋 Choisir un article préencodé (stock / marchandises) ▾';
 }
 function supprimerMateriauChantier(id) {
   const m = appData.chantierMateriaux.find(x => x.id === id);
