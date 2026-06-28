@@ -2139,6 +2139,8 @@ function voitChantierFinances() { return !!currentUser && (currentUser.name === 
 // Qui peut SAISIR les coûts terrain (prix matériaux utilisés, machine louée à la journée) : Marco + Justin + Thibaut (chef).
 // Thibaut peut indiquer ces coûts pour alimenter la rentabilité, mais ne voit pas la rentabilité globale ni les coûts internes du parc.
 function peutSaisirCouts() { return !!currentUser && (currentUser.name === 'Marco' || currentUser.name === 'Justin' || currentUser.name === 'Thibaut'); }
+// Budget total d'un chantier = devis initial + tous les devis supplémentaires (avenants)
+function budgetTotalChantier(ch) { return (parseFloat(ch && ch.budget) || 0) + ((ch && ch.devisSupplements || []).reduce((s, x) => s + (parseFloat(x.montant) || 0), 0)); }
 // Adresse e-mail réelle de chaque compte Firebase Auth (les e-mails ne sont pas secrets)
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
@@ -4548,7 +4550,7 @@ function carteChantierDetaillee(ch, clients) {
       </div>
       ${equipe.length ? `<div class="equipe-chips" style="margin-top:6px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 ${ch.chef}</span>` : ''}${equipe.filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>` : ''}
       ${pct > 0 ? `<div style="margin-top:8px"><div style="height:7px;background:#eee;border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.c}"></div></div><div style="font-size:0.72rem;color:var(--gris);margin-top:2px">Avancement ${pct}%</div></div>` : ''}
-      ${voitChantierFinances() && ch.budget ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(ch.budget)}</div>` : ''}
+      ${voitChantierFinances() && budgetTotalChantier(ch) ? `<div style="font-size:0.82rem;margin-top:4px">💰 ${eurFmt(budgetTotalChantier(ch))}${(ch.devisSupplements || []).length ? ' <span style="color:var(--gris)">(devis + avenants)</span>' : ''}</div>` : ''}
       ${ch.description ? `<div style="font-size:0.8rem;color:var(--gris);margin-top:4px">${ch.description}</div>` : ''}
     </div>`;
 }
@@ -4798,7 +4800,7 @@ function renderChantierDetail() {
     </div>
     ${(adresseChantier || tel) ? `<div style="margin-top:6px;font-size:0.88rem">${adresseChantier ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresseChantier)}" target="_blank" rel="noopener" style="color:var(--vert);text-decoration:none">📍 ${esc(adresseChantier)}</a>` : ''}${adresseChantier && tel ? '<span style="color:var(--gris)"> · </span>' : ''}${tel ? `<a href="tel:${tel.replace(/[^0-9+]/g, '')}" style="color:var(--vert);text-decoration:none;white-space:nowrap">📞 ${esc(tel)}</a>` : ''}</div>` : ''}
     ${(ch.chef || (ch.equipe && ch.equipe.length)) ? `<div class="equipe-chips" style="margin-top:8px">${ch.chef ? `<span class="equipe-chip-sm" style="background:#6f42c122;color:#6f42c1">👷 Chef : ${esc(ch.chef)}</span>` : ''}${(ch.equipe || []).filter(m => m !== ch.chef).map(m => `<span class="equipe-chip-sm">${esc(m)}</span>`).join('')}</div>` : ''}
-    ${voitChantierFinances() && ch.budget ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(ch.budget)}</strong></div>` : ''}
+    ${voitChantierFinances() && budgetTotalChantier(ch) ? `<div style="margin-top:6px">💰 Budget : <strong>${eurFmt(budgetTotalChantier(ch))}</strong>${(ch.devisSupplements || []).length ? ` <span style="font-size:0.8rem;color:var(--gris)">(devis ${eurFmt(parseFloat(ch.budget) || 0)} + ${(ch.devisSupplements || []).length} avenant(s))</span>` : ''}</div>` : ''}
     ${ch.description ? `<div style="margin-top:4px;color:var(--gris);font-size:0.85rem">${esc(ch.description)}</div>` : ''}`;
 
   // --- Avancement (étapes par défaut + postes personnalisés, cochables + barre) ---
@@ -5081,7 +5083,10 @@ function renderChantierDetail() {
       const coutMOSupp = totalHSupp * tauxH;
       const coutMatSupp = mats.filter(m => supp(m.poste)).reduce((s, m) => s + (parseFloat(m.cout) || 0), 0);
       const coutSupp = coutMOSupp + coutMatSupp;
-      const budget = parseFloat(ch.budget) || 0;
+      const budgetInitial = parseFloat(ch.budget) || 0;
+      const supplements = ch.devisSupplements || [];
+      const budgetSupp = supplements.reduce((s, x) => s + (parseFloat(x.montant) || 0), 0);
+      const budget = budgetInitial + budgetSupp;
       const marge = budget - coutTotal;
       const margePct = budget > 0 ? (marge / budget * 100) : null;
       const ligne = (label, val, fort) => `<div class="flex-between" style="padding:4px 0${fort ? ';border-top:2px solid var(--vert);margin-top:4px;font-weight:800' : ''}"><span>${label}</span><span>${val}</span></div>`;
@@ -5093,9 +5098,19 @@ function renderChantierDetail() {
         ${coutMachines ? ligne('🚜 Engins / machines', eurFmt(coutMachines)) : ''}
         ${ligne('💸 Coût de revient total', eurFmt(coutTotal), true)}
         ${coutSupp > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:#fd7e1418;color:#e67e22;font-weight:800"><span>🆕 Suppléments hors devis<br><span style="font-weight:400;font-size:0.75rem">à refacturer en plus du devis (${totalHSupp ? totalHSupp + ' h' : ''}${totalHSupp && coutMatSupp ? ' + ' : ''}${coutMatSupp ? 'matériaux' : ''})</span></span><span>${eurFmt(coutSupp)}</span></div>` : ''}
-        ${budget > 0 ? ligne('💰 Budget devis / prix vendu', eurFmt(budget)) : '<div style="padding:4px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget sur le chantier pour voir la marge.</div>'}
-        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'}</span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : ''}
-        ${budget > 0 && coutSupp > 0 ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--gris)">💡 Le budget couvre le devis initial. Pense à facturer les <strong style="color:#e67e22">${eurFmt(coutSupp)}</strong> de suppléments en plus.</div>` : ''}`;
+        <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:6px">
+          <div style="font-weight:700;font-size:0.82rem;color:var(--gris);margin-bottom:2px">📄 Devis & avenants</div>
+          ${ligne('💰 Devis initial', budgetInitial ? eurFmt(budgetInitial) : '—')}
+          ${supplements.map(sp => `<div class="flex-between" style="padding:3px 0"><span style="min-width:0">➕ ${esc(sp.label || 'Avenant')}${sp.date ? ` <span style="color:var(--gris);font-size:0.76rem">· ${formatDateFR(sp.date)}</span>` : ''} <button onclick="supprimerDevisSupplement('${sp.id}')" title="Retirer cet avenant" style="background:none;border:none;cursor:pointer">🗑️</button></span><span style="white-space:nowrap">${eurFmt(parseFloat(sp.montant) || 0)}</span></div>`).join('')}
+          ${budgetSupp ? ligne('💰 Budget total (devis + avenants)', eurFmt(budget), true) : ''}
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+            <input id="ch-devsup-label" class="form-control" style="flex:2;min-width:130px" placeholder="Libellé (ex : terrasse en plus)">
+            <input id="ch-devsup-montant" type="number" step="0.01" min="0" class="form-control" style="max-width:130px" placeholder="Montant €">
+            <button class="btn btn-secondary btn-sm" onclick="ajouterDevisSupplement()">+ Devis suppl.</button>
+          </div>
+        </div>
+        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'} <span style="font-weight:400;font-size:0.74rem">(sur budget total)</span></span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : '<div style="padding:6px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget (ou un devis suppl.) pour voir la marge.</div>'}
+        ${budget > 0 && coutSupp > 0 ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--gris)">💡 Pense à facturer les <strong style="color:#e67e22">${eurFmt(coutSupp)}</strong> de suppléments hors devis en plus.</div>` : ''}`;
     }
   }
 
@@ -6098,6 +6113,23 @@ function supprimerMateriauChantier(id) {
   const m = appData.chantierMateriaux.find(x => x.id === id);
   if (m && m.stockConsoId) recrediterStock(m.stockConsoId, m.stockConsoQte);
   deleteDoc('chantierMateriaux', id);
+}
+function ajouterDevisSupplement() {
+  if (!voitChantierFinances() || !currentChantierDetailId) return;
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  const label = (document.getElementById('ch-devsup-label').value || '').trim();
+  const montant = parseFloat(document.getElementById('ch-devsup-montant').value);
+  if (!montant) { alert('Indiquez le montant du devis supplémentaire (€).'); return; }
+  const sup = { id: uuid(), label: label || 'Avenant', montant: +montant, date: formatDate(new Date()) };
+  saveDoc('chantiers', { ...ch, devisSupplements: [...(ch.devisSupplements || []), sup] });
+}
+function supprimerDevisSupplement(id) {
+  if (!voitChantierFinances() || !currentChantierDetailId) return;
+  const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
+  if (!ch) return;
+  if (!confirm('Retirer ce devis supplémentaire ?')) return;
+  saveDoc('chantiers', { ...ch, devisSupplements: (ch.devisSupplements || []).filter(s => s.id !== id) });
 }
 function memoriserPrixMateriau(id) {
   if (!peutSaisirCouts()) return;
