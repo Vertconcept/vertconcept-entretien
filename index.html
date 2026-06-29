@@ -1810,6 +1810,13 @@
 
         <hr>
         <div class="form-label" style="margin-bottom:6px">🧱 Matériel / fournitures utilisés <span style="font-weight:400;color:var(--gris);font-size:0.8rem">(gestion du stock)</span></div>
+        <div class="ms-wrap" style="margin-bottom:6px">
+          <button type="button" class="form-control ms-toggle" id="iv-mat-articles-btn" onclick="toggleIvArticlesPicker()">📋 Choisir un article préencodé (stock / marchandises) ▾</button>
+          <div class="ms-menu" id="iv-mat-articles-menu" style="display:none">
+            <input type="text" class="form-control" id="iv-mat-articles-search" placeholder="🔎 Rechercher un article…" oninput="renderIvArticlesPicker()" style="margin-bottom:8px">
+            <div id="iv-mat-articles-list"></div>
+          </div>
+        </div>
         <div class="form-row" style="align-items:flex-end">
           <div class="form-group" style="flex:2;margin-bottom:6px"><input type="text" class="form-control" id="iv-mat-nom" list="iv-stock-datalist" placeholder="Ex : Engrais, terreau, sac déchets…"><datalist id="iv-stock-datalist"></datalist></div>
           <div class="form-group" style="max-width:90px;margin-bottom:6px"><input type="number" step="0.01" min="0" class="form-control" id="iv-mat-qte" placeholder="Qté"></div>
@@ -4000,6 +4007,8 @@ function remplirIvStockSection(iv) {
   renderIvMatList();
   renderIvMachLoueeList();
   ['iv-mat-nom', 'iv-mat-qte', 'iv-mat-unite', 'iv-louee', 'iv-louee-cout'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const apMenu = document.getElementById('iv-mat-articles-menu'); if (apMenu) apMenu.style.display = 'none';
+  const apBtn = document.getElementById('iv-mat-articles-btn'); if (apBtn) apBtn.textContent = '📋 Choisir un article préencodé (stock / marchandises) ▾';
 }
 function toggleIvEnginsMenu() { const menu = document.getElementById('iv-engins'); if (menu) menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'flex' : 'none'; }
 function toggleIvEnginChip(el) { el.classList.toggle('selected'); majIvEnginsLabel(); }
@@ -4008,6 +4017,44 @@ function majIvEnginsLabel() {
   if (!btn) return;
   const n = document.querySelectorAll('#iv-engins .membre-chip.selected').length;
   btn.textContent = (n ? `🚜 ${n} engin(s) sélectionné(s)` : '— Choisir les engins —') + ' ▾';
+}
+// Sélecteur d'articles préencodés (stock + marchandises) avec recherche — côté Entretien
+function toggleIvArticlesPicker() {
+  const menu = document.getElementById('iv-mat-articles-menu');
+  if (!menu) return;
+  const show = (menu.style.display === 'none' || !menu.style.display);
+  menu.style.display = show ? 'block' : 'none';
+  if (show) {
+    const s = document.getElementById('iv-mat-articles-search');
+    if (s) s.value = '';
+    renderIvArticlesPicker();
+    setTimeout(() => { if (s) s.focus(); }, 50);
+  }
+}
+function renderIvArticlesPicker() {
+  const list = document.getElementById('iv-mat-articles-list');
+  if (!list) return;
+  const q = (document.getElementById('iv-mat-articles-search')?.value || '').toLowerCase().trim();
+  const fin = peutSaisirCouts();
+  const esc = s => ('' + (s ?? '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let arts = (appData.stock || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+  if (q) arts = arts.filter(a => (a.nom || '').toLowerCase().includes(q) || (a.fournisseur || '').toLowerCase().includes(q));
+  if (!arts.length) { list.innerHTML = '<div style="color:var(--gris);font-size:0.85rem;padding:6px">Aucun article trouvé. Encodez-les dans Matériel → Stock (ou Marchandise).</div>'; return; }
+  list.innerHTML = arts.slice(0, 60).map(a => {
+    const march = (a.categorie || '') === 'marchandise';
+    const prix = (fin && a.prixAchat != null && a.prixAchat !== '') ? ` · 💰 ${eurFmt(a.prixAchat)}/${esc(a.unite || 'u')}` : '';
+    return `<div onclick="choisirArticleIvMateriau('${a.id}')" style="padding:8px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px">${march ? '🚚' : '📦'} <strong>${esc(a.nom)}</strong>${a.unite ? ` <span style="color:var(--gris);font-size:0.8rem">(${esc(a.unite)})</span>` : ''}${prix}</div>`;
+  }).join('') + (arts.length > 60 ? `<div style="color:var(--gris);font-size:0.78rem;padding:6px">… affinez la recherche (${arts.length} résultats au total)</div>` : '');
+}
+function choisirArticleIvMateriau(id) {
+  const a = (appData.stock || []).find(s => s.id === id);
+  if (!a) return;
+  const nomEl = document.getElementById('iv-mat-nom');
+  if (nomEl) nomEl.value = a.nom || '';
+  if (a.unite) { const sel = document.getElementById('iv-mat-unite'); if (sel) { const opt = [...sel.options].find(o => o.value === a.unite || o.text === a.unite); if (opt) sel.value = opt.value; } }
+  const menu = document.getElementById('iv-mat-articles-menu'); if (menu) menu.style.display = 'none';
+  const btn = document.getElementById('iv-mat-articles-btn'); if (btn) btn.textContent = `📋 ${a.nom} ▾`;
+  const qEl = document.getElementById('iv-mat-qte'); if (qEl) qEl.focus();
 }
 function ajouterMatInterv() {
   const nom = document.getElementById('iv-mat-nom').value.trim();
@@ -4018,6 +4065,7 @@ function ajouterMatInterv() {
   document.getElementById('iv-mat-nom').value = '';
   document.getElementById('iv-mat-qte').value = '';
   document.getElementById('iv-mat-unite').value = '';
+  const apBtn = document.getElementById('iv-mat-articles-btn'); if (apBtn) apBtn.textContent = '📋 Choisir un article préencodé (stock / marchandises) ▾';
   renderIvMatList();
 }
 function supprimerMatInterv(i) { ivMatTemp.splice(i, 1); renderIvMatList(); }
