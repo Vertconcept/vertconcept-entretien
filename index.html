@@ -2603,7 +2603,12 @@ function toggleMode() {
 // Création : onglet 🏗️ Création. Partagés (Clients, Matériel) : tout le monde.
 function appliquerVisibilitePoles() {
   const ent = voitEntretien(), cre = voitCreation();
-  ['nav-planning','bnav-planning','nav-tontes','bnav-tontes','nav-contrats','bnav-contrats'].forEach(id => {
+  // Thibaut (chef Création) a aussi accès au planning Entretien (consultation/coordination), mais pas aux Tontes/Contrats.
+  const voitPlanningEnt = ent || (currentUser && currentUser.name === 'Thibaut');
+  ['nav-planning','bnav-planning'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = voitPlanningEnt ? '' : 'none';
+  });
+  ['nav-tontes','bnav-tontes','nav-contrats','bnav-contrats'].forEach(id => {
     const e = document.getElementById(id); if (e) e.style.display = ent ? '' : 'none';
   });
   ['nav-creation','bnav-creation'].forEach(id => {
