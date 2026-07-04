@@ -87,6 +87,11 @@
   .jour-body { padding: 8px; min-height: 80px; }
   .interv-card { background: var(--vert-pale); border-left: 3px solid var(--vert); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 0.78rem; cursor: pointer; transition: transform 0.1s; }
   .interv-card:hover { transform: translateX(2px); }
+  .interv-card.dragging { opacity: 0.45; }
+  .jour-body.drop-target { background: #1e563112; outline: 2px dashed var(--vert); outline-offset: -3px; border-radius: 8px; }
+  .interv-move { display: inline-flex; gap: 4px; margin-top: 5px; }
+  .interv-move button { border: 1px solid var(--border); background: white; border-radius: 6px; padding: 1px 7px; font-size: 0.74rem; cursor: pointer; line-height: 1.4; }
+  .interv-move button:hover { background: var(--vert-pale); border-color: var(--vert); }
   .interv-card.tonte { background: #fff3cd; border-left-color: var(--orange); }
   .interv-card.facturee { background: #c2e8c8; border-left: 5px solid #1e5631; }
   .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
@@ -2851,6 +2856,12 @@ function renderPlanningSemail() {
     const body = document.createElement('div');
     body.className = 'jour-body';
     body.innerHTML = bandeauAbsencesJour(dateStr);
+    // Cible de dépôt : on peut glisser une fiche vers ce jour (admin)
+    if (modeAdmin) {
+      body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drop-target'); });
+      body.addEventListener('dragleave', () => body.classList.remove('drop-target'));
+      body.addEventListener('drop', e => { e.preventDefault(); body.classList.remove('drop-target'); const id = e.dataTransfer.getData('text/plain'); if (id) deplacerInterventionDate(id, dateStr); });
+    }
 
     interventions.filter(iv => iv.date === dateStr).forEach(iv => {
       const card = document.createElement('div');
@@ -2867,8 +2878,18 @@ function renderPlanningSemail() {
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
         ${estMarco && iv.facturee ? '<span style="display:inline-block;background:#1e5631;color:white;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-top:3px">💶 Facturé</span>' : ''}
+        ${modeAdmin ? `<div class="interv-move">
+          <button title="Reculer d'un jour" onclick="event.stopPropagation();deplacerInterventionJours('${iv.id}',-1)">◀</button>
+          <button title="Décaler au lendemain" onclick="event.stopPropagation();deplacerInterventionJours('${iv.id}',1)">demain ▶</button>
+          <button title="Décaler au surlendemain" onclick="event.stopPropagation();deplacerInterventionJours('${iv.id}',2)">▶▶</button>
+        </div>` : ''}
       `;
       card.onclick = () => ouvrirDetailIntervention(iv.id);
+      if (modeAdmin) {
+        card.draggable = true;
+        card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', iv.id); e.dataTransfer.effectAllowed = 'move'; card.classList.add('dragging'); });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+      }
       body.appendChild(card);
     });
 
@@ -2889,6 +2910,21 @@ function renderPlanningSemail() {
   }
 }
 
+// Déplacer une intervention vers une date précise (glisser-déposer)
+function deplacerInterventionDate(id, newDate) {
+  const iv = appData.interventions.find(x => x.id === id);
+  if (!iv || !newDate || iv.date === newDate) return;
+  saveDoc('interventions', { ...iv, date: newDate });
+}
+// Décaler une intervention de n jours (boutons ◀ / demain ▶ / ▶▶). Jamais un dimanche.
+function deplacerInterventionJours(id, n) {
+  const iv = appData.interventions.find(x => x.id === id);
+  if (!iv || !iv.date) return;
+  const d = new Date(iv.date + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  if (d.getDay() === 0) d.setDate(d.getDate() + (n < 0 ? -1 : 1)); // saute le dimanche
+  saveDoc('interventions', { ...iv, date: formatDate(d) });
+}
 function renderPlanningMois() {
   const now = new Date();
   const refMois = new Date(now.getFullYear(), now.getMonth() + currentMonthOffset, 1);
@@ -4362,7 +4398,7 @@ const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
 // Tarif horaire du transport camion (entre dans la rentabilité du chantier)
 const TRANSPORT_TARIF = 90;
 // Équipe Création (pour affecter les ouvriers à un chantier)
-const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
+const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony', 'Evann'];
 // Étapes d'avancement type d'un chantier d'aménagement
 const CHANTIER_ETAPES = [
   { key: 'prepa',      label: '🚧 Préparation / terrassement' },
