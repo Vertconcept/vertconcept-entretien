@@ -867,7 +867,7 @@
     <div id="factu-contrats-rappel"></div>
     <div class="flex-between mb-1">
       <div class="factu-filters">
-        <input type="month" class="form-control" id="factu-mois" style="width:180px" oninput="renderFacturation()">
+        <label style="display:flex;flex-direction:column;font-size:0.68rem;color:var(--gris);line-height:1.2">Mois (déjà facturées)<input type="month" class="form-control" id="factu-mois" style="width:180px" oninput="renderFacturation()"></label>
         <select class="form-control" id="factu-client-filter" style="width:200px" onchange="renderFacturation()">
           <option value="">Tous les clients</option>
         </select>
@@ -6379,41 +6379,26 @@ function renderFacturation() {
   const masquerFacturees = document.getElementById('factu-masquer-facturees').checked;
   const clientFilter = selClient.value;
 
-  let filtered = terminées.filter(iv => iv.date.startsWith(moisRef));
-  if (clientFilter) filtered = filtered.filter(iv => iv.clientId === clientFilter);
-  if (masquerFacturees) filtered = filtered.filter(iv => !iv.facturee);
+  const parClient = iv => !clientFilter || iv.clientId === clientFilter;
+  // À FACTURER : toutes périodes confondues (pour ne jamais oublier un ancien bon)
+  const aFacturer = terminées.filter(iv => !iv.facturee && parClient(iv)).sort((a, b) => a.date.localeCompare(b.date));
+  // DÉJÀ FACTURÉES : uniquement le mois sélectionné (historique), masquables
+  const dejaFact = masquerFacturees ? [] : terminées.filter(iv => iv.facturee && (iv.date || '').startsWith(moisRef) && parClient(iv)).sort((a, b) => a.date.localeCompare(b.date));
 
-  filtered.sort((a, b) => a.date.localeCompare(b.date));
-
-  // Stats mini
-  const totalH = filtered.reduce((s, iv) => {
-    if (!iv.heuresParMembre) return s + (iv.duree || 0);
-    return s + Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures||0), 0);
-  }, 0);
-  const totalMontant = filtered.reduce((s, iv) => {
-    if (!iv.heuresParMembre) return s;
-    return s + Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures||0)*(v.taux||0), 0);
-  }, 0);
+  // Stats = ce qu'il reste à facturer (l'actionnable)
+  const sumH = arr => arr.reduce((s, iv) => s + (iv.heuresParMembre ? Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures || 0), 0) : (iv.duree || 0)), 0);
+  const sumM = arr => arr.reduce((s, iv) => s + (iv.heuresParMembre ? Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures || 0) * (v.taux || 0), 0) : 0), 0);
+  const totalMontant = sumM(aFacturer);
   document.getElementById('factu-stats-mini').innerHTML =
-    `<div class="factu-stat"><div class="val">${filtered.length}</div><div class="lbl">Interventions</div></div>` +
-    `<div class="factu-stat"><div class="val">${totalH.toFixed(1)}h</div><div class="lbl">Heures totales</div></div>` +
-    (totalMontant > 0 ? `<div class="factu-stat"><div class="val">${totalMontant.toFixed(0)}€</div><div class="lbl">Montant estimé</div></div>` : '');
+    `<div class="factu-stat"><div class="val" style="color:#c0392b">${aFacturer.length}</div><div class="lbl">à facturer</div></div>` +
+    `<div class="factu-stat"><div class="val">${sumH(aFacturer).toFixed(1)}h</div><div class="lbl">heures</div></div>` +
+    (totalMontant > 0 ? `<div class="factu-stat"><div class="val">${totalMontant.toFixed(0)}€</div><div class="lbl">estimé</div></div>` : '');
 
-  const list = document.getElementById('factu-list');
-  if (!filtered.length) {
-    list.innerHTML = '<div class="card"><div class="empty-state">Aucune intervention terminée sur cette période.</div></div>';
-    return;
-  }
-
-  list.innerHTML = filtered.map(iv => {
+  const itemHtml = iv => {
     const client = clients.find(c => c.id === iv.clientId);
     const membres = iv.membres || [iv.chef];
-    const heures = iv.heuresParMembre
-      ? Object.values(iv.heuresParMembre).reduce((a,v)=>a+(v.heures||0),0)
-      : (iv.duree || 0);
-    const montant = iv.heuresParMembre
-      ? Object.values(iv.heuresParMembre).reduce((a,v)=>a+(v.heures||0)*(v.taux||0),0)
-      : 0;
+    const heures = iv.heuresParMembre ? Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures || 0), 0) : (iv.duree || 0);
+    const montant = iv.heuresParMembre ? Object.values(iv.heuresParMembre).reduce((a, v) => a + (v.heures || 0) * (v.taux || 0), 0) : 0;
     return `
     <div class="factu-item${iv.facturee ? ' facturee' : ''}">
       <div class="fi-info">
@@ -6421,7 +6406,7 @@ function renderFacturation() {
         <div class="fi-meta">📅 ${formatDateFR(iv.date)} · ${iv.type} · ${iv.chef}
           ${iv.facturee ? '<span class="badge badge-termine" style="margin-left:6px">✓ Facturée</span>' : ''}
         </div>
-        <div class="equipe-chips" style="margin-top:4px">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
+        <div class="equipe-chips" style="margin-top:4px">${membres.map(m => `<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
       </div>
       <div class="fi-stats">
         <div class="factu-stat"><div class="val">${membres.length}</div><div class="lbl">ouvriers</div></div>
@@ -6433,7 +6418,23 @@ function renderFacturation() {
         <button class="btn btn-secondary btn-sm" onclick="ouvrirEditionIntervention('${iv.id}')">✏️</button>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  const list = document.getElementById('factu-list');
+  if (!aFacturer.length && !dejaFact.length) {
+    list.innerHTML = '<div class="card"><div class="empty-state">Aucune intervention terminée à afficher.</div></div>';
+    return;
+  }
+  const entete = (txt, couleur) => `<div style="font-weight:800;color:${couleur};margin:16px 2px 8px;font-size:0.95rem">${txt}</div>`;
+  let html = entete(`🧾 À facturer — toutes périodes (${aFacturer.length})`, '#c0392b');
+  html += aFacturer.length ? aFacturer.map(itemHtml).join('') : '<div class="card"><div class="empty-state" style="padding:12px">✅ Rien en attente — tout est facturé, bravo !</div></div>';
+  if (!masquerFacturees) {
+    let moisLabel = moisRef;
+    try { moisLabel = new Date(moisRef + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); } catch (e) {}
+    html += entete(`✅ Déjà facturées — ${moisLabel} (${dejaFact.length})`, '#1e5631');
+    html += dejaFact.length ? dejaFact.map(itemHtml).join('') : '<div class="card"><div class="empty-state" style="padding:12px">Aucune facturée ce mois-ci.</div></div>';
+  }
+  list.innerHTML = html;
 }
 
 // =====================================================
