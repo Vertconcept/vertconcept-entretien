@@ -1376,6 +1376,17 @@
 </div>
 
 <!-- ===== MODAL CONGÉ / ABSENCE ===== -->
+<!-- ===== MODAL DÉTAIL TONTES D'UN CLIENT (facturation) ===== -->
+<div class="modal-overlay hidden" id="modal-tonte-client">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="tonte-client-titre">Tontes du client</h3>
+      <button class="close-btn" onclick="fermerModal('modal-tonte-client')">×</button>
+    </div>
+    <div class="modal-body" id="tonte-client-body"></div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="modal-conge">
   <div class="modal">
     <div class="modal-header">
@@ -3245,13 +3256,14 @@ function renderTontes() {
   document.getElementById('tonte-clients-list').innerHTML = clientsTonte.length
     ? clientsTonte.map(c => `
       <div class="tonte-client">
-        <div class="name">${c.nom}</div>
+        <div class="name" style="cursor:pointer;text-decoration:underline" onclick="ouvrirDetailTonteClient('${c.id}')" title="Voir les tontes réalisées (dates + facturation)">${c.nom}</div>
         <div class="info">📍 ${c.adresse || '—'}</div>
         ${estMarco ? `<div class="info" style="color:var(--vert);font-weight:700">${c.tontePrix ? `💶 ${eur(c.tontePrix)}/tonte · ${eur(montantClient(c))}/an` : '💶 prix à définir'}</div>` : ''}
-        ${modeAdmin ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" onclick="ouvrirFormClient('${c.id}')" title="Modifier la fiche (prix, infos…)">✏️ Modifier</button>
-          <button class="btn btn-danger btn-sm" onclick="arreterTonte('${c.id}')" title="Retirer du tour de tonte (la fiche client est conservée)">🚫 Arrêter la tonte</button>
-        </div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="ouvrirDetailTonteClient('${c.id}')" title="Voir les tontes réalisées et facturer">📄 Tontes réalisées</button>
+          ${modeAdmin ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirFormClient('${c.id}')" title="Modifier la fiche (prix, infos…)">✏️ Modifier</button>
+          <button class="btn btn-danger btn-sm" onclick="arreterTonte('${c.id}')" title="Retirer du tour de tonte (la fiche client est conservée)">🚫 Arrêter la tonte</button>` : ''}
+        </div>
       </div>`).join('')
     : '<div class="empty-state">Aucun client avec tonte configurée.</div>';
 
@@ -3268,7 +3280,7 @@ function renderTontes() {
       <button onclick="toggleTontePassage('${c.id}')" title="${fait ? 'Annuler cette tonte' : 'Marquer comme tondu'}" style="font-size:1.5rem;background:none;border:none;cursor:pointer;line-height:1;padding:0">${fait ? '✅' : '⬜'}</button>
       <div style="width:22px;text-align:right;color:var(--gris);font-weight:700;flex:none">${i + 1}.</div>
       <div style="flex:1;min-width:0">
-        <div><strong>${c.nom}</strong> <span style="color:var(--gris);font-size:0.82rem">— ${lieu}${montant}</span></div>
+        <div><strong style="cursor:pointer;text-decoration:underline" onclick="ouvrirDetailTonteClient('${c.id}')" title="Voir les tontes réalisées (dates + facturation)">${c.nom}</strong> <span style="color:var(--gris);font-size:0.82rem">— ${lieu}${montant}</span></div>
         <div style="font-size:0.76rem;color:${nb > prevus ? 'var(--vert)' : 'var(--gris)'}">🔢 ${nb}/${prevus} tontes en ${anneeT}${fait ? ' · ✓ fait ce tour' : ''}</div>
       </div>
     </div>`;
@@ -3410,6 +3422,71 @@ function arreterTonte(id) {
   if (!confirm(`Arrêter le contrat de tonte de « ${c.nom} » ?\n\n• Il sera retiré du tour de tonte et du budget.\n• Sa fiche client est conservée (vous pourrez réactiver la tonte plus tard via ✏️ Modifier).`)) return;
   saveDoc('clients', { ...c, tonte: false });
 }
+function ouvrirDetailTonteClient(clientId) {
+  const c = appData.clients.find(x => x.id === clientId);
+  if (!c) return;
+  const estMarco = currentUser && currentUser.name === 'Marco';
+  const prix = parseFloat(c.tontePrix) || 0;
+  const eur = n => eurFmt(n);
+  const passages = (appData.tontesPassages || []).filter(p => p.clientId === clientId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const aFacturer = passages.filter(p => !p.facture);
+  const dejaFact = passages.filter(p => p.facture);
+  document.getElementById('tonte-client-titre').textContent = 'Tontes — ' + c.nom;
+  const ligne = p => `<div class="flex-between" style="padding:5px 8px;background:#f8f9fa;border-radius:8px;margin-bottom:4px;gap:8px">
+      <span>&#128197; ${formatDateFR(p.date)}</span>
+      <span style="display:flex;gap:10px;align-items:center;flex:none">
+        <button onclick="toggleFactureTonte('${p.id}','${clientId}')" title="${p.facture ? 'Remettre a facturer' : 'Marquer comme facture'}" style="background:none;border:none;cursor:pointer;font-size:0.95rem">${p.facture ? '&#8617;&#65039;' : '&#10003;'}</button>
+        <button onclick="supprimerPassageTonte('${p.id}','${clientId}')" title="Supprimer cette tonte (erreur)" style="background:none;border:none;cursor:pointer">&#128465;&#65039;</button>
+      </span>
+    </div>`;
+  const adr = c.adresse || [c.rue, [c.codePostal, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '&#8212;';
+  let html = `<div style="color:var(--gris);font-size:0.86rem;margin-bottom:12px">&#128205; ${adr}${estMarco && prix ? ` &middot; &#128176; ${eur(prix)}/tonte` : ''}</div>`;
+  html += `<div class="card-title" style="margin-bottom:6px">&#129534; A facturer &mdash; ${aFacturer.length} tonte(s)${estMarco && prix ? ` &middot; <span style="color:var(--vert)">${eur(aFacturer.length * prix)}</span>` : ''}</div>`;
+  if (aFacturer.length) {
+    html += aFacturer.map(ligne).join('');
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px">
+      <button class="btn btn-secondary btn-sm" onclick="copierDatesTontes('${clientId}')">&#128203; Copier les dates</button>
+      ${estMarco ? `<button class="btn btn-primary btn-sm" onclick="marquerTontesFacturees('${clientId}')">&#10003; Marquer ces ${aFacturer.length} comme facturees</button>` : ''}
+    </div>`;
+  } else {
+    html += `<div class="empty-state" style="padding:10px">&#9989; Rien a facturer pour le moment.</div>`;
+  }
+  if (dejaFact.length) {
+    html += `<div class="card-title" style="margin:16px 0 6px">&#9989; Deja facturees &mdash; ${dejaFact.length} tonte(s)${estMarco && prix ? ` &middot; ${eur(dejaFact.length * prix)}` : ''}</div>`;
+    html += `<div style="opacity:0.68">${dejaFact.map(ligne).join('')}</div>`;
+  }
+  if (!passages.length) html = `<div class="empty-state" style="padding:16px">Aucune tonte encore realisee pour ce client.<br>Cochez &#9989; dans la tournee quand c'est fait.</div>`;
+  document.getElementById('tonte-client-body').innerHTML = html;
+  document.getElementById('modal-tonte-client').classList.remove('hidden');
+}
+function toggleFactureTonte(passageId, clientId) {
+  const p = (appData.tontesPassages || []).find(x => x.id === passageId);
+  if (!p) return;
+  saveDoc('tontesPassages', { ...p, facture: !p.facture });
+  setTimeout(() => ouvrirDetailTonteClient(clientId), 250);
+}
+function marquerTontesFacturees(clientId) {
+  const aFact = (appData.tontesPassages || []).filter(p => p.clientId === clientId && !p.facture);
+  if (!aFact.length) return;
+  if (!confirm(`Marquer ${aFact.length} tonte(s) comme facturees ?\nElles passeront dans "deja facturees" et ne reapparaitront plus dans "a facturer".`)) return;
+  aFact.forEach(p => saveDoc('tontesPassages', { ...p, facture: true }));
+  setTimeout(() => ouvrirDetailTonteClient(clientId), 350);
+}
+function supprimerPassageTonte(passageId, clientId) {
+  if (!confirm('Supprimer cette tonte (date) ? A faire seulement si c\'est une erreur.')) return;
+  deleteDoc('tontesPassages', passageId);
+  setTimeout(() => ouvrirDetailTonteClient(clientId), 250);
+}
+function copierDatesTontes(clientId) {
+  const c = appData.clients.find(x => x.id === clientId);
+  const aFact = (appData.tontesPassages || []).filter(p => p.clientId === clientId && !p.facture).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  if (!aFact.length) { alert('Aucune date a copier.'); return; }
+  const txt = `Tontes ${c ? c.nom : ''} - ${aFact.length} passage(s) :\n` + aFact.map(p => '- ' + formatDateFR(p.date)).join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => alert('Dates copiees !\n\n' + txt)).catch(() => prompt('Copiez les dates :', txt));
+  } else { prompt('Copiez les dates :', txt); }
+}
+
 function toggleTontePassage(clientId) {
   const recent = passageRecentClient(clientId);
   if (recent) deleteDoc('tontesPassages', recent.id);
