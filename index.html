@@ -10,28 +10,35 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --vert: #2d6a4f;
-    --vert-clair: #52b788;
-    --vert-pale: #d8f3dc;
-    --vert-bg: #f0faf3;
-    --gris: #6c757d;
-    --gris-clair: #f8f9fa;
-    --border: #dee2e6;
-    --rouge: #dc3545;
-    --orange: #fd7e14;
-    --bleu: #0d6efd;
+    /* Charte alignée sur le site vitrine vertconcept.be (vert végétal / sauge / crème) */
+    --vert: #6b7a56;        /* vert végétal (charte site) */
+    --vert-fonce: #55613f;
+    --vert-clair: #8a9a6f;
+    --vert-pale: #e8edda;   /* sauge très clair (cartes, badges, sélection) */
+    --vert-bg: #f6f4ee;     /* crème (fond) */
+    --sauge: #9aa389;
+    --gris: #6f6f68;
+    --gris-clair: #f2f0e9;
+    --border: #e3ded2;      /* bordure chaude (accord crème) */
+    --rouge: #c0392b;
+    --orange: #d98b3a;
+    --bleu: #4a6fa5;
     --blanc: #ffffff;
-    --ombre: 0 2px 8px rgba(0,0,0,0.10);
+    --ombre: 0 2px 10px rgba(51,52,46,0.08);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--vert-bg); color: #212529; min-height: 100vh; }
+  body { font-family: 'Montserrat', system-ui, -apple-system, sans-serif; background: var(--vert-bg); color: #3a3a36; min-height: 100vh; }
+  /* Titres en Cormorant Garamond (charte site) */
+  h1, h2, h3, .card-title, header .logo, #semaine-titre, .modal-header h3 { font-family: 'Cormorant Garamond', Georgia, serif; }
 
   /* HEADER */
   header { background: var(--vert); color: white; padding: 0 1rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-  header .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px; }
-  header .logo span { color: var(--vert-clair); }
+  header .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.12em; }
+  header .logo span { color: #dfe4d1; }
   .header-nav { display: flex; gap: 4px; }
   .header-nav button { background: transparent; border: none; color: rgba(255,255,255,0.8); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
   .header-nav button:hover, .header-nav button.active { background: rgba(255,255,255,0.2); color: white; }
@@ -44,7 +51,7 @@
 
   /* CARDS */
   .card { background: white; border-radius: 12px; box-shadow: var(--ombre); padding: 1.25rem; margin-bottom: 1rem; }
-  .card-title { font-size: 1rem; font-weight: 700; color: var(--vert); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
+  .card-title { font-size: 1.2rem; font-weight: 700; color: var(--vert-fonce); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em; }
 
   /* BUTTONS */
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: all 0.2s; }
@@ -88,12 +95,12 @@
   .interv-card { background: var(--vert-pale); border-left: 3px solid var(--vert); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 0.78rem; cursor: pointer; transition: transform 0.1s; }
   .interv-card:hover { transform: translateX(2px); }
   .interv-card.dragging { opacity: 0.45; }
-  .jour-body.drop-target { background: #1e563112; outline: 2px dashed var(--vert); outline-offset: -3px; border-radius: 8px; }
+  .jour-body.drop-target { background: #55613f12; outline: 2px dashed var(--vert); outline-offset: -3px; border-radius: 8px; }
   .interv-move { display: inline-flex; gap: 4px; margin-top: 5px; }
   .interv-move button { border: 1px solid var(--border); background: white; border-radius: 6px; padding: 1px 7px; font-size: 0.74rem; cursor: pointer; line-height: 1.4; }
   .interv-move button:hover { background: var(--vert-pale); border-color: var(--vert); }
   .interv-card.tonte { background: #fff3cd; border-left-color: var(--orange); }
-  .interv-card.facturee { background: #c2e8c8; border-left: 5px solid #1e5631; }
+  .interv-card.facturee { background: #c2e8c8; border-left: 5px solid #55613f; }
   .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
   .interv-card.equipe-mateo { border-left-color: #6f42c1; }
   .interv-card .client-name { font-weight: 700; color: #212529; }
@@ -222,7 +229,7 @@
   .mois-interv-dot.equipe-timo { border-left-color: var(--vert-clair); }
   .mois-interv-dot.equipe-mateo { border-left-color: #6f42c1; }
   .mois-interv-dot.termine { opacity: 0.55; }
-  .mois-interv-dot.facturee { border-left: 5px solid #1e5631; background: #c2e8c8; }
+  .mois-interv-dot.facturee { border-left: 5px solid #55613f; background: #c2e8c8; }
   .mois-more { font-size: 0.7rem; color: var(--gris); cursor: pointer; text-align: center; }
   @media (max-width: 700px) {
     .mois-grid { grid-template-columns: repeat(7, 1fr); gap: 2px; }
@@ -554,12 +561,12 @@
 </div>
 
 <!-- LOADING OVERLAY -->
-<div id="update-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:10000;background:#2d6a4f;color:white;padding:11px 16px;text-align:center;font-weight:600;font-size:0.92rem;box-shadow:0 2px 10px rgba(0,0,0,0.25)">
+<div id="update-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:10000;background:#6b7a56;color:white;padding:11px 16px;text-align:center;font-weight:600;font-size:0.92rem;box-shadow:0 2px 10px rgba(0,0,0,0.25)">
   🔄 Nouvelle version disponible
-  <button onclick="location.reload()" style="margin-left:12px;background:white;color:#2d6a4f;border:none;border-radius:6px;padding:5px 16px;font-weight:700;cursor:pointer">Mettre à jour</button>
+  <button onclick="location.reload()" style="margin-left:12px;background:white;color:#6b7a56;border:none;border-radius:6px;padding:5px 16px;font-weight:700;cursor:pointer">Mettre à jour</button>
 </div>
 <div id="loading-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(45,106,79,0.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;color:white">
-  <div style="font-size:2rem;font-weight:800;letter-spacing:1px">Vert<span style="color:#52b788">concept</span></div>
+  <div style="font-size:2rem;font-weight:800;letter-spacing:1px">Vert<span style="color:#8a9a6f">concept</span></div>
   <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite"></div>
   <div style="font-size:0.9rem;opacity:0.85">Connexion en cours…</div>
   <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
@@ -1774,7 +1781,7 @@
           Tâche récurrente (crée plusieurs interventions identiques)
         </label>
       </div>
-      <div id="recurrence-section" style="display:none;background:#f0faf3;border:1.5px solid var(--vert-clair);border-radius:10px;padding:14px;margin-bottom:1rem">
+      <div id="recurrence-section" style="display:none;background:#f6f4ee;border:1.5px solid var(--vert-clair);border-radius:10px;padding:14px;margin-bottom:1rem">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Fréquence</label>
@@ -2877,7 +2884,7 @@ function renderPlanningSemail() {
         <div class="interv-meta">${iv.type}</div>
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
-        ${estMarco && iv.facturee ? '<span style="display:inline-block;background:#1e5631;color:white;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-top:3px">💶 Facturé</span>' : ''}
+        ${estMarco && iv.facturee ? '<span style="display:inline-block;background:#55613f;color:white;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-top:3px">💶 Facturé</span>' : ''}
         ${modeAdmin ? `<div class="interv-move">
           <button title="Reculer d'un jour" onclick="event.stopPropagation();deplacerInterventionJours('${iv.id}',-1)">◀</button>
           <button title="Décaler au lendemain" onclick="event.stopPropagation();deplacerInterventionJours('${iv.id}',1)">demain ▶</button>
@@ -4304,7 +4311,7 @@ function renderContrats() {
   cont.innerHTML = liste.map(({ ct, client }) => {
     const servicesHtml = SERVICES_CONTRAT.map(s => {
       const inclus = (ct.services || []).includes(s.key);
-      return `<span style="font-size:0.78rem;padding:2px 8px;border-radius:20px;${inclus ? 'background:#d8f3dc;color:#1e5631;font-weight:600' : 'background:#f1f1f1;color:#bbb;text-decoration:line-through'}">${inclus ? '✓ ' : ''}${s.label}</span>`;
+      return `<span style="font-size:0.78rem;padding:2px 8px;border-radius:20px;${inclus ? 'background:#e8edda;color:#55613f;font-weight:600' : 'background:#f1f1f1;color:#bbb;text-decoration:line-through'}">${inclus ? '✓ ' : ''}${s.label}</span>`;
     }).join(' ');
     let bilanHtml = '';
     if (marco) {
@@ -4391,7 +4398,7 @@ const STATUTS_CHANTIER = {
   devis:      { label: '📝 Devis',     c: '#7f8c8d' },
   planifie:   { label: '📅 Planifié',  c: '#2980b9' },
   'en-cours': { label: '🔧 En cours',  c: '#e67e22' },
-  termine:    { label: '✅ Terminé',   c: '#1e5631' }
+  termine:    { label: '✅ Terminé',   c: '#55613f' }
 };
 // Unités proposées dans l'avancement
 const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
@@ -4471,7 +4478,7 @@ function renderCreation() {
       ${tuile('en-cours', '🔧 En cours', '#e67e22')}
       ${tuile('a-venir', '📅 À venir', '#2980b9')}
       ${tuile('en-retard', '⚠️ En retard', '#c0392b')}
-      ${tuile('termine', '✅ Terminés', '#1e5631')}
+      ${tuile('termine', '✅ Terminés', '#55613f')}
     </div>${recapHtml}`;
   }
 
@@ -4908,7 +4915,7 @@ function renderChantierDetail() {
     const postesList = ordonnees.filter(estPoste);
     const faites = new Set((ch.etapes || []).filter(k => postesList.some(e => e.key === k)));
     const pct = postesList.length ? Math.round(faites.size / postesList.length * 100) : 0;
-    const barC = pct === 100 ? '#1e5631' : '#e67e22';
+    const barC = pct === 100 ? '#55613f' : '#e67e22';
     const persoKeys = new Set(perso.map(e => e.key));
     const ctrls = (e, idx) => `<span style="display:flex;flex-direction:column;line-height:0.75">
         <span onclick="deplacerEtape('${e.key}',-1)" title="Monter" style="cursor:pointer;font-size:0.78rem;padding:1px 3px;${idx === 0 ? 'opacity:0.2;pointer-events:none' : 'opacity:0.55'}">▲</span>
@@ -5021,7 +5028,7 @@ function renderChantierDetail() {
       ${items.length ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
         ${items.map(s => {
           const quand = s.ts ? new Date(s.ts).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : '';
-          return `<div class="flex-between" style="gap:8px;padding:7px 10px;background:${s.fait ? '#1e56310d' : '#fff7ed'};border-left:4px solid ${s.fait ? '#1e5631' : '#e67e22'};border-radius:8px">
+          return `<div class="flex-between" style="gap:8px;padding:7px 10px;background:${s.fait ? '#55613f0d' : '#fff7ed'};border-left:4px solid ${s.fait ? '#55613f' : '#e67e22'};border-radius:8px">
             <div style="min-width:0;flex:1">
               <div style="${s.fait ? 'text-decoration:line-through;color:var(--gris)' : ''}">${esc(s.texte)}${(s.quantite || s.unite) ? ` <span style="font-weight:700;color:#b9770e">· ${esc([s.quantite, s.unite].filter(Boolean).join(' '))}</span>` : ''}</div>
               <div style="font-size:0.72rem;color:var(--gris);margin-top:2px">${esc(s.auteur || '')}${quand ? ' · ' + quand : ''}</div>
@@ -5129,7 +5136,7 @@ function renderChantierDetail() {
           const meta = trans ? `${x.heuresTransport || '?'} h` : `${x.duree === 'demi' ? '½ journée' : 'journée'}`;
           return `<div class="flex-between" style="gap:8px;padding:6px 8px;background:#f8f9fa;border-radius:8px">
             <div style="min-width:0;flex:1">${icone} ${esc(nom)}${loc ? ' <span style="background:#2980b922;color:#2980b9;font-weight:700;font-size:0.66rem;padding:1px 6px;border-radius:10px">louée</span>' : ''} <span style="color:var(--gris);font-size:0.8rem">· ${meta} · 📅 ${x.date ? formatDateFR(x.date) : '?'}</span></div>
-            ${montreCout ? `<span style="font-weight:700;color:#1e5631;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
+            ${montreCout ? `<span style="font-weight:700;color:#55613f;white-space:nowrap">${eurFmt(coutMachine(x))}</span>` : ''}
             <button onclick="supprimerMachineChantier('${x.id}')" title="Retirer" style="background:none;border:none;cursor:pointer;flex:none">🗑️</button>
           </div>`;
         }).join('')}
@@ -5157,7 +5164,7 @@ function renderChantierDetail() {
   document.getElementById('ch-materiaux-list').innerHTML = mats.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:0.88rem">
         <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:4px">Date</th><th style="padding:4px">Matériau</th><th style="padding:4px;text-align:right">Quantité</th>${peutCout ? '<th style="padding:4px;text-align:right">Coût</th>' : ''}<th></th></tr></thead>
-        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}${m.stockConsoId ? ' <span title="Quantité retirée du stock" style="font-size:0.72rem;color:#1e5631;white-space:nowrap">📦➖</span>' : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right;white-space:nowrap">${peutCout && m.cout ? `<button onclick="memoriserPrixMateriau('${m.id}')" title="Mémoriser ce prix dans le Stock (repris automatiquement la prochaine fois)" style="background:none;border:none;cursor:pointer">💾</button>` : ''}<button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
+        <tbody>${mats.map(m => `<tr style="border-bottom:1px solid var(--border)${supp(m.poste) ? ';background:#fd7e1409' : ''}"><td style="padding:4px">${formatDateFR(m.date)}</td><td style="padding:4px">${esc(m.designation)}${supp(m.poste) ? suppBadge : ''}${m.stockConsoId ? ' <span title="Quantité retirée du stock" style="font-size:0.72rem;color:#55613f;white-space:nowrap">📦➖</span>' : ''}</td><td style="padding:4px;text-align:right">${m.quantite} ${esc(m.unite)}</td>${peutCout ? `<td style="padding:4px;text-align:right"><span onclick="modifierCoutMateriau('${m.id}')" style="cursor:pointer;border-bottom:1px dashed var(--gris)" title="Cliquer pour saisir / modifier le prix">${m.cout ? eurFmt(m.cout) : '✏️ —'}</span></td>` : ''}<td style="text-align:right;white-space:nowrap">${peutCout && m.cout ? `<button onclick="memoriserPrixMateriau('${m.id}')" title="Mémoriser ce prix dans le Stock (repris automatiquement la prochaine fois)" style="background:none;border:none;cursor:pointer">💾</button>` : ''}<button onclick="supprimerMateriauChantier('${m.id}')" style="background:none;border:none;cursor:pointer">🗑️</button></td></tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Aucun matériau encodé pour ce chantier.</div>';
 
@@ -5205,7 +5212,7 @@ function renderChantierDetail() {
             <button class="btn btn-secondary btn-sm" onclick="ajouterDevisSupplement()">+ Devis suppl.</button>
           </div>
         </div>
-        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#1e563115' : '#c0392b15'};color:${marge >= 0 ? '#1e5631' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'} <span style="font-weight:400;font-size:0.74rem">(sur budget total)</span></span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : '<div style="padding:6px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget (ou un devis suppl.) pour voir la marge.</div>'}
+        ${budget > 0 ? `<div class="flex-between" style="padding:8px 10px;margin-top:6px;border-radius:8px;background:${marge >= 0 ? '#55613f15' : '#c0392b15'};color:${marge >= 0 ? '#55613f' : '#c0392b'};font-weight:800"><span>${marge >= 0 ? '✅ Marge' : '⚠️ Perte'} <span style="font-weight:400;font-size:0.74rem">(sur budget total)</span></span><span>${eurFmt(marge)}${margePct !== null ? ` · ${margePct.toFixed(0)} %` : ''}</span></div>` : '<div style="padding:6px 0;color:var(--gris);font-size:0.85rem">💰 Renseigne un budget (ou un devis suppl.) pour voir la marge.</div>'}
         ${budget > 0 && coutSupp > 0 ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--gris)">💡 Pense à facturer les <strong style="color:#e67e22">${eurFmt(coutSupp)}</strong> de suppléments hors devis en plus.</div>` : ''}`;
     }
   }
@@ -5713,8 +5720,8 @@ const APPRO_STATUTS = {
   'a-commander': { label: '📋 À commander', c: '#c0392b', bg: '#c0392b15' },
   'commande':    { label: '📦 Commandé',    c: '#2980b9', bg: '#2980b915' },
   'a-enlever':   { label: '🚚 À enlever',   c: '#b9770e', bg: '#fd7e1422' },
-  'en-stock':    { label: '✅ En stock',    c: '#1e5631', bg: '#1e563115' },
-  'livre':       { label: '📥 Livré',       c: '#1e5631', bg: '#1e563115' }
+  'en-stock':    { label: '✅ En stock',    c: '#55613f', bg: '#55613f15' },
+  'livre':       { label: '📥 Livré',       c: '#55613f', bg: '#55613f15' }
 };
 const APPRO_STATUTS_ORDRE = { 'a-commander': 0, 'commande': 1, 'a-enlever': 2, 'en-stock': 3, 'livre': 4 };
 let currentApproId = null, currentApproChantier = null;
@@ -5783,7 +5790,7 @@ const CONGE_TYPES = {
 };
 const CONGE_STATUTS = {
   'en-attente': { label: '⏳ En attente', c: '#b9770e', bg: '#fd7e1418' },
-  'valide':     { label: '✅ Validé',     c: '#1e5631', bg: '#1e563115' },
+  'valide':     { label: '✅ Validé',     c: '#55613f', bg: '#55613f15' },
   'refuse':     { label: '❌ Refusé',     c: '#c0392b', bg: '#c0392b15' }
 };
 function tousMembres() { return [...new Set([...MEMBRES, ...MEMBRES_CREATION])]; }
@@ -6431,7 +6438,7 @@ function renderFacturation() {
   if (!masquerFacturees) {
     let moisLabel = moisRef;
     try { moisLabel = new Date(moisRef + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); } catch (e) {}
-    html += entete(`✅ Déjà facturées — ${moisLabel} (${dejaFact.length})`, '#1e5631');
+    html += entete(`✅ Déjà facturées — ${moisLabel} (${dejaFact.length})`, '#55613f');
     html += dejaFact.length ? dejaFact.map(itemHtml).join('') : '<div class="card"><div class="empty-state" style="padding:12px">Aucune facturée ce mois-ci.</div></div>';
   }
   list.innerHTML = html;
@@ -6696,7 +6703,7 @@ function statEntretien(prochainDate) {
 function statutMachine(statut) {
   if (statut === 'entretien') return { label: '🔧 À récupérer chez Vertitec', color: '#8a4b08', bg: '#fff3e0', bord: '#e67e22' };
   if (statut === 'hs')        return { label: '⛔ Hors service', color: '#922b21', bg: '#fdecea', bord: '#c0392b' };
-  return { label: '✔️ En ordre de marche', color: '#1e5631', bg: '#d8f3dc', bord: 'var(--vert-clair)' };
+  return { label: '✔️ En ordre de marche', color: '#55613f', bg: '#e8edda', bord: 'var(--vert-clair)' };
 }
 
 function renderMachines() {
@@ -6924,7 +6931,7 @@ function supprimerAchat() {
 // STOCK / INVENTAIRE (plantes, amendements, phyto, matériaux…) — consultable par tous
 // =====================================================
 const STOCK_CATEGORIES = {
-  plantes:     { label: '🌿 Plantes',         c: '#1e5631' },
+  plantes:     { label: '🌿 Plantes',         c: '#55613f' },
   amendements: { label: '🪴 Amendements',     c: '#8d6e63' },
   phyto:       { label: '🧪 Produits phyto',  c: '#c0392b' },
   materiaux:   { label: '🧱 Matériaux',       c: '#5d6d7e' },
@@ -6932,7 +6939,7 @@ const STOCK_CATEGORIES = {
   marchandise: { label: '🚚 Marchandise (hors stock)', c: '#e67e22', horsStock: true }
 };
 const STOCK_STATUTS = {
-  dispo:   { label: '✅ En stock',     c: '#1e5631', bg: '#1e563118' },
+  dispo:   { label: '✅ En stock',     c: '#55613f', bg: '#55613f18' },
   bas:     { label: '⚠️ Stock bas',    c: '#b9770e', bg: '#fd7e1422' },
   rupture: { label: '❌ À commander',  c: '#c0392b', bg: '#c0392b18' }
 };
@@ -6984,7 +6991,7 @@ function renderStock() {
     const valorises = stockReel.filter(it => it.prixAchat != null && it.prixAchat !== '');
     const total = valorises.reduce((s, it) => s + valeurLigne(it), 0);
     const sansPrix = stockReel.length - valorises.length;
-    enteteMarco = `<div class="card" style="margin-bottom:10px;border-left:5px solid #1e5631;background:#1e56310d">
+    enteteMarco = `<div class="card" style="margin-bottom:10px;border-left:5px solid #55613f;background:#55613f0d">
       <div class="flex-between" style="flex-wrap:wrap;gap:8px;align-items:center">
         <div><strong>💰 Valeur totale du stock : ${eurFmt(total)}</strong> <span style="font-size:0.8rem;color:var(--gris)">HTVA · ${valorises.length} article(s) valorisé(s)${sansPrix ? ` · ${sansPrix} sans prix` : ''}</span></div>
         <button class="btn btn-secondary btn-sm" onclick="exporterStockComptable()">📊 Export comptable (Excel)</button>
@@ -7000,7 +7007,7 @@ function renderStock() {
     const qte = (!march && i.quantite) ? `${i.quantite}${i.unite ? (' ' + i.unite) : ''}` : '';
     const sousLigne = [cat.label, i.emplacement ? `📍 ${esc(i.emplacement)}` : '', i.fournisseur ? `🏪 ${esc(i.fournisseur)}` : ''].filter(Boolean).join(' · ');
     const lignePrix = (estMarco && i.prixAchat != null && i.prixAchat !== '')
-      ? `<div style="font-size:0.8rem;color:#1e5631;margin-top:2px">💰 ${eurFmt(i.prixAchat)}/u${valeurLigne(i) ? ` · valeur ${eurFmt(valeurLigne(i))}` : ''}</div>` : '';
+      ? `<div style="font-size:0.8rem;color:#55613f;margin-top:2px">💰 ${eurFmt(i.prixAchat)}/u${valeurLigne(i) ? ` · valeur ${eurFmt(valeurLigne(i))}` : ''}</div>` : '';
     return `<div class="card" style="margin-bottom:8px;padding:12px;border-left:5px solid ${cat.c}">
       <div class="flex-between" style="gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0;flex:1">
