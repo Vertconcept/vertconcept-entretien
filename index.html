@@ -694,7 +694,7 @@
           <div class="form-label">Équipe</div>
           <div class="fiche-equipe-selector">
             <button class="fiche-equipe-btn active-jimi" id="fiche-btn-jimi" onclick="selectFicheEquipe('Jimi')">🔵 Jimi</button>
-            <button class="fiche-equipe-btn" id="fiche-btn-timo" onclick="selectFicheEquipe('Timo')">🟢 Timo</button>
+            
             <button class="fiche-equipe-btn" id="fiche-btn-mateo" onclick="selectFicheEquipe('Mateo')">🟣 Mateo</button>
           </div>
         </div>
@@ -963,7 +963,7 @@
   <!-- ===== TONTES ===== -->
   <div class="page" id="page-tontes">
     <div class="flex-between mb-1">
-      <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Timo + Mateo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
+      <div class="alert alert-info" style="margin:0;flex:1">🌿 Tontes réalisées par <strong>Mateo</strong> — tous les 15 jours le <strong>jeudi et vendredi</strong></div>
       <button class="btn btn-secondary btn-sm" id="btn-geo-tontes" onclick="geolocaliserClients()" style="margin-left:8px;white-space:nowrap">📍 Géolocaliser</button>
       <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:4px;white-space:nowrap">🌱 Tonte ponctuelle</button>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
@@ -999,7 +999,7 @@
     </div>
     <div class="modal-body">
       <div class="alert alert-info" style="margin-bottom:1rem">
-        Crée automatiquement une intervention <strong>Tonte - Tournée complète</strong> chaque jeudi et vendredi, toutes les 2 semaines, pour <strong>Timo + Mateo</strong>.
+        Crée automatiquement une intervention <strong>Tonte - Tournée complète</strong> chaque jeudi et vendredi, toutes les 2 semaines, pour <strong>Mateo</strong>.
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -1156,7 +1156,7 @@
           <select class="form-control" id="panne-auteur">
             <option value="Marco">Marco</option>
             <option value="Jimi">Jimi</option>
-            <option value="Timo">Timo</option>
+            
             <option value="Justin">Justin</option>
             <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
@@ -1455,7 +1455,7 @@
           <select class="form-control" id="fo-auteur">
             <option value="Marco">Marco</option>
             <option value="Jimi">Jimi</option>
-            <option value="Timo">Timo</option>
+            
             <option value="Justin">Justin</option>
             <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
@@ -1673,7 +1673,7 @@
         <select class="form-control" id="interv-chef">
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
-          <option value="Timo">Timo</option>
+          
           <option value="Mateo">Mateo</option>
         </select>
       </div>
@@ -1681,7 +1681,7 @@
         <label class="form-label">Membres de l'équipe</label>
         <div class="equipe-toggle" id="equipe-toggle">
           <div class="membre-chip chef selected" data-membre="Jimi" onclick="toggleMembre(this)">Jimi</div>
-          <div class="membre-chip chef" data-membre="Timo" onclick="toggleMembre(this)">Timo</div>
+          
           <div class="membre-chip chef" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
           <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
@@ -1961,7 +1961,7 @@
         <select class="form-control" id="remarque-auteur">
           <option value="Marco">Marco</option>
           <option value="Jimi">Jimi</option>
-          <option value="Timo">Timo</option>
+          
           <option value="Mateo">Mateo</option>
           <option value="Bryan">Bryan</option>
           <option value="Evann">Evann</option>
@@ -2144,8 +2144,8 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Marco','Jimi','Timo','Justin','Mateo','Bryan','Evann','Lucas'];
-const CHEFS = ['Marco','Jimi','Timo','Mateo'];
+const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','Evann','Lucas'];
+const CHEFS = ['Marco','Jimi','Mateo'];
 
 firebase.initializeApp({
   apiKey: "AIzaSyAfz-ugGATvkPNHLVWx46XGFy57WtNfrTU",
@@ -2157,7 +2157,7 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 const auth = firebase.auth();
-const ADMINS = ['Marco', 'Jimi', 'Timo', 'Justin', 'Thibaut']; // comptes avec accès admin (Thibaut = chef création)
+const ADMINS = ['Marco', 'Jimi', 'Justin', 'Thibaut']; // comptes avec accès admin (Thibaut = chef création)
 // Pôle de chaque personne : 'entretien' | 'creation' | 'direction' (voit tout). Défaut = entretien.
 const USER_POLES = {
   'Marco': 'direction',
@@ -2182,7 +2182,6 @@ function budgetTotalChantier(ch) { return (parseFloat(ch && ch.budget) || 0) + (
 const USER_EMAILS = {
   'Marco':  'info@vertconcept.be',
   'Jimi':   'jimi.engelbeens001@hotmail.com',
-  'Timo':   'bouby4455@gmail.com',
   'Justin': 'justin@vertconcept.be',
   'Mateo':  'mferretti150@gmail.com',
   'Bryan':  'bryanfagnart77@gmail.com',
@@ -2489,13 +2488,13 @@ function showPage(name) {
 // =====================================================
 // CONNEXION / LOGIN
 // =====================================================
-const ADMIN_PINS = { 'Marco': '0605', 'Jimi': '1234', 'Timo': '1111', 'Justin': '0001' };
+const ADMIN_PINS = { 'Marco': '0605', 'Jimi': '1234', 'Justin': '0001' };
 let pendingAdminUser = null;
 
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Timo','Mateo','Bryan','Evann','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
+  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','Evann','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
   const bureau = ['Marco','Justin','Thibaut'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
@@ -7392,7 +7391,7 @@ async function confirmerGenererTontes() {
   const mkTonte = (date) => {
     const id = uuid();
     return { id, date, clientId: 'tonte-collective', clientNom: 'Tournée tonte — tous clients',
-      type: 'tonte', chef: 'Timo', membres: ['Timo', 'Mateo'],
+      type: 'tonte', chef: 'Mateo', membres: ['Mateo'],
       adresse: '', materiel: 'Tondeuses, souffleur', dechets: null, duree: 8,
       demandes: notes, remarquesClient: '', statut: 'planifie',
       remarques: [], heuresParMembre: null, pulve: null, facturee: false };
@@ -7424,7 +7423,7 @@ function confirmerTontePonctuelle() {
   const client = (getData().clients).find(c => c.id === clientId);
   const iv = {
     id: uuid(), clientId, date, type: 'tonte',
-    chef: 'Timo', membres: ['Timo', 'Mateo'],
+    chef: 'Mateo', membres: ['Mateo'],
     adresse: client?.adresse || '', materiel: 'Tondeuses, souffleur',
     dechets: null, duree: null,
     demandes: document.getElementById('tp-notes').value, remarquesClient: '',
