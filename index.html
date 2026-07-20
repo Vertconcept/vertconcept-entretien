@@ -1160,7 +1160,7 @@
             <option value="Justin">Justin</option>
             <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
-            <option value="Evann">Evann</option>
+            
             <option value="Lucas">Lucas (étudiant)</option>
           </select>
         </div>
@@ -1459,7 +1459,7 @@
             <option value="Justin">Justin</option>
             <option value="Mateo">Mateo</option>
             <option value="Bryan">Bryan</option>
-            <option value="Evann">Evann</option>
+            
             <option value="Lucas">Lucas (étudiant)</option>
           </select>
         </div>
@@ -1684,7 +1684,7 @@
           
           <div class="membre-chip chef" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
-          <div class="membre-chip" data-membre="Evann" onclick="toggleMembre(this)">Evann</div>
+          
           <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
         </div>
       </div>
@@ -1964,7 +1964,7 @@
           
           <option value="Mateo">Mateo</option>
           <option value="Bryan">Bryan</option>
-          <option value="Evann">Evann</option>
+          
           <option value="Lucas">Lucas</option>
         </select>
       </div>
@@ -2144,7 +2144,7 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','Evann','Lucas'];
+const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','Lucas'];
 const CHEFS = ['Marco','Jimi','Mateo'];
 
 firebase.initializeApp({
@@ -2185,7 +2185,6 @@ const USER_EMAILS = {
   'Justin': 'justin@vertconcept.be',
   'Mateo':  'mferretti150@gmail.com',
   'Bryan':  'bryanfagnart77@gmail.com',
-  'Evann':  'evannhennico07@gmail.com',
   'Lucas':  'lucas@vertconcept.app', // compte pas encore créé
   // Équipe Création (comptes à créer dans Firebase avec EXACTEMENT ces e-mails)
   'Thibaut': 'thibaut.devel@hotmail.com',
@@ -2494,7 +2493,7 @@ let pendingAdminUser = null;
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','Evann','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
+  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
   const bureau = ['Marco','Justin','Thibaut'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
@@ -4481,7 +4480,7 @@ const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
 // Tarif horaire du transport camion (entre dans la rentabilité du chantier)
 const TRANSPORT_TARIF = 90;
 // Équipe Création (pour affecter les ouvriers à un chantier)
-const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony', 'Evann'];
+const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
 // Étapes d'avancement type d'un chantier d'aménagement
 const CHANTIER_ETAPES = [
   { key: 'prepa',      label: '🚧 Préparation / terrassement' },
