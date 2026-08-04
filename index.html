@@ -982,6 +982,21 @@
       <div class="card-title">🌿 Clients avec tonte programmée</div>
       <div class="tonte-grid" id="tonte-clients-list"></div>
     </div>
+    <div class="card" id="card-calc-tonte" style="display:none">
+      <div class="card-title">🧮 Calculateur de prix de tonte <span style="font-size:0.75rem;font-weight:600;color:var(--gris)">— pour tes devis (rentable)</span></div>
+      <div style="font-size:0.82rem;color:var(--gris);margin-bottom:10px">Estime un prix par tonte qui couvre tes coûts + ta marge. Basé sur tes chiffres (⚙️ Paramètres facturation).</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">⏱️ Temps sur place / passage (min)</label><input type="number" min="0" step="1" class="form-control" id="ct-temps" placeholder="ex : 25" oninput="calcPrixTonte()"></div>
+        <div class="form-group"><label class="form-label">👷 Nb d'ouvriers</label><input type="number" min="1" step="1" class="form-control" id="ct-ouv" value="1" oninput="calcPrixTonte()"></div>
+        <div class="form-group"><label class="form-label">🚗 Trajet A/R attribué (min)</label><input type="number" min="0" step="1" class="form-control" id="ct-trajet" value="0" placeholder="ex : 10" oninput="calcPrixTonte()"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">⛽ Distance A/R (km)</label><input type="number" min="0" step="0.1" class="form-control" id="ct-km" value="0" oninput="calcPrixTonte()"></div>
+        <div class="form-group"><label class="form-label">🔁 Nb de tontes / an</label><input type="number" min="1" step="1" class="form-control" id="ct-nban" value="18" oninput="calcPrixTonte()"></div>
+        <div class="form-group"><label class="form-label">🎯 Marge cible (%)</label><input type="number" min="0" max="95" step="1" class="form-control" id="ct-marge" oninput="calcPrixTonte()"></div>
+      </div>
+      <div id="ct-result" style="margin-top:10px"></div>
+    </div>
     <div class="card" id="card-rentabilite" style="display:none">
       <div class="card-title">💶 Rentabilité des tontes <span style="font-size:0.75rem;font-weight:600;color:var(--gris)">— visible par Marco uniquement</span></div>
       <div id="tonte-rentabilite"></div>
@@ -3307,6 +3322,18 @@ function renderTontes() {
   }
 
   // --- Rentabilité (Marco uniquement) ---
+  // Calculateur de prix de tonte (Marco + Justin — devis)
+  const cardCalc = document.getElementById('card-calc-tonte');
+  if (cardCalc) {
+    const voitCalc = voitChantierFinances();
+    cardCalc.style.display = voitCalc ? '' : 'none';
+    if (voitCalc) {
+      const mEl = document.getElementById('ct-marge');
+      if (mEl && mEl.value === '') mEl.value = (fraisFactu && fraisFactu.margeCible) || 30;
+      calcPrixTonte();
+    }
+  }
+
   const cardRenta = document.getElementById('card-rentabilite');
   cardRenta.style.display = estMarco ? '' : 'none';
   if (estMarco) {
@@ -3518,6 +3545,48 @@ function distanceBoucleTontesKm() {
 }
 
 // Calcule recettes / frais / marge nette des tontes
+function calcPrixTonte() {
+  const f = fraisFactu || {};
+  const num = id => { const e = document.getElementById(id); return e ? (parseFloat(e.value) || 0) : 0; };
+  const tempsMin = num('ct-temps');
+  const nbOuv = Math.max(1, num('ct-ouv') || 1);
+  const trajetMin = num('ct-trajet');
+  const km = num('ct-km');
+  const nbAn = Math.max(1, num('ct-nban') || 1);
+  const mEl = document.getElementById('ct-marge');
+  let margePct = (mEl && mEl.value !== '') ? (parseFloat(mEl.value) || 0) : (f.margeCible || 30);
+  const res = document.getElementById('ct-result');
+  if (!res) return;
+  if (!tempsMin) { res.innerHTML = '<div style="color:var(--gris);font-size:0.85rem">&#8592; Entre au moins le temps sur place pour estimer le prix.</div>'; return; }
+  const heuresPresence = (tempsMin + trajetMin) / 60;           // heures par ouvrier (sur place + trajet)
+  const heuresMO = heuresPresence * nbOuv;                       // heures homme totales
+  const coutH = f.coutHoraireOuvrier || 25;
+  const mainOeuvre = heuresMO * coutH;
+  const outils = heuresMO * (f.contributionOutils || 0);
+  const carburant = km * ((f.consoLitres100 || 0) / 100) * (f.prixCarburant || 0);
+  const coutVanJour = (f.vanMensuel || 0) / (f.vanJoursMois || 20);
+  const vehicule = coutVanJour * (heuresPresence / (f.vanHeuresJour || 8));
+  const total = mainOeuvre + outils + carburant + vehicule;
+  const marge = Math.min(0.95, margePct / 100);
+  const prix = marge < 1 ? total / (1 - marge) : total;
+  const prixArr = Math.ceil(prix);
+  const eur = n => n.toFixed(2).replace('.', ',') + ' &euro;';
+  const ligne = (l, v) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">${l}</td><td style="padding:5px 4px;text-align:right">${eur(v)}</td></tr>`;
+  res.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.86rem">
+      ${ligne(`&#128119; Main-d'oeuvre (${heuresMO.toFixed(2)} h &times; ${eur(coutH)})`, mainOeuvre)}
+      ${outils ? ligne('&#129520; Consommables / outils', outils) : ''}
+      ${carburant ? ligne(`&#9981; Carburant (${km} km A/R)`, carburant) : ''}
+      ${vehicule ? ligne(`&#128666; Camionnette (${heuresPresence.toFixed(2)} h)`, vehicule) : ''}
+      <tr style="border-top:2px solid var(--gris)"><td style="padding:7px 4px;font-weight:800">Co&ucirc;t de revient / tonte</td><td style="padding:7px 4px;text-align:right;font-weight:800">${eur(total)}</td></tr>
+      <tr style="border-top:2px solid var(--vert)"><td style="padding:8px 4px;font-weight:800;color:var(--vert)">&#128176; Prix conseill&eacute; / tonte (marge ${margePct}%)</td><td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.1rem;color:var(--vert)">${eur(prix)} HTVA</td></tr>
+    </table>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center">
+      <div style="background:var(--vert-pale);border-radius:10px;padding:9px 15px;font-weight:800;color:var(--vert-fonce)">&#8776; ${eur(prixArr)} / tonte <span style="font-weight:500;font-size:0.8rem">(arrondi)</span></div>
+      <div style="background:var(--vert-pale);border-radius:10px;padding:9px 15px;font-weight:800;color:var(--vert-fonce)">&#128197; ${nbAn} tontes/an &rarr; ${eur(prixArr * nbAn)} / an</div>
+    </div>
+    <div style="font-size:0.76rem;color:var(--gris);margin-top:8px">Bas&eacute; sur tes co&ucirc;ts (&#9881;&#65039; Param&egrave;tres facturation) : ${eur(coutH)}/h charg&eacute;, marge cible ${f.margeCible || 30}%. Montants HTVA.</div>`;
+}
+
 function calculerRentabiliteTontes(f) {
   f = f || fraisTontes;
   const saison = saisonTonte();
