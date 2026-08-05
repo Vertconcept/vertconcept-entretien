@@ -4721,13 +4721,14 @@ function renderCreationSemaine(el, chantiers, clients) {
       if (!ch || idsRange.includes(ch.id)) return '';
       const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
       const client = clients.find(c => c.id === ch.clientId);
-      const pool = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
-      const plEquipe = pl.equipe || pool; // équipe DU JOUR (par défaut = équipe du chantier)
+      const equipeBase = ch.equipe && ch.equipe.length ? ch.equipe : (ch.chef ? [ch.chef] : []);
+      const pool = [...new Set([...equipeBase, ...RENFORT_ENTRETIEN])]; // base + renforts entretien (toggleables ce jour)
+      const plEquipe = pl.equipe || equipeBase; // équipe DU JOUR (par défaut = équipe du chantier, sans renforts)
       return `<div class="interv-card" onclick="ouvrirChantierDetail('${ch.id}')" style="border-left-color:${st.c};cursor:pointer;position:relative">
         <span onclick="event.stopPropagation();retirerPlacementChantier('${pl.id}')" title="Retirer ce chantier de ce jour" style="position:absolute;top:1px;right:4px;cursor:pointer;color:var(--gris);font-weight:700;font-size:0.95rem;line-height:1">✕</span>
         <div class="client-name" style="padding-right:14px">${esc(ch.nom || 'Chantier')}</div>
         <div class="interv-meta">${client ? esc(client.nom) : '—'}</div>
-        ${pool.length ? `<div class="equipe-chips" onclick="event.stopPropagation()" title="Cliquez un homme pour l'ajouter/retirer ce jour">${pool.map(m => `<span onclick="togglePlacementMembre('${pl.id}','${m}')" class="equipe-chip-sm" style="cursor:pointer;${plEquipe.includes(m) ? '' : 'opacity:0.35;text-decoration:line-through'}">${esc(m)}</span>`).join('')}</div>` : ''}
+        ${pool.length ? `<div class="equipe-chips" onclick="event.stopPropagation()" title="Cliquez un homme pour l'ajouter/retirer ce jour">${pool.map(m => `<span onclick="togglePlacementMembre('${pl.id}','${m}')" class="equipe-chip-sm" style="cursor:pointer;${plEquipe.includes(m) ? '' : 'opacity:0.35;text-decoration:line-through'}">${esc(m)}${MEMBRES_CREATION.includes(m) ? '' : ' 🍃'}</span>`).join('')}</div>` : ''}
         <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
           <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px">${st.label}</span>
           ${pool.length ? `<span style="font-size:0.68rem;color:var(--gris)">👷 ${plEquipe.length}</span>` : `<label onclick="event.stopPropagation()" style="font-size:0.68rem;color:var(--gris);display:inline-flex;align-items:center;gap:2px">👷 <input type="number" min="0" value="${esc(pl.nbHommes || '')}" onchange="setPlacementHommes('${pl.id}',this.value)" placeholder="–" style="width:34px;padding:1px 3px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;text-align:center"></label>`}
