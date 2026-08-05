@@ -4550,6 +4550,10 @@ const UNITES_AVANCEMENT = ['m²', 'm³', 'fft', 'Pcs', 'container', 'ml', 'T'];
 const TRANSPORT_TARIF = 90;
 // Équipe Création (pour affecter les ouvriers à un chantier)
 const MEMBRES_CREATION = ['Thibaut', 'Jerome', 'Olivier', 'Antoine', 'Anthony'];
+// Ouvriers d'entretien pouvant venir en renfort sur les chantiers Création (hors direction)
+const RENFORT_ENTRETIEN = MEMBRES.filter(m => !['Marco', 'Justin'].includes(m));
+// Pool complet sélectionnable en Création = équipe Création + renforts entretien
+const POOL_CREATION = [...new Set([...MEMBRES_CREATION, ...RENFORT_ENTRETIEN])];
 // Étapes d'avancement type d'un chantier d'aménagement
 const CHANTIER_ETAPES = [
   { key: 'prepa',      label: '🚧 Préparation / terrassement' },
@@ -4910,8 +4914,8 @@ function ouvrirChantier(id) {
   document.getElementById('ch-description').value = ch?.description || '';
   document.getElementById('ch-chef').value = ch?.chef || 'Thibaut';
   const equipe = ch?.equipe || [];
-  document.getElementById('ch-equipe-toggle').innerHTML = MEMBRES_CREATION.map(m =>
-    `<div class="membre-chip${equipe.includes(m) ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`
+  document.getElementById('ch-equipe-toggle').innerHTML = POOL_CREATION.map(m =>
+    `<div class="membre-chip${equipe.includes(m) ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}${MEMBRES_CREATION.includes(m) ? '' : ' 🍃'}</div>`
   ).join('');
   // Jours sélectionnés : placements existants, ou la plage de dates (legacy) en jours ouvrés
   chJoursSel = new Set((appData.chantierPlanning || []).filter(p => p.chantierId === currentChantierId).map(p => p.date));
@@ -5004,9 +5008,9 @@ function ouvrirChantierDetail(id) {
   // Cases ouvriers : équipe du chantier ∪ équipe Création ∪ moi ; moi pré-coché
   const chOuv = appData.chantiers.find(c => c.id === id);
   const moi = currentUser ? currentUser.name : '';
-  const pool = [...new Set([...((chOuv && chOuv.equipe) || []), ...MEMBRES_CREATION, moi].filter(Boolean))];
+  const pool = [...new Set([...((chOuv && chOuv.equipe) || []), ...POOL_CREATION, moi].filter(Boolean))];
   const ouvEl = document.getElementById('ch-h-ouvriers');
-  if (ouvEl) ouvEl.innerHTML = pool.map(m => `<div class="membre-chip${m === moi ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`).join('');
+  if (ouvEl) ouvEl.innerHTML = pool.map(m => `<div class="membre-chip${m === moi ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}${MEMBRES_CREATION.includes(m) ? '' : ' 🍃'}</div>`).join('');
   // Cases engins (facultatif, multi-sélection) dans le menu déroulant du formulaire heures
   const enginEl = document.getElementById('ch-h-engins');
   if (enginEl) { enginEl.innerHTML = (appData.machines || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(m => `<div class="membre-chip" data-machine="${m.id}" onclick="toggleEnginChip(this)">🚜 ${(m.nom || '').replace(/</g, '&lt;')}</div>`).join('') || '<span style="color:var(--gris);font-size:0.85rem">Aucune machine — créez-en dans Matériel</span>'; enginEl.style.display = 'none'; }
