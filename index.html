@@ -3774,7 +3774,7 @@ function ouvrirEditionIntervention(id) {
   currentIntervId = id;
 
   document.getElementById('modal-interv-titre').textContent = 'Modifier l\'intervention';
-  document.getElementById('btn-suppr-interv').style.display = '';
+  document.getElementById('btn-suppr-interv').style.display = modeAdmin ? '' : 'none';
 
   document.getElementById('interv-date').value = iv.date;
   majDateConfirm();
@@ -3973,7 +3973,7 @@ function ouvrirDetailIntervention(id) {
     { val: 'en-cours',  icon: '🔧', label: 'En cours' },
     { val: 'termine',   icon: '✅', label: 'Terminé'  },
   ];
-  const btnsStatut = modeAdmin ? `
+  const btnsStatut = `
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-right:auto">
       ${statutsRapides.map(s => `
         <button onclick="changerStatutRapide('${id}','${s.val}')"
@@ -3981,7 +3981,7 @@ function ouvrirDetailIntervention(id) {
                  background:${s.val===iv.statut?'var(--vert-pale)':'white'};font-size:0.78rem;font-weight:600;cursor:pointer">
           ${s.icon} ${s.label}
         </button>`).join('')}
-    </div>` : '';
+    </div>`;
 
   document.getElementById('detail-footer').innerHTML = `
     ${btnsStatut}
@@ -3989,7 +3989,7 @@ function ouvrirDetailIntervention(id) {
     ${iv.clientId !== 'tonte-collective' ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirContinuer('${id}')">📅 Continuer un autre jour</button>` : ''}
     ${client && client.tel ? `<button class="btn btn-sm" style="background:#25D366;color:white;border:none" onclick="prevenirWhatsApp('${id}')">📲 Prévenir WhatsApp</button>` : ''}
     ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
-    ${modeAdmin ? `<button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>` : ''}
+    <button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>
     <button class="btn btn-secondary btn-sm" onclick="fermerModal('modal-detail')">Fermer</button>
   `;
 
