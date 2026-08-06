@@ -4440,7 +4440,7 @@ function bilanContrat(ct) {
 function renderContrats() {
   const cont = document.getElementById('contrats-list');
   if (!cont) return;
-  const marco = currentUser && currentUser.name === 'Marco';
+  const marco = voitChantierFinances(); // Marco + Justin : ajout / édition / bilan des contrats
   const btn = document.getElementById('btn-nouveau-contrat');
   if (btn) btn.style.display = marco ? '' : 'none';
   const { contrats, clients } = getData();
