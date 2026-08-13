@@ -3481,8 +3481,29 @@ function ouvrirDetailTonteClient(clientId) {
     html += `<div style="opacity:0.68">${dejaFact.map(ligne).join('')}</div>`;
   }
   if (!passages.length) html = `<div class="empty-state" style="padding:16px">Aucune tonte encore realisee pour ce client.<br>Cochez &#9989; dans la tournee quand c'est fait.</div>`;
+  if (modeAdmin) {
+    html += `<hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
+      <div style="font-weight:800;color:var(--vert-fonce);margin-bottom:4px">&#10133; Ajouter une tonte realisee</div>
+      <div style="font-size:0.8rem;color:var(--gris);margin-bottom:8px">Pour encoder les tontes faites <strong>avant l'app</strong> (debut de saison), afin que le compte annuel soit juste.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="date" id="tonte-ajout-date" class="form-control" style="max-width:170px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer"><input type="checkbox" id="tonte-ajout-facturee" style="width:auto"> deja facturee</label>
+        <button class="btn btn-primary btn-sm" onclick="ajouterTontePassee('${clientId}')">Ajouter</button>
+      </div>`;
+  }
   document.getElementById('tonte-client-body').innerHTML = html;
   document.getElementById('modal-tonte-client').classList.remove('hidden');
+}
+function ajouterTontePassee(clientId) {
+  if (!modeAdmin) return;
+  const dEl = document.getElementById('tonte-ajout-date');
+  const date = dEl ? dEl.value : '';
+  if (!date) { alert('Choisissez la date de la tonte.'); return; }
+  const factEl = document.getElementById('tonte-ajout-facturee');
+  const doc = { id: uuid(), clientId, date, ts: date + 'T12:00:00' };
+  if (factEl && factEl.checked) doc.facture = true;
+  saveDoc('tontesPassages', doc);
+  setTimeout(() => ouvrirDetailTonteClient(clientId), 250);
 }
 function toggleFactureTonte(passageId, clientId) {
   const p = (appData.tontesPassages || []).find(x => x.id === passageId);
