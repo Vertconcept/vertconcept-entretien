@@ -1699,6 +1699,7 @@
           
           <div class="membre-chip chef" data-membre="Mateo" onclick="toggleMembre(this)">Mateo</div>
           <div class="membre-chip" data-membre="Bryan" onclick="toggleMembre(this)">Bryan</div>
+          <div class="membre-chip" data-membre="William" onclick="toggleMembre(this)">William</div>
           
           <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
         </div>
@@ -2159,7 +2160,7 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','Lucas'];
+const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','William','Lucas'];
 const CHEFS = ['Marco','Jimi','Mateo','Bryan'];
 
 firebase.initializeApp({
@@ -2200,6 +2201,7 @@ const USER_EMAILS = {
   'Justin': 'justin@vertconcept.be',
   'Mateo':  'mferretti150@gmail.com',
   'Bryan':  'bryanfagnart77@gmail.com',
+  'William': 'william@vertconcept.app', // compte a creer
   'Lucas':  'lucas@vertconcept.app', // compte pas encore créé
   // Équipe Création (comptes à créer dans Firebase avec EXACTEMENT ces e-mails)
   'Thibaut': 'thibaut.devel@hotmail.com',
@@ -2508,7 +2510,7 @@ let pendingAdminUser = null;
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
+  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','William','Lucas','Thibaut','Jerome','Olivier','Antoine','Anthony'];
   const bureau = ['Marco','Justin','Thibaut'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
