@@ -967,6 +967,7 @@
       <button class="btn btn-secondary btn-sm" id="btn-geo-tontes" onclick="geolocaliserClients()" style="margin-left:8px;white-space:nowrap">📍 Géolocaliser</button>
       <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:4px;white-space:nowrap">🌱 Tonte ponctuelle</button>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
+      <button class="btn btn-secondary btn-sm" id="btn-decaler-tontes" onclick="decalerTontesSemaine()" style="margin-left:4px;white-space:nowrap">📆 Décaler d'une semaine</button>
       <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
     </div>
     <div class="stats-row" id="stats-tontes" style="margin-top:0.75rem"></div>
@@ -3391,6 +3392,10 @@ function renderTontes() {
   if (btnGen) btnGen.style.display = modeAdmin ? '' : 'none';
   const btnGeo = document.getElementById('btn-geo-tontes');
   if (btnGeo) btnGeo.style.display = modeAdmin ? '' : 'none';
+  const btnDec = document.getElementById('btn-decaler-tontes');
+  if (btnDec) btnDec.style.display = modeAdmin ? '' : 'none';
+  const btnSup = document.getElementById('btn-suppr-tontes');
+  if (btnSup) btnSup.style.display = modeAdmin ? '' : 'none';
 }
 
 // Comparateur d'adresses pour la tournée (code postal, puis ville, puis rue, puis nom)
@@ -7450,6 +7455,26 @@ async function supprimerPlanningTontes() {
   if (!confirm(`Supprimer les ${sessions.length} sessions de tonte du planning ?`)) return;
   for (const iv of sessions) await deleteDoc('interventions', iv.id);
   alert(`✅ ${sessions.length} sessions supprimées. Vous pouvez maintenant regénérer le planning.`);
+}
+
+// Décaler globalement les tontes À VENIR (ex : semaine sautée pour sécheresse) — ne change que les dates
+function decalerTontesSemaine() {
+  if (!modeAdmin) return;
+  const rep = prompt("Décaler les tontes À VENIR de combien de semaines ?\n\n1 = une semaine plus tard (ex : sécheresse)\n-1 = une semaine plus tôt", "1");
+  if (rep === null) return;
+  const nb = parseInt(rep, 10);
+  if (!nb) { alert("Entrez un nombre de semaines (ex : 1)."); return; }
+  const today = formatDate(new Date());
+  const sessions = (appData.interventions || []).filter(iv => iv.clientId === 'tonte-collective' && (iv.date || '') >= today && iv.statut !== 'termine');
+  if (!sessions.length) { alert("Aucune session de tournée de tonte à venir à décaler."); return; }
+  const sens = nb > 0 ? '+' + nb : '' + nb;
+  if (!confirm(`Décaler ${sessions.length} tonte(s) à venir de ${sens} semaine(s) ?\n\nSeules les dates changent — aucune donnée n'est perdue (les tontes déjà faites ne bougent pas).`)) return;
+  sessions.forEach(iv => {
+    const d = new Date(iv.date + 'T00:00:00');
+    d.setDate(d.getDate() + nb * 7);
+    saveDoc('interventions', { ...iv, date: formatDate(d) });
+  });
+  alert(`✅ ${sessions.length} tonte(s) décalée(s) de ${sens} semaine(s).`);
 }
 
 function ouvrirGenererTontes() {
