@@ -739,6 +739,7 @@
         <div class="vue-toggle">
           <button id="creation-vue-semaine" class="active" onclick="setVueCreation('semaine')">Semaine</button>
           <button id="creation-vue-mois" onclick="setVueCreation('mois')">Mois</button>
+          <button id="creation-vue-equipes" onclick="setVueCreation('equipes')">📋 Équipes</button>
           <button id="creation-vue-annee" onclick="setVueCreation('annee')">Année</button>
         </div>
         <button class="btn btn-secondary btn-sm" id="btn-samedi-creation" onclick="toggleSamediCreation()" title="Afficher / masquer le samedi">+ Samedi</button>
@@ -4625,7 +4626,7 @@ const CHANTIER_ETAPES = [
 ];
 function periodeCreation() {
   const now = new Date();
-  if (vueCreation === 'mois') {
+  if (vueCreation === 'mois' || vueCreation === 'equipes') {
     const ref = new Date(now.getFullYear(), now.getMonth() + creationOffset, 1);
     const fin = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
     return { debut: formatDate(ref), fin: formatDate(fin), titre: ref.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(/^./, s => s.toUpperCase()) };
@@ -4650,7 +4651,7 @@ function creationAujourdhui() { creationOffset = 0; renderCreation(); }
 function renderCreation() {
   const el = document.getElementById('creation-list');
   if (!el) return;
-  ['semaine', 'mois', 'annee'].forEach(v => document.getElementById('creation-vue-' + v)?.classList.toggle('active', v === vueCreation));
+  ['semaine', 'mois', 'equipes', 'annee'].forEach(v => document.getElementById('creation-vue-' + v)?.classList.toggle('active', v === vueCreation));
   const btnResa = document.getElementById('btn-reserver-creation');
   if (btnResa) btnResa.style.display = modeAdmin ? '' : 'none';
   const p = periodeCreation();
@@ -4694,6 +4695,7 @@ function renderCreation() {
 
   // Vues calendrier : Mois = grille, Année = frise chronologique (étalement)
   if (vueCreation === 'mois')  { renderCreationCalendrier(el, p, chantiers, clients); return; }
+  if (vueCreation === 'equipes') { renderCreationEquipes(el, p, chantiers, clients); return; }
   if (vueCreation === 'annee') { renderCreationGantt(el, p, chantiers, clients); return; }
 
   // Vue Semaine : tableau jour par jour (même présentation que l'entretien)
@@ -4913,6 +4915,107 @@ function renderCreationCalendrier(el, p, chantiers, clients) {
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// --- Vue MOIS PAR ÉQUIPE : colonnes d'équipes (comme le planning Excel) ---
+function renderCreationEquipes(el, p, chantiers, clients) {
+  const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ref = new Date(p.debut + 'T00:00:00');
+  const an = ref.getFullYear(), mois = ref.getMonth();
+  const today = formatDate(new Date());
+  const nbJoursMois = new Date(an, mois + 1, 0).getDate();
+  const joursAbbr = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
+  const COUL = ['#2980b9', '#e67e22', '#6f42c1', '#16a085', '#c0392b', '#8e44ad', '#27ae60', '#d35400', '#34495e', '#16824f'];
+  const mm = String(mois + 1).padStart(2, '0');
+
+  const joursChMois = ch => {
+    const days = new Set();
+    if (chantierAPlacements(ch.id)) {
+      (appData.chantierPlanning || []).filter(pl => pl.chantierId === ch.id).forEach(pl => {
+        const d = new Date(pl.date + 'T00:00:00');
+        if (d.getFullYear() === an && d.getMonth() === mois) days.add(pl.date);
+      });
+    } else if (ch.dateDebut) {
+      const f = ch.dateFin || ch.dateDebut;
+      let d = new Date(Math.max(+new Date(ch.dateDebut + 'T00:00:00'), +new Date(an, mois, 1)));
+      const end = new Date(Math.min(+new Date(f + 'T00:00:00'), +new Date(an, mois + 1, 0)));
+      for (; d <= end; d.setDate(d.getDate() + 1)) {
+        const ds = formatDate(d);
+        if (d.getDay() !== 0 && d.getDay() !== 6 && !(ch.joursExclus || []).includes(ds)) days.add(ds);
+      }
+    }
+    return days;
+  };
+
+  const chMois = chantiers.map(ch => ({ ch, days: joursChMois(ch) })).filter(x => x.days.size)
+    .sort((a, b) => ([...a.days].sort()[0] || '').localeCompare([...b.days].sort()[0] || ''));
+
+  const lanes = [];
+  chMois.forEach((x, idx) => {
+    let lane = 0;
+    while (true) {
+      if (!lanes[lane]) lanes[lane] = new Set();
+      let overlap = false;
+      for (const d of x.days) { if (lanes[lane].has(d)) { overlap = true; break; } }
+      if (!overlap) { x.days.forEach(d => lanes[lane].add(d)); x.lane = lane; break; }
+      lane++;
+    }
+    x.coul = COUL[idx % COUL.length];
+  });
+  const nbLanes = Math.max(2, lanes.length);
+  const cellMap = {};
+  chMois.forEach(x => x.days.forEach(d => { cellMap[d + '|' + x.lane] = x; }));
+
+  const menJour = (ch, dStr) => {
+    const pl = (appData.chantierPlanning || []).find(q => q.chantierId === ch.id && q.date === dStr);
+    return (pl && pl.equipe && pl.equipe.length) ? pl.equipe : (ch.equipe || []);
+  };
+
+  const colW = `width:${Math.floor(70 / nbLanes)}%`;
+  let head = `<th style="width:46px"></th>`;
+  for (let l = 0; l < nbLanes; l++) head += `<th style="${colW};padding:6px;font-size:0.78rem">Équipe ${l + 1}</th>`;
+  head += `<th style="width:22%;padding:6px;font-size:0.78rem">Entretien</th>`;
+
+  let rows = '';
+  for (let jn = 1; jn <= nbJoursMois; jn++) {
+    const jour = new Date(an, mois, jn);
+    const dStr = formatDate(jour);
+    const wd = jour.getDay();
+    const weekend = wd === 0 || wd === 6;
+    const ferme = fermetureJour(dStr);
+    const estToday = dStr === today;
+    const bg = estToday ? 'background:#e6ecdd' : (weekend ? 'background:#f0eee6' : '');
+    let tds = `<td style="text-align:center;font-weight:700;font-size:0.7rem;color:${weekend ? 'var(--gris)' : 'var(--texte)'};${bg}">${joursAbbr[wd]}<br>${jn}</td>`;
+    if (ferme) {
+      tds += `<td colspan="${nbLanes}" style="text-align:center;color:#b9560a;font-weight:700;font-size:0.76rem;background:#e67e2214">Fermeture</td>`;
+    } else {
+      for (let l = 0; l < nbLanes; l++) {
+        const x = weekend ? null : cellMap[dStr + '|' + l];
+        if (x) {
+          const men = menJour(x.ch, dStr);
+          tds += `<td onclick="ouvrirChantierDetail('${x.ch.id}')" style="cursor:pointer;padding:3px 5px;background:${x.coul};color:white;font-size:0.72rem;line-height:1.15;border:1px solid #fff"><strong>${esc(x.ch.nom || 'Chantier')}</strong>${men.length ? `<br><span style="opacity:0.85;font-size:0.64rem">${esc(men.join(', '))}</span>` : ''}</td>`;
+        } else {
+          tds += `<td style="${bg}"></td>`;
+        }
+      }
+    }
+    const ent = (appData.interventions || []).filter(iv => iv.date === dStr && ['entretien', 'tonte', 'pulverisation'].includes(iv.type));
+    const entHtml = ent.map(iv => `<div onclick="ouvrirDetailIntervention('${iv.id}')" style="cursor:pointer;font-size:0.66rem;padding:1px 4px;border-left:3px solid ${iv.type === 'tonte' ? '#e6b800' : '#35503a'};background:#f6f4ee;margin-bottom:2px;border-radius:3px">${esc(getNomClient(iv, clients))}</div>`).join('');
+    tds += `<td style="padding:2px 3px;${weekend ? bg : ''}">${entHtml}</td>`;
+    rows += `<tr>${tds}</tr>`;
+  }
+
+  const absMois = (appData.conges || []).filter(c => c.statut === 'valide' && c.type !== 'fermeture' && c.dateDebut && c.dateDebut <= `${an}-${mm}-31` && (c.dateFin || c.dateDebut) >= `${an}-${mm}-01`);
+  const absHtml = absMois.length ? `<div style="margin-top:10px;font-size:0.8rem"><strong>Absences :</strong> ${absMois.map(c => `${esc(c.personne)} (${formatDateFR(c.dateDebut)}${c.dateFin && c.dateFin !== c.dateDebut ? ' → ' + formatDateFR(c.dateFin) : ''})`).join(' &middot; ')}</div>` : '';
+
+  el.innerHTML = `<div class="card" style="overflow-x:auto">
+    <div style="font-size:0.78rem;color:var(--gris);margin-bottom:6px">Colonnes = équipes (réparties automatiquement). Clique un bloc pour ouvrir le chantier.</div>
+    <table style="width:100%;min-width:640px;border-collapse:collapse">
+      <thead><tr style="background:var(--vert);color:#fff">${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${absHtml}
+  </div>`;
 }
 
 // --- Vue ANNÉE : frise chronologique (étalement des chantiers sur 12 mois) ---
