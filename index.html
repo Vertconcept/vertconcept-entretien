@@ -742,6 +742,7 @@
           <button id="creation-vue-annee" onclick="setVueCreation('annee')">Année</button>
         </div>
         <button class="btn btn-secondary btn-sm" id="btn-samedi-creation" onclick="toggleSamediCreation()" title="Afficher / masquer le samedi">+ Samedi</button>
+        <button class="btn btn-secondary btn-sm" id="btn-reserver-creation" onclick="ouvrirReservation()" style="white-space:nowrap" title="Bloquer une période pour un chantier signé / à venir (2027, printemps…)">🔒 Bloquer une plage</button>
         <button class="btn btn-primary btn-sm" onclick="ouvrirChantier()" style="white-space:nowrap">+ Chantier</button>
       </div>
     </div>
@@ -1392,6 +1393,33 @@
 </div>
 
 <!-- ===== MODAL CONGÉ / ABSENCE ===== -->
+<!-- ===== MODAL RÉSERVATION / BLOCAGE DE PLAGE (Création) ===== -->
+<div class="modal-overlay hidden" id="modal-reservation">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-reservation-titre">Bloquer une plage</h3>
+      <button class="close-btn" onclick="fermerModal('modal-reservation')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:0.82rem;color:var(--gris);margin-bottom:10px">Réserve une période pour un chantier signé / à venir (2027, printemps…), même sans devis final. Apparaît en bloc sur la vue <strong>Année</strong> et <strong>Mois</strong>.</div>
+      <div class="form-group"><label class="form-label">Titre / client *</label><input type="text" class="form-control" id="resa-titre" placeholder="Ex : M. Dupont — terrasse (signé 2027)"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Du *</label><input type="date" class="form-control" id="resa-debut"></div>
+        <div class="form-group"><label class="form-label">Au *</label><input type="date" class="form-control" id="resa-fin"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Couleur</label>
+        <div class="equipe-toggle" id="resa-couleurs"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Note</label><input type="text" class="form-control" id="resa-note" placeholder="Optionnel (acompte reçu, à confirmer…)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-resa" onclick="supprimerReservation()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-reservation')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderReservation()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL DÉTAIL TONTES D'UN CLIENT (facturation) ===== -->
 <div class="modal-overlay hidden" id="modal-tonte-client">
   <div class="modal">
@@ -2220,7 +2248,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [], reservationsCreation: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2352,6 +2380,10 @@ function initFirestore() {
   });
   db.collection('chantierPlanning').onSnapshot(snap => {
     appData.chantierPlanning = snap.docs.map(d => d.data());
+    if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
+  });
+  db.collection('reservationsCreation').onSnapshot(snap => {
+    appData.reservationsCreation = snap.docs.map(d => d.data());
     if (document.getElementById('page-creation')?.classList.contains('active')) renderCreation();
   });
   db.collection('chantierDegats').onSnapshot(snap => {
@@ -4619,6 +4651,8 @@ function renderCreation() {
   const el = document.getElementById('creation-list');
   if (!el) return;
   ['semaine', 'mois', 'annee'].forEach(v => document.getElementById('creation-vue-' + v)?.classList.toggle('active', v === vueCreation));
+  const btnResa = document.getElementById('btn-reserver-creation');
+  if (btnResa) btnResa.style.display = modeAdmin ? '' : 'none';
   const p = periodeCreation();
   const t = document.getElementById('creation-periode-titre'); if (t) t.textContent = p.titre;
   const { chantiers, clients } = getData();
@@ -4895,11 +4929,27 @@ function renderCreationGantt(el, p, chantiers, clients) {
     const f = ch.dateFin || ch.dateDebut;
     return ch.dateDebut <= `${an}-12-31` && f >= `${an}-01-01`;
   }).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
-  if (!list.length) {
-    el.innerHTML = `<div class="card"><div class="empty-state">Aucun chantier en ${an}.</div></div>`;
+  // Plages réservées (blocages) qui chevauchent l'année
+  const resas = (appData.reservationsCreation || []).filter(r => r.dateDebut && r.dateDebut <= `${an}-12-31` && (r.dateFin || r.dateDebut) >= `${an}-01-01`).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  if (!list.length && !resas.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state">Aucun chantier ni réservation en ${an}.<br>Cliquez « 🔒 Bloquer une plage » pour réserver une période.</div></div>`;
     return;
   }
   const gridlines = `<div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,1fr);pointer-events:none">${moisNoms.map((m, i) => `<div style="border-left:1px solid ${i === 0 ? 'transparent' : '#e9ecef'}"></div>`).join('')}</div>`;
+  const resaRows = resas.map(r => {
+    const col = r.couleur || '#6f42c1';
+    const debut = Math.max(doy(r.dateDebut), 0);
+    const fin = Math.min(doy(r.dateFin || r.dateDebut), totalDays - 1);
+    const left = debut / totalDays * 100;
+    const width = Math.max((fin - debut + 1) / totalDays * 100, 1.5);
+    return `<div onclick="ouvrirReservation('${r.id}')" style="display:flex;align-items:center;margin-bottom:5px;cursor:pointer">
+      <div style="width:130px;flex:none;font-size:0.8rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px" title="${esc(r.titre)}${r.notes ? ' — ' + esc(r.notes) : ''}">🔒 ${esc(r.titre)}</div>
+      <div style="flex:1;position:relative;height:24px;background:#f1f3f5;border-radius:6px">
+        ${gridlines}
+        <div title="${esc(r.titre)} : ${formatDateFR(r.dateDebut)} → ${formatDateFR(r.dateFin || r.dateDebut)}${r.notes ? ' · ' + esc(r.notes) : ''}" style="position:absolute;left:${left}%;width:${width}%;top:2px;bottom:2px;background:${col};opacity:0.9;border:2px dashed rgba(255,255,255,0.75);border-radius:5px;display:flex;align-items:center;padding:0 6px;color:white;font-size:0.66rem;font-weight:700;overflow:hidden;white-space:nowrap">🔒 réservé</div>
+      </div>
+    </div>`;
+  }).join('');
   const rows = list.map(ch => {
     const st = STATUTS_CHANTIER[ch.statut] || STATUTS_CHANTIER.devis;
     const debut = Math.max(doy(ch.dateDebut), 0);
@@ -4921,9 +4971,50 @@ function renderCreationGantt(el, p, chantiers, clients) {
         <div style="width:130px;flex:none"></div>
         <div style="flex:1;display:grid;grid-template-columns:repeat(12,1fr)">${moisNoms.map(m => `<div style="text-align:center;font-size:0.7rem;color:var(--gris);font-weight:700">${m}</div>`).join('')}</div>
       </div>
+      ${resas.length ? `<div style="font-size:0.72rem;font-weight:800;color:var(--gris);margin:2px 0 6px">🔒 Plages réservées (chantiers signés / à venir)</div>${resaRows}${list.length ? '<div style="height:1px;background:var(--border);margin:8px 0"></div>' : ''}` : ''}
       ${rows}
     </div>
   </div>`;
+}
+
+// ===== Réservations / plages bloquées (Création) =====
+const RESA_COULEURS = ['#6f42c1', '#e67e22', '#2980b9', '#c0392b', '#35503a', '#16a085'];
+let currentReservationId = null;
+let resaCouleurSel = RESA_COULEURS[0];
+function ouvrirReservation(id) {
+  if (!modeAdmin) return;
+  currentReservationId = id || null;
+  const r = id ? (appData.reservationsCreation || []).find(x => x.id === id) : null;
+  document.getElementById('modal-reservation-titre').textContent = r ? 'Modifier la plage reservee' : 'Bloquer une plage';
+  document.getElementById('resa-titre').value = r ? (r.titre || '') : '';
+  document.getElementById('resa-debut').value = r ? (r.dateDebut || '') : '';
+  document.getElementById('resa-fin').value = r ? (r.dateFin || '') : '';
+  document.getElementById('resa-note').value = r ? (r.notes || '') : '';
+  resaCouleurSel = (r && r.couleur) || RESA_COULEURS[0];
+  const cc = document.getElementById('resa-couleurs');
+  if (cc) cc.innerHTML = RESA_COULEURS.map(c => `<div onclick="choisirCouleurResa('${c}')" data-c="${c}" style="width:30px;height:30px;border-radius:50%;cursor:pointer;background:${c};border:3px solid ${c === resaCouleurSel ? '#111' : 'transparent'}"></div>`).join('');
+  document.getElementById('btn-suppr-resa').style.display = r ? '' : 'none';
+  document.getElementById('modal-reservation').classList.remove('hidden');
+}
+function choisirCouleurResa(c) {
+  resaCouleurSel = c;
+  const cc = document.getElementById('resa-couleurs');
+  if (cc) [...cc.children].forEach(el => el.style.border = '3px solid ' + (el.dataset.c === c ? '#111' : 'transparent'));
+}
+function sauvegarderReservation() {
+  const titre = document.getElementById('resa-titre').value.trim();
+  const dateDebut = document.getElementById('resa-debut').value;
+  const dateFin = document.getElementById('resa-fin').value || dateDebut;
+  if (!titre) { alert('Indiquez un titre / client.'); return; }
+  if (!dateDebut) { alert('Indiquez au moins la date de debut.'); return; }
+  if (dateFin < dateDebut) { alert('La date de fin doit etre apres la date de debut.'); return; }
+  saveDoc('reservationsCreation', { id: currentReservationId || uuid(), titre, dateDebut, dateFin, couleur: resaCouleurSel, notes: document.getElementById('resa-note').value.trim() });
+  fermerModal('modal-reservation');
+}
+function supprimerReservation() {
+  if (!currentReservationId || !confirm('Supprimer cette plage reservee ?')) return;
+  deleteDoc('reservationsCreation', currentReservationId);
+  fermerModal('modal-reservation');
 }
 
 let chJoursSel = new Set();
@@ -6520,7 +6611,7 @@ async function importerSauvegarde(input) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { alert('❌ Fichier illisible (ce n\'est pas une sauvegarde valide).'); return; }
-  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'chantierDegats', 'chantierMachines', 'conges'];
+  const cols = ['clients', 'interventions', 'contrats', 'machines', 'pannes', 'achats', 'stock', 'backlog', 'backlogCreation', 'chantiers', 'chantierHeures', 'chantierMateriaux', 'chantierMessages', 'chantierSupplements', 'chantierAppro', 'chantierPlanning', 'chantierDegats', 'chantierMachines', 'conges', 'reservationsCreation'];
   const total = cols.reduce((s, c) => s + ((data[c] || []).length), 0);
   if (!total) { alert('❌ Aucune donnée trouvée dans ce fichier.'); return; }
   const quand = data._date ? new Date(data._date).toLocaleString('fr-FR') : 'date inconnue';
