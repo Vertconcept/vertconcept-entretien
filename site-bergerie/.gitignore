@@ -1,0 +1,6 @@
+# Photos et logo originaux pleine résolution (~22 Mo) : sources de travail,
+# inutiles en ligne. Les versions web optimisées sont dans img/.
+_sources/
+
+# Fichiers système macOS
+.DS_Store
