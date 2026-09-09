@@ -1711,17 +1711,18 @@
         </div>
         <div class="form-group">
           <label class="form-label">Type *</label>
-          <select class="form-control" id="interv-type" onchange="document.getElementById('pulve-section').style.display=this.value==='pulverisation'?'':'none'">
+          <select class="form-control" id="interv-type" onchange="majTypeInterv()">
             <option value="entretien">Entretien</option>
             <option value="tonte">Tonte pelouse</option>
             <option value="pulverisation">💧 Pulvérisation</option>
+            <option value="chantier">🏗️ Renfort chantier (Création)</option>
             <option value="travaux">Travaux</option>
             <option value="autre">Autre</option>
           </select>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Client *</label>
+        <label class="form-label" id="interv-client-label">Client *</label>
         <div class="client-search-wrap" id="interv-client-wrap">
           <input type="text" class="client-search-input" id="interv-client-search"
             placeholder="🔍 Rechercher un client…" autocomplete="off"
@@ -1731,6 +1732,7 @@
           <input type="hidden" id="interv-client-id">
           <div class="client-search-dropdown" id="interv-client-dropdown"></div>
         </div>
+        <select class="form-control" id="interv-chantier-select" style="display:none"></select>
         <div id="interv-rappel-remarque" style="display:none;margin-top:6px;background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:7px 10px;font-size:0.82rem;color:#664d03"></div>
       </div>
       <div class="form-group">
@@ -2283,6 +2285,7 @@ function getData() {
 
 // Résolution du nom client — gère le cas spécial "tonte-collective"
 function getNomClient(iv, clients) {
+  if (iv.type === 'chantier' && iv.chantierId) { const ch = (appData.chantiers || []).find(x => x.id === iv.chantierId); return '🏗️ ' + (ch ? (ch.nom || 'Chantier') : 'Chantier'); }
   if (iv.clientId === 'tonte-collective') return iv.clientNom || '🌿 Tournée tonte';
   const c = clients.find(c => c.id === iv.clientId);
   return c ? c.nom : 'Client inconnu';
@@ -3820,6 +3823,24 @@ async function geolocaliserClients() {
 // =====================================================
 // MODAL INTERVENTION
 // =====================================================
+function majTypeInterv() {
+  const t = document.getElementById('interv-type').value;
+  const ps = document.getElementById('pulve-section'); if (ps) ps.style.display = t === 'pulverisation' ? '' : 'none';
+  const chantier = t === 'chantier';
+  const wrap = document.getElementById('interv-client-wrap');
+  const csel = document.getElementById('interv-chantier-select');
+  const lbl = document.getElementById('interv-client-label');
+  if (wrap) wrap.style.display = chantier ? 'none' : '';
+  if (lbl) lbl.textContent = chantier ? 'Chantier (Création) *' : 'Client *';
+  if (csel) {
+    csel.style.display = chantier ? '' : 'none';
+    if (chantier) {
+      const cur = csel.value;
+      csel.innerHTML = '<option value="">— Choisir un chantier —</option>' + (appData.chantiers || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(ch => `<option value="${ch.id}">${(ch.nom || 'Chantier').replace(/</g, '&lt;')}</option>`).join('');
+      if (cur) csel.value = cur;
+    }
+  }
+}
 function ouvrirNouvelleIntervention(dateStr) {
   currentIntervId = null;
   document.getElementById('modal-interv-titre').textContent = 'Nouvelle intervention';
@@ -3828,6 +3849,8 @@ function ouvrirNouvelleIntervention(dateStr) {
   document.getElementById('interv-date').value = dateStr || dateDefautPlanning();
   majDateConfirm();
   document.getElementById('interv-type').value = 'entretien';
+  { const cs = document.getElementById('interv-chantier-select'); if (cs) cs.value = ''; }
+  majTypeInterv();
   document.getElementById('interv-adresse').value = '';
   document.getElementById('interv-chef').value = 'Jimi';
   document.getElementById('interv-materiel').value = '';
@@ -3866,6 +3889,8 @@ function ouvrirEditionIntervention(id) {
   document.getElementById('interv-date').value = iv.date;
   majDateConfirm();
   document.getElementById('interv-type').value = iv.type;
+  majTypeInterv();
+  { const cs = document.getElementById('interv-chantier-select'); if (cs) cs.value = iv.chantierId || ''; }
   document.getElementById('interv-adresse').value = iv.adresse || '';
   document.getElementById('interv-chef').value = iv.chef;
   document.getElementById('interv-materiel').value = iv.materiel || '';
@@ -3903,8 +3928,11 @@ function toggleMembre(el) {
 
 function sauvegarderIntervention() {
   const data = getData();
+  const type = document.getElementById('interv-type').value;
   const clientId = document.getElementById('interv-client-id').value;
-  if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
+  const chantierId = (type === 'chantier' && document.getElementById('interv-chantier-select')) ? document.getElementById('interv-chantier-select').value : '';
+  if (type === 'chantier') { if (!chantierId) { alert('Sélectionnez un chantier.'); return; } }
+  else if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
   const date = document.getElementById('interv-date').value;
   if (!date) { alert('Veuillez choisir une date.'); return; }
 
@@ -3921,12 +3949,14 @@ function sauvegarderIntervention() {
     prevMats.forEach(pm => { if (pm.stockConsoId && !ivMatTemp.some(nm => nm.id === pm.id)) recrediterStock(pm.stockConsoId, pm.stockConsoQte); });
     ivMatTemp.forEach(nm => { if (!nm.stockConsoId) { const sid = consommerStock(nm.designation, nm.quantite); if (sid) { nm.stockConsoId = sid; nm.stockConsoQte = nm.quantite; } } });
   }
+  const chAssoc = (type === 'chantier') ? (appData.chantiers || []).find(c => c.id === chantierId) : null;
   const iv = {
     id: currentIntervId || uuid(),
     clientId,
+    chantierId: (type === 'chantier') ? chantierId : null,
     date,
-    type: document.getElementById('interv-type').value,
-    adresse: document.getElementById('interv-adresse').value,
+    type,
+    adresse: document.getElementById('interv-adresse').value || (chAssoc ? (chAssoc.adresse || '') : ''),
     chef,
     membres,
     materiel: document.getElementById('interv-materiel').value,
