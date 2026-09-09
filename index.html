@@ -969,6 +969,7 @@
       <button class="btn btn-secondary btn-sm" id="btn-geo-tontes" onclick="geolocaliserClients()" style="margin-left:8px;white-space:nowrap">📍 Géolocaliser</button>
       <button class="btn btn-secondary btn-sm" id="btn-tonte-ponctuelle" onclick="ouvrirTontePonctuelle()" style="margin-left:4px;white-space:nowrap">🌱 Tonte ponctuelle</button>
       <button class="btn btn-primary btn-sm" id="btn-generer-tontes" onclick="ouvrirGenererTontes()" style="margin-left:4px;white-space:nowrap">⚡ Générer planning</button>
+      <button class="btn btn-secondary btn-sm" id="btn-equipe-tontes" onclick="ouvrirTonteEquipe()" style="margin-left:4px;white-space:nowrap">👥 Équipe des tontes</button>
       <button class="btn btn-secondary btn-sm" id="btn-decaler-tontes" onclick="decalerTontesSemaine()" style="margin-left:4px;white-space:nowrap">📆 Décaler d'une semaine</button>
       <button class="btn btn-danger btn-sm" id="btn-suppr-tontes" onclick="supprimerPlanningTontes()" style="margin-left:4px;white-space:nowrap">🗑️ Supprimer le planning</button>
     </div>
@@ -1394,6 +1395,29 @@
 </div>
 
 <!-- ===== MODAL CONGÉ / ABSENCE ===== -->
+<!-- ===== MODAL ÉQUIPE DES TONTES ===== -->
+<div class="modal-overlay hidden" id="modal-tonte-equipe">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Équipe des tontes</h3>
+      <button class="close-btn" onclick="fermerModal('modal-tonte-equipe')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:0.82rem;color:var(--gris);margin-bottom:8px">Qui fait la tournée de tonte ? Coche les personnes. Tu peux limiter à une période (ex : juste cette semaine si un remplaçant).</div>
+      <div class="form-group"><label class="form-label">Personnes</label><div class="equipe-toggle" id="te-personnes"></div></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">À partir du</label><input type="date" class="form-control" id="te-du"></div>
+        <div class="form-group"><label class="form-label">Jusqu'au (optionnel)</label><input type="date" class="form-control" id="te-au"></div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--gris)">Laisse « Jusqu'au » vide pour appliquer à toutes les tontes à partir de la date choisie.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fermerModal('modal-tonte-equipe')">Annuler</button>
+      <button class="btn btn-primary" onclick="appliquerTonteEquipe()">Appliquer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL RÉSERVATION / BLOCAGE DE PLAGE (Création) ===== -->
 <div class="modal-overlay hidden" id="modal-reservation">
   <div class="modal">
@@ -3427,6 +3451,8 @@ function renderTontes() {
   if (btnGeo) btnGeo.style.display = modeAdmin ? '' : 'none';
   const btnDec = document.getElementById('btn-decaler-tontes');
   if (btnDec) btnDec.style.display = modeAdmin ? '' : 'none';
+  const btnEq = document.getElementById('btn-equipe-tontes');
+  if (btnEq) btnEq.style.display = modeAdmin ? '' : 'none';
   const btnSup = document.getElementById('btn-suppr-tontes');
   if (btnSup) btnSup.style.display = modeAdmin ? '' : 'none';
 }
@@ -7651,6 +7677,32 @@ async function supprimerPlanningTontes() {
   alert(`✅ ${sessions.length} sessions supprimées. Vous pouvez maintenant regénérer le planning.`);
 }
 
+// Changer l'équipe qui fait les tontes (par défaut ou pour une période précise)
+function ouvrirTonteEquipe() {
+  if (!modeAdmin) return;
+  const today = formatDate(new Date());
+  const next = (appData.interventions || []).filter(iv => iv.clientId === 'tonte-collective' && (iv.date || '') >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+  const actuelle = (next && next.membres && next.membres.length) ? next.membres : ['Mateo', 'Bryan'];
+  const pool = RENFORT_ENTRETIEN;
+  document.getElementById('te-personnes').innerHTML = pool.map(m => `<div class="membre-chip${actuelle.includes(m) ? ' selected' : ''}" data-membre="${m}" onclick="toggleChip(this)">${m}</div>`).join('');
+  document.getElementById('te-du').value = today;
+  document.getElementById('te-au').value = '';
+  document.getElementById('modal-tonte-equipe').classList.remove('hidden');
+}
+function appliquerTonteEquipe() {
+  const membres = [...document.querySelectorAll('#te-personnes .membre-chip.selected')].map(c => c.dataset.membre);
+  if (!membres.length) { alert('Sélectionnez au moins une personne.'); return; }
+  const du = document.getElementById('te-du').value || formatDate(new Date());
+  const au = document.getElementById('te-au').value || '';
+  const sessions = (appData.interventions || []).filter(iv => iv.clientId === 'tonte-collective' && (iv.date || '') >= du && (!au || (iv.date || '') <= au) && iv.statut !== 'termine');
+  if (!sessions.length) { alert('Aucune session de tonte à venir sur cette période.'); return; }
+  const chef = membres.includes('Mateo') ? 'Mateo' : membres[0];
+  const portee = au ? `du ${formatDateFR(du)} au ${formatDateFR(au)}` : `à partir du ${formatDateFR(du)}`;
+  if (!confirm(`Mettre l'équipe « ${membres.join(', ')} » sur ${sessions.length} session(s) de tonte ${portee} ?`)) return;
+  sessions.forEach(iv => saveDoc('interventions', { ...iv, membres: membres.slice(), chef }));
+  fermerModal('modal-tonte-equipe');
+  alert(`✅ Équipe mise à jour sur ${sessions.length} session(s).`);
+}
 // Décaler globalement les tontes À VENIR (ex : semaine sautée pour sécheresse) — ne change que les dates
 function decalerTontesSemaine() {
   if (!modeAdmin) return;
@@ -7706,7 +7758,7 @@ async function confirmerGenererTontes() {
   const mkTonte = (date) => {
     const id = uuid();
     return { id, date, clientId: 'tonte-collective', clientNom: 'Tournée tonte — tous clients',
-      type: 'tonte', chef: 'Mateo', membres: ['Mateo'],
+      type: 'tonte', chef: 'Mateo', membres: ['Mateo', 'Bryan'],
       adresse: '', materiel: 'Tondeuses, souffleur', dechets: null, duree: 8,
       demandes: notes, remarquesClient: '', statut: 'planifie',
       remarques: [], heuresParMembre: null, pulve: null, facturee: false };
@@ -7738,7 +7790,7 @@ function confirmerTontePonctuelle() {
   const client = (getData().clients).find(c => c.id === clientId);
   const iv = {
     id: uuid(), clientId, date, type: 'tonte',
-    chef: 'Mateo', membres: ['Mateo'],
+    chef: 'Mateo', membres: ['Mateo', 'Bryan'],
     adresse: client?.adresse || '', materiel: 'Tondeuses, souffleur',
     dechets: null, duree: null,
     demandes: document.getElementById('tp-notes').value, remarquesClient: '',
