@@ -721,6 +721,7 @@
     <div class="flex-between mb-1">
       <div class="alert alert-info" style="margin:0;flex:1">📑 Contrats d'entretien — services inclus par client</div>
       <input type="text" class="form-control" id="contrat-filtre" placeholder="🔍 Client…" style="max-width:200px;margin-left:8px" oninput="renderContrats()">
+      <button class="btn btn-secondary btn-sm" id="btn-preplanning" onclick="genererPrePlanning()" style="margin-left:8px;white-space:nowrap;display:none" title="Créer les interventions d'entretien de l'année depuis les contrats (mois cochés)">⚡ Générer le pré-planning</button>
       <button class="btn btn-primary btn-sm" id="btn-nouveau-contrat" onclick="ouvrirContrat()" style="margin-left:8px;white-space:nowrap;display:none">+ Nouveau contrat</button>
     </div>
     <div id="contrats-list"></div>
@@ -2180,6 +2181,11 @@
         <div id="ct-services" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px"></div>
       </div>
       <div class="form-group">
+        <label class="form-label">🗓️ Mois de passage (pour le pré-planning)</label>
+        <div class="equipe-toggle" id="ct-mois"></div>
+        <div style="font-size:0.78rem;color:var(--gris);margin-top:3px">Coche les mois où ce client reçoit un entretien. Sert à générer le pré-planning automatiquement.</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Notes</label>
         <textarea class="form-control" id="ct-notes" rows="2" placeholder="Fréquences, conditions, particularités…"></textarea>
       </div>
@@ -2985,6 +2991,7 @@ function renderPlanningSemail() {
       card.innerHTML = `
         <div class="client-name">${getNomClient(iv, clients)}</div>
         ${iv.clientPrevenu ? '<div style="display:inline-block;background:#e6b800;color:#3a2f00;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:20px;margin:2px 0">📢 Client prévenu</div>' : ''}
+        ${(iv.prePlanning && iv.statut === 'planifie') ? '<div style="display:inline-block;background:#8e44ad22;color:#8e44ad;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:20px;margin:2px 0">🗓️ pré-planning</div>' : ''}
         <div class="interv-meta">${iv.type}</div>
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
@@ -4590,6 +4597,8 @@ function renderContrats() {
   const marco = voitChantierFinances(); // Marco + Justin : ajout / édition / bilan des contrats
   const btn = document.getElementById('btn-nouveau-contrat');
   if (btn) btn.style.display = marco ? '' : 'none';
+  const btnPP = document.getElementById('btn-preplanning');
+  if (btnPP) btnPP.style.display = marco ? '' : 'none';
   const { contrats, clients } = getData();
   const filtre = (document.getElementById('contrat-filtre')?.value || '').toLowerCase().trim();
   let liste = contrats.map(ct => ({ ct, client: clients.find(c => c.id === ct.clientId) }));
@@ -4647,6 +4656,8 @@ function ouvrirContrat(id) {
   document.getElementById('ct-frequence').value = ct?.frequence || 'annuelle';
   document.getElementById('ct-prochaine').value = ct?.prochaineFacturation || '';
   document.getElementById('ct-notes').value = ct?.notes || '';
+  const moisSel = ct?.moisEntretien || [];
+  document.getElementById('ct-mois').innerHTML = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'].map((m, i) => `<div class="membre-chip${moisSel.includes(i + 1) ? ' selected' : ''}" data-mois="${i + 1}" onclick="toggleChip(this)">${m}</div>`).join('');
   const services = ct?.services || [];
   document.querySelectorAll('.ct-service-cb').forEach(cb => { cb.checked = services.includes(cb.value); });
   document.getElementById('ct-complet').checked = services.length === SERVICES_CONTRAT.length;
@@ -4667,9 +4678,41 @@ function sauvegarderContrat() {
     frequence: document.getElementById('ct-frequence').value,
     prochaineFacturation: document.getElementById('ct-prochaine').value || '',
     services,
+    moisEntretien: [...document.querySelectorAll('#ct-mois .membre-chip.selected')].map(c => parseInt(c.dataset.mois, 10)).sort((a, b) => a - b),
     notes: document.getElementById('ct-notes').value.trim()
   });
   fermerModal('modal-contrat');
+}
+function genererPrePlanning() {
+  if (!voitChantierFinances()) return;
+  const rep = prompt("Générer le pré-planning entretien pour quelle année ?", String(new Date().getFullYear()));
+  if (rep === null) return;
+  const an = parseInt(rep, 10);
+  if (!an || an < 2020 || an > 2100) { alert('Année invalide.'); return; }
+  const contrats = (appData.contrats || []).filter(c => (c.moisEntretien || []).length);
+  if (!contrats.length) { alert("Aucun contrat n'a de mois de passage cochés.\nOuvre un contrat, coche les mois d'entretien, puis relance."); return; }
+  const anciens = (appData.interventions || []).filter(iv => iv.prePlanning && (iv.date || '').startsWith(String(an)) && iv.statut === 'planifie');
+  const msg = anciens.length
+    ? `Régénérer le pré-planning ${an} ?\n${anciens.length} ancien(s) brouillon(s) non commencé(s) seront remplacés.\nLes interventions déjà réalisées ne bougent pas.`
+    : `Générer le pré-planning entretien ${an} depuis les contrats (mois cochés) ?`;
+  if (!confirm(msg)) return;
+  const creer = () => {
+    let created = 0;
+    contrats.forEach(ct => {
+      (ct.moisEntretien || []).forEach(mo => {
+        const mm = String(mo).padStart(2, '0');
+        const dejaReel = (appData.interventions || []).some(iv => iv.clientId === ct.clientId && !iv.prePlanning && iv.type === 'entretien' && (iv.date || '').slice(0, 7) === `${an}-${mm}`);
+        if (dejaReel) return;
+        const d = new Date(an, mo - 1, 15);
+        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+        if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+        saveDoc('interventions', { id: uuid(), clientId: ct.clientId, date: formatDate(d), type: 'entretien', adresse: '', chef: 'Jimi', membres: ['Jimi'], materiel: '', dechets: null, duree: null, demandes: 'Pré-planning auto — à confirmer', remarquesClient: '', statut: 'planifie', prePlanning: true, contratId: ct.id, heuresParMembre: null, pulve: null, facturee: false, remarques: [] });
+        created++;
+      });
+    });
+    setTimeout(() => alert(`✅ Pré-planning ${an} généré : ${created} passage(s) posé(s) sur le calendrier.\nAjuste les dates par glisser-déposer. Les brouillons sont marqués « 🗓️ pré-planning ».`), 400);
+  };
+  Promise.all(anciens.map(iv => Promise.resolve(deleteDoc('interventions', iv.id)))).then(creer);
 }
 function supprimerContrat() {
   if (!currentContratId || !confirm('Supprimer ce contrat ?')) return;
