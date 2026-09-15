@@ -1735,6 +1735,12 @@
         <select class="form-control" id="interv-chantier-select" style="display:none"></select>
         <div id="interv-rappel-remarque" style="display:none;margin-top:6px;background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:7px 10px;font-size:0.82rem;color:#664d03"></div>
       </div>
+      <div class="form-group" style="margin-top:2px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;background:#fff8e1;border:1px solid #e6b800;border-radius:8px;padding:8px 10px">
+          <input type="checkbox" id="interv-client-prevenu" style="width:auto">
+          <span>📢 <strong>Client prévenu</strong> de cette date — ne pas déplacer sans le reprévenir</span>
+        </label>
+      </div>
       <div class="form-group">
         <label class="form-label">Adresse (si différente du client)</label>
         <input type="text" class="form-control" id="interv-adresse" placeholder="Laisser vide pour utiliser l'adresse client">
@@ -2968,6 +2974,7 @@ function renderPlanningSemail() {
       const membres = iv.membres || [iv.chef];
       card.innerHTML = `
         <div class="client-name">${getNomClient(iv, clients)}</div>
+        ${iv.clientPrevenu ? '<div style="display:inline-block;background:#e6b800;color:#3a2f00;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:20px;margin:2px 0">📢 Client prévenu</div>' : ''}
         <div class="interv-meta">${iv.type}</div>
         <div class="equipe-chips">${membres.map(m=>`<span class="equipe-chip-sm">${m}</span>`).join('')}</div>
         ${statutBadgeHtml(iv.statut)}
@@ -3008,12 +3015,14 @@ function renderPlanningSemail() {
 function deplacerInterventionDate(id, newDate) {
   const iv = appData.interventions.find(x => x.id === id);
   if (!iv || !newDate || iv.date === newDate) return;
+  if (iv.clientPrevenu && !confirm('📢 Le CLIENT A ÉTÉ PRÉVENU de cette date.\nNe la déplacez pas sans le reprévenir.\n\nDéplacer quand même ?')) return;
   saveDoc('interventions', { ...iv, date: newDate });
 }
 // Décaler une intervention de n jours (boutons ◀ / demain ▶ / ▶▶). Jamais un dimanche.
 function deplacerInterventionJours(id, n) {
   const iv = appData.interventions.find(x => x.id === id);
   if (!iv || !iv.date) return;
+  if (iv.clientPrevenu && !confirm('📢 Le CLIENT A ÉTÉ PRÉVENU de cette date.\nNe la déplacez pas sans le reprévenir.\n\nDéplacer quand même ?')) return;
   const d = new Date(iv.date + 'T00:00:00');
   d.setDate(d.getDate() + n);
   if (d.getDay() === 0) d.setDate(d.getDate() + (n < 0 ? -1 : 1)); // saute le dimanche
@@ -3849,6 +3858,7 @@ function ouvrirNouvelleIntervention(dateStr) {
   document.getElementById('interv-date').value = dateStr || dateDefautPlanning();
   majDateConfirm();
   document.getElementById('interv-type').value = 'entretien';
+  { const cp = document.getElementById('interv-client-prevenu'); if (cp) cp.checked = false; }
   { const cs = document.getElementById('interv-chantier-select'); if (cs) cs.value = ''; }
   majTypeInterv();
   document.getElementById('interv-adresse').value = '';
@@ -3889,6 +3899,7 @@ function ouvrirEditionIntervention(id) {
   document.getElementById('interv-date').value = iv.date;
   majDateConfirm();
   document.getElementById('interv-type').value = iv.type;
+  { const cp = document.getElementById('interv-client-prevenu'); if (cp) cp.checked = !!iv.clientPrevenu; }
   majTypeInterv();
   { const cs = document.getElementById('interv-chantier-select'); if (cs) cs.value = iv.chantierId || ''; }
   document.getElementById('interv-adresse').value = iv.adresse || '';
@@ -3966,6 +3977,7 @@ function sauvegarderIntervention() {
     remarquesClient: document.getElementById('interv-remarques-client').value,
     statut,
     heuresParMembre: heuresParMembre || null,
+    clientPrevenu: !!document.getElementById('interv-client-prevenu')?.checked,
     materiaux: ivMatTemp.map(x => ({ ...x })),
     machines: getIvMachinesFromForm(),
     pulve: document.getElementById('interv-type').value === 'pulverisation' ? getPulveFromForm('') : null,
@@ -4057,6 +4069,7 @@ function ouvrirDetailIntervention(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
       <div><div class="fiche-field-label">📅 Date</div><div>${formatDateFR(iv.date)}</div></div>
       <div><div class="fiche-field-label">Type / Statut</div><div><span class="badge badge-${iv.type}">${iv.type}</span> ${statutBadgeHtml(iv.statut)}</div></div>
+      ${iv.clientPrevenu ? '<div style="grid-column:1/-1;background:#fff8e1;border:1px solid #e6b800;border-radius:8px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#7a5b00">📢 Client prévenu de cette date — ne pas déplacer sans le reprévenir</div>' : ''}
       ${iv.statut === 'en-attente' ? `<div style="grid-column:1/-1"><div style="background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:8px 12px;font-size:0.85rem">⏳ Fiche soumise par <strong>${iv.soumisePar || '?'}</strong> le ${iv.soumiseDate ? formatDateFR(iv.soumiseDate) : '?'} — en attente de validation admin</div></div>` : ''}
       <div><div class="fiche-field-label">📍 Adresse</div><div>${lienAdresse(adresse)}</div></div>
       <div><div class="fiche-field-label">👷 Équipe</div><div>${membres}</div></div>
