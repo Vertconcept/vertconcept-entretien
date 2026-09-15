@@ -4904,6 +4904,17 @@ function togglePlacementMembre(placementId, membre) {
   set.has(membre) ? set.delete(membre) : set.add(membre);
   saveDoc('chantierPlanning', { ...p, equipe: [...set] });
 }
+function deplacerPlacementJours(placementId, n) {
+  const pl = (appData.chantierPlanning || []).find(p => p.id === placementId);
+  if (!pl) return;
+  const d = new Date(pl.date + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + (n < 0 ? -1 : 1)); // saute les week-ends (créa Lun-Ven)
+  const newDate = formatDate(d);
+  if (newDate === pl.date) return;
+  if ((appData.chantierPlanning || []).some(p => p.id !== pl.id && p.chantierId === pl.chantierId && p.date === newDate)) { alert('Ce chantier est déjà placé ce jour-là.'); return; }
+  saveDoc('chantierPlanning', { ...pl, date: newDate });
+}
 function renderCreationSemaine(el, chantiers, clients) {
   const esc = s => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const lundi = getLundiSemaine(creationOffset);
@@ -4944,6 +4955,10 @@ function renderCreationSemaine(el, chantiers, clients) {
         <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
           <span style="background:${st.c}22;color:${st.c};font-weight:700;font-size:0.66rem;padding:1px 8px;border-radius:20px">${st.label}</span>
           ${pool.length ? `<span style="font-size:0.68rem;color:var(--gris)">👷 ${plEquipe.length}</span>` : `<label onclick="event.stopPropagation()" style="font-size:0.68rem;color:var(--gris);display:inline-flex;align-items:center;gap:2px">👷 <input type="number" min="0" value="${esc(pl.nbHommes || '')}" onchange="setPlacementHommes('${pl.id}',this.value)" placeholder="–" style="width:34px;padding:1px 3px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;text-align:center"></label>`}
+          <span style="margin-left:auto;display:inline-flex;gap:3px">
+            <button onclick="event.stopPropagation();deplacerPlacementJours('${pl.id}',-1)" title="Avancer d'un jour (la veille)" style="border:1px solid var(--border);background:white;border-radius:5px;padding:0 6px;font-size:0.72rem;cursor:pointer;line-height:1.4">◀</button>
+            <button onclick="event.stopPropagation();deplacerPlacementJours('${pl.id}',1)" title="Reculer d'un jour (le lendemain)" style="border:1px solid var(--border);background:white;border-radius:5px;padding:0 6px;font-size:0.72rem;cursor:pointer;line-height:1.4">▶</button>
+          </span>
         </div>
       </div>`;
     }).join('');
