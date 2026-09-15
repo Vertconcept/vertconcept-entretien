@@ -2131,6 +2131,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger btn-sm" id="btn-suppr-chantier" onclick="supprimerChantier()" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary btn-sm" id="btn-dupliquer-chantier" onclick="dupliquerChantier()" style="display:none" title="Créer une copie de ce chantier">📋 Dupliquer</button>
       <button class="btn btn-secondary" onclick="fermerModal('modal-chantier')">Annuler</button>
       <button class="btn btn-primary" onclick="sauvegarderChantier()">Enregistrer</button>
     </div>
@@ -4051,6 +4052,14 @@ function sauvegarderIntervention() {
   renderPlanning();
 }
 
+function dupliquerIntervention(id) {
+  const iv = appData.interventions.find(x => x.id === id);
+  if (!iv) return;
+  const copie = { ...iv, id: uuid(), statut: 'planifie', facturee: false, heuresParMembre: null, materiaux: [], machines: [], remarques: [], soumisePar: null, soumiseDate: null, prePlanning: false };
+  saveDoc('interventions', copie);
+  fermerModal('modal-detail');
+  setTimeout(() => ouvrirEditionIntervention(copie.id), 350);
+}
 function supprimerIntervention() {
   if (!currentIntervId) return;
   if (!confirm('Supprimer cette intervention ?')) return;
@@ -4160,6 +4169,7 @@ function ouvrirDetailIntervention(id) {
     ${iv.clientId !== 'tonte-collective' ? `<button class="btn btn-secondary btn-sm" onclick="ouvrirContinuer('${id}')">📅 Continuer un autre jour</button>` : ''}
     ${client && client.tel ? `<button class="btn btn-sm" style="background:#25D366;color:white;border:none" onclick="prevenirWhatsApp('${id}')">📲 Prévenir WhatsApp</button>` : ''}
     ${modeAdmin && iv.statut === 'en-attente' ? `<button class="btn-approuver" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="approuverFiche('${id}')">✅ Approuver</button><button class="btn-refuser" style="font-size:0.85rem;padding:7px 14px;border-radius:8px" onclick="refuserFiche('${id}');fermerModal('modal-detail')">❌ Refuser</button>` : ''}
+    <button class="btn btn-secondary btn-sm" onclick="dupliquerIntervention('${id}')" title="Créer une copie de cette intervention">📋 Dupliquer</button>
     <button class="btn btn-primary btn-sm" onclick="ouvrirEditionIntervention('${id}')">✏️ Modifier</button>
     <button class="btn btn-secondary btn-sm" onclick="fermerModal('modal-detail')">Fermer</button>
   `;
@@ -5290,6 +5300,7 @@ function ouvrirChantier(id) {
   const ch = id ? appData.chantiers.find(c => c.id === id) : null;
   document.getElementById('modal-chantier-titre').textContent = ch ? 'Modifier le chantier' : 'Nouveau chantier';
   document.getElementById('btn-suppr-chantier').style.display = ch ? '' : 'none';
+  { const bd = document.getElementById('btn-dupliquer-chantier'); if (bd) bd.style.display = ch ? '' : 'none'; }
   resetClientSearch('ch');
   if (ch) setClientSearch('ch', ch.clientId);
   document.getElementById('ch-nom').value = ch?.nom || '';
@@ -5378,6 +5389,14 @@ function sauvegarderChantier() {
   const dejaLa = new Set(existants.map(p => p.date));
   dates.forEach(d => { if (!dejaLa.has(d)) saveDoc('chantierPlanning', { id: uuid(), chantierId: currentChantierId, date: d, nbHommes: '' }); });
   fermerModal('modal-chantier');
+}
+function dupliquerChantier() {
+  const ch = appData.chantiers.find(c => c.id === currentChantierId);
+  if (!ch) return;
+  const copie = { ...ch, id: uuid(), nom: (ch.nom || 'Chantier') + ' (copie)', statut: 'devis', dateDebut: null, dateFin: null, joursExclus: [], devisNom: null, devisSupplements: [] };
+  saveDoc('chantiers', copie);
+  fermerModal('modal-chantier');
+  setTimeout(() => alert('✅ Chantier dupliqué : « ' + copie.nom + ' ».\nOuvre-le pour placer les jours et ajuster l\'équipe.'), 200);
 }
 function supprimerChantier() {
   if (!currentChantierId || !confirm('Supprimer ce chantier ?')) return;
