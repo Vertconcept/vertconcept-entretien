@@ -1774,6 +1774,8 @@
           
           <div class="membre-chip" data-membre="Lucas" onclick="toggleMembre(this)">Lucas (étudiant)</div>
           <div class="membre-chip" data-membre="Alexis" onclick="toggleMembre(this)">Alexis (IFAPME)</div>
+          <div class="membre-chip" data-membre="Noah" onclick="toggleMembre(this)">Noah (IFAPME)</div>
+          <div class="membre-chip" data-membre="Aurélien" onclick="toggleMembre(this)">Aurélien (IFAPME)</div>
         </div>
       </div>
       <div class="form-group">
@@ -2248,7 +2250,7 @@
 // =====================================================
 // DATA MODEL & FIRESTORE
 // =====================================================
-const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','William','Lucas','Alexis'];
+const MEMBRES = ['Marco','Jimi','Justin','Mateo','Bryan','William','Lucas','Alexis','Noah','Aurélien'];
 const CHEFS = ['Marco','Jimi','Mateo','Bryan'];
 
 firebase.initializeApp({
@@ -2292,6 +2294,8 @@ const USER_EMAILS = {
   'William': 'william000630@gmail.com',
   'Lucas':  'lucas@vertconcept.app', // compte pas encore créé
   'Alexis': 'alexis.pecher@apprenant.ifapme.be',
+  'Noah':   'noah.moucherono@gmail.com',
+  'Aurélien': 'giordanoaurelien9@gmail.com',
   // Équipe Création (comptes à créer dans Firebase avec EXACTEMENT ces e-mails)
   'Thibaut': 'thibaut.devel@hotmail.com',
   'Jerome':  'jeromefermeuse@gmail.com',
@@ -2604,7 +2608,7 @@ let pendingAdminUser = null;
 function initLoginScreen() {
   // Tout le monde dans une seule liste — même apparence 👷
   // Les admins (ADMIN_PINS) auront le PIN en arrière-plan
-  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','William','Lucas','Alexis','Thibaut','Jerome','Olivier','Antoine','Anthony'];
+  const tous = ['Marco','Justin','Jimi','Mateo','Bryan','William','Lucas','Alexis','Noah','Aurélien','Thibaut','Jerome','Olivier','Antoine','Anthony'];
   const bureau = ['Marco','Justin','Thibaut'];
 
   document.getElementById('login-buttons').innerHTML = tous.map(n => `
