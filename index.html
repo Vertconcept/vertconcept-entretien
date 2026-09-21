@@ -4853,6 +4853,15 @@ function renderCreation() {
         liste.forEach(c => vus.add(c.id));
         if (liste.length) inner += `<div style="font-weight:800;color:${col};margin:12px 2px 6px">${lbl} (${liste.length})</div>` + liste.map(ch => carteChantierDetaillee(ch, clients)).join('');
       });
+      // Plages réservées (bookés sans devis) encore d'actualité
+      const escR = x => (x || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const resas = (appData.reservationsCreation || []).filter(r => (r.dateFin || r.dateDebut || '') >= today).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+      if (resas.length) {
+        inner += `<div style="font-weight:800;color:#6f42c1;margin:14px 2px 6px">🔒 Réservé — plages bloquées, sans devis (${resas.length})</div>` + resas.map(r => `<div onclick="ouvrirReservation('${r.id}')" class="card" style="margin-bottom:6px;padding:10px;border-left:5px solid ${r.couleur || '#6f42c1'};cursor:pointer">
+          <div style="font-weight:800">🔒 ${escR(r.titre || 'Réservation')}</div>
+          <div style="font-size:0.82rem;color:var(--gris);margin-top:2px">📅 ${formatDateFR(r.dateDebut)}${r.dateFin && r.dateFin !== r.dateDebut ? ' → ' + formatDateFR(r.dateFin) : ''}${r.notes ? ' · ' + escR(r.notes) : ''}</div>
+        </div>`).join('');
+      }
       recapHtml = `<div style="margin:-0.4rem 0 1rem">
         <div class="flex-between" style="align-items:center;margin-bottom:6px"><div class="card-title" style="margin:0">📋 Vue d'ensemble — chantiers actifs (${total})</div><button class="btn btn-secondary btn-sm" onclick="setRecapCreation(null)">✕ Fermer</button></div>
         ${inner || '<div class="empty-state" style="padding:10px">Aucun chantier actif.</div>'}</div>`;
