@@ -2995,7 +2995,9 @@ function renderPlanningSemail() {
       body.addEventListener('drop', e => { e.preventDefault(); body.classList.remove('drop-target'); const id = e.dataTransfer.getData('text/plain'); if (id) deplacerInterventionDate(id, dateStr); });
     }
 
-    interventions.filter(iv => iv.date === dateStr).forEach(iv => {
+    interventions.filter(iv => iv.date === dateStr)
+      .sort((a, b) => ((a.ordreJour ?? 1e9) - (b.ordreJour ?? 1e9)))
+      .forEach(iv => {
       const card = document.createElement('div');
       const estMarco = currentUser && currentUser.name === 'Marco';
       card.className = 'interv-card'
@@ -3022,7 +3024,22 @@ function renderPlanningSemail() {
       if (modeAdmin) {
         card.draggable = true;
         card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', iv.id); e.dataTransfer.effectAllowed = 'move'; card.classList.add('dragging'); });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragend', () => { card.classList.remove('dragging'); card.style.borderTop = ''; card.style.borderBottom = ''; });
+        // Glisser une carte SUR une autre carte = réordonner (haut/bas) dans le jour
+        card.addEventListener('dragover', e => {
+          e.preventDefault(); e.stopPropagation();
+          if (card.classList.contains('dragging')) return;
+          const r = card.getBoundingClientRect(); const avant = (e.clientY - r.top) < r.height / 2;
+          card.style.borderTop = avant ? '3px solid var(--vert)' : ''; card.style.borderBottom = avant ? '' : '3px solid var(--vert)';
+        });
+        card.addEventListener('dragleave', () => { card.style.borderTop = ''; card.style.borderBottom = ''; });
+        card.addEventListener('drop', e => {
+          e.preventDefault(); e.stopPropagation();
+          card.style.borderTop = ''; card.style.borderBottom = '';
+          const id = e.dataTransfer.getData('text/plain'); if (!id) return;
+          const r = card.getBoundingClientRect(); const avant = (e.clientY - r.top) < r.height / 2;
+          reordonnerInterventionsJour(id, iv.id, avant);
+        });
       }
       body.appendChild(card);
     });
@@ -3060,6 +3077,30 @@ function deplacerInterventionJours(id, n) {
   d.setDate(d.getDate() + n);
   if (d.getDay() === 0) d.setDate(d.getDate() + (n < 0 ? -1 : 1)); // saute le dimanche
   saveDoc('interventions', { ...iv, date: formatDate(d) });
+}
+// Réordonner (glisser haut/bas) les interventions d'un même jour, ou déposer une carte
+// venant d'un autre jour à un emplacement précis. Réattribue un ordreJour séquentiel.
+function reordonnerInterventionsJour(dragId, targetId, avant) {
+  if (dragId === targetId) return;
+  const drag = appData.interventions.find(x => x.id === dragId);
+  const target = appData.interventions.find(x => x.id === targetId);
+  if (!drag || !target) return;
+  const date = target.date;
+  if (drag.date !== date && drag.clientPrevenu &&
+      !confirm('📢 Le CLIENT A ÉTÉ PRÉVENU de cette date.\nNe la déplacez pas sans le reprévenir.\n\nDéplacer quand même ?')) return;
+  const liste = appData.interventions
+    .filter(iv => iv.date === date && iv.id !== dragId)
+    .sort((a, b) => ((a.ordreJour ?? 1e9) - (b.ordreJour ?? 1e9)));
+  const idx = liste.findIndex(x => x.id === targetId);
+  const insertAt = avant ? idx : idx + 1;
+  liste.splice(insertAt, 0, drag);
+  liste.forEach((iv, i) => {
+    const nOrdre = (i + 1) * 10;
+    const patch = {};
+    if (iv.ordreJour !== nOrdre) patch.ordreJour = nOrdre;
+    if (iv.id === dragId && iv.date !== date) patch.date = date;
+    if (Object.keys(patch).length) saveDoc('interventions', { ...iv, ...patch });
+  });
 }
 function renderPlanningMois() {
   const now = new Date();
