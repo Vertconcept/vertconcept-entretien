@@ -944,6 +944,7 @@
       <button class="btn btn-primary btn-sm" onclick="ouvrirConge()">+ Demande / absence</button>
     </div>
     <div id="conges-a-valider"></div>
+    <div class="card" id="conges-compteur"></div>
     <div class="card">
       <div class="flex-between mb-1" style="flex-wrap:wrap;gap:8px">
         <div class="semaine-nav" style="margin-bottom:0">
@@ -6599,6 +6600,65 @@ function exporterCongesMois() {
   XLSX.writeFile(wb, 'absences-' + an + '-' + String(mois + 1).padStart(2, '0') + '.xlsx');
 }
 
+const CONGE_ALLOC = 20; // jours de congé par an, hors fériés
+// Fériés belges d'une année (Pâques via algorithme de Meeus)
+function feriesBelgique(an) {
+  const set = new Set();
+  const pad = n => String(n).padStart(2, '0');
+  [[1,1],[5,1],[7,21],[8,15],[11,1],[11,11],[12,25]].forEach(([m,d]) => set.add(`${an}-${pad(m)}-${pad(d)}`));
+  const a = an % 19, b = Math.floor(an / 100), c = an % 100, d = Math.floor(b / 4), e = b % 4,
+    f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30,
+    i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m2 = Math.floor((a + 11 * h + 22 * l) / 451),
+    mois = Math.floor((h + l - 7 * m2 + 114) / 31), jour = ((h + l - 7 * m2 + 114) % 31) + 1;
+  const paques = new Date(an, mois - 1, jour);
+  [1, 39, 50].forEach(off => { const dt = new Date(paques); dt.setDate(paques.getDate() + off); set.add(formatDate(dt)); });
+  return set;
+}
+// Jours ouvrés (Lun-Ven) hors fériés d'une absence, dans l'année 'an'
+function joursOuvresConge(c, an) {
+  const feries = feriesBelgique(an);
+  const d0 = new Date(Math.max(+new Date((c.dateDebut || '') + 'T00:00:00'), +new Date(an, 0, 1)));
+  const d1 = new Date(Math.min(+new Date((c.dateFin || c.dateDebut || '') + 'T00:00:00'), +new Date(an, 11, 31)));
+  let n = 0;
+  for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) {
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6 && !feries.has(formatDate(d))) n++;
+  }
+  return n;
+}
+function renderCongesCompteur() {
+  const el = document.getElementById('conges-compteur');
+  if (!el) return;
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const an = new Date().getFullYear();
+  const valides = (appData.conges || []).filter(c => c.statut === 'valide' && (c.dateDebut || '') <= `${an}-12-31` && (c.dateFin || c.dateDebut || '') >= `${an}-01-01`);
+  const fermetureJours = valides.filter(c => c.type === 'fermeture').reduce((s, c) => s + joursOuvresConge(c, an), 0);
+  const gens = tousMembres().filter(m => !['Marco', 'Justin'].includes(m));
+  const rows = gens.map(pnom => {
+    const perso = valides.filter(c => c.type === 'conge' && c.personne === pnom).reduce((s, c) => s + joursOuvresConge(c, an), 0);
+    const maladie = valides.filter(c => c.type === 'maladie' && c.personne === pnom).reduce((s, c) => s + joursOuvresConge(c, an), 0);
+    const pris = perso + fermetureJours;
+    const reste = CONGE_ALLOC - pris;
+    const coul = reste < 0 ? '#c0392b' : reste <= 3 ? '#e67e22' : '#35503a';
+    return { pnom, perso, maladie, pris, reste, coul };
+  }).sort((a, b) => a.reste - b.reste);
+  el.innerHTML = `
+    <div class="card-title">📊 Compteur de congés ${an} <span style="font-size:0.72rem;font-weight:600;color:var(--gris)">— ${CONGE_ALLOC} j/an hors fériés · fermeture commune incluse (${fermetureJours} j)</span></div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:440px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:5px;text-align:left">Ouvrier</th><th style="padding:5px;text-align:center">🏖️ Perso</th><th style="padding:5px;text-align:center">🏢 Fermet.</th><th style="padding:5px;text-align:center">Pris</th><th style="padding:5px;text-align:center">Restant</th><th style="padding:5px;text-align:center">🤒 Mal.</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px;font-weight:600">${esc(r.pnom)}</td>
+        <td style="padding:5px;text-align:center">${r.perso || '—'}</td>
+        <td style="padding:5px;text-align:center">${fermetureJours || '—'}</td>
+        <td style="padding:5px;text-align:center;font-weight:700">${r.pris}</td>
+        <td style="padding:5px;text-align:center;font-weight:800;color:${r.coul}">${r.reste}</td>
+        <td style="padding:5px;text-align:center;color:var(--gris)">${r.maladie || '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div style="font-size:0.74rem;color:var(--gris);margin-top:6px">Pris = congés persos validés + fermeture annuelle (commune à tous). Jours ouvrés Lun→Ven, hors fériés belges. Maladie / intempérie non déduites des ${CONGE_ALLOC} jours.</div>`;
+}
 function renderConges() {
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const estMarco = currentUser && currentUser.name === 'Marco';
@@ -6606,6 +6666,7 @@ function renderConges() {
   const conges = (appData.conges || []).slice();
   updateCongesBadge();
   renderCongesCalendrier();
+  renderCongesCompteur();
   // À valider (Marco)
   const aVal = document.getElementById('conges-a-valider');
   const enAttente = conges.filter(c => c.statut === 'en-attente').sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
