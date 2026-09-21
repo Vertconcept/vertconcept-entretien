@@ -4829,6 +4829,7 @@ function renderCreation() {
   if (dash) {
     const today = formatDate(new Date());
     const critere = {
+      'actifs': c => c.statut !== 'termine',
       'en-cours': c => c.statut === 'en-cours',
       'a-venir':  c => (c.statut === 'planifie' || c.statut === 'devis') && (!c.dateDebut || c.dateDebut >= today),
       'en-retard': c => c.statut !== 'termine' && c.dateFin && c.dateFin < today,
@@ -4842,7 +4843,20 @@ function renderCreation() {
         <div style="font-size:0.78rem;color:var(--gris);margin-top:2px">${lbl}</div></div>`;
     };
     let recapHtml = '';
-    if (creationRecapFiltre && critere[creationRecapFiltre]) {
+    if (creationRecapFiltre === 'actifs') {
+      const groupes = [['en-retard', '⚠️ En retard', '#c0392b'], ['en-cours', '🔧 En cours', '#e67e22'], ['a-venir', '📅 À venir', '#2980b9']];
+      const total = chantiers.filter(c => c.statut !== 'termine').length;
+      const vus = new Set();
+      let inner = '';
+      groupes.forEach(([k, lbl, col]) => {
+        const liste = chantiers.filter(c => critere[k](c) && !vus.has(c.id)).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+        liste.forEach(c => vus.add(c.id));
+        if (liste.length) inner += `<div style="font-weight:800;color:${col};margin:12px 2px 6px">${lbl} (${liste.length})</div>` + liste.map(ch => carteChantierDetaillee(ch, clients)).join('');
+      });
+      recapHtml = `<div style="margin:-0.4rem 0 1rem">
+        <div class="flex-between" style="align-items:center;margin-bottom:6px"><div class="card-title" style="margin:0">📋 Vue d'ensemble — chantiers actifs (${total})</div><button class="btn btn-secondary btn-sm" onclick="setRecapCreation(null)">✕ Fermer</button></div>
+        ${inner || '<div class="empty-state" style="padding:10px">Aucun chantier actif.</div>'}</div>`;
+    } else if (creationRecapFiltre && critere[creationRecapFiltre]) {
       const titres = { 'en-cours': '🔧 Chantiers en cours', 'a-venir': '📅 Chantiers à venir', 'en-retard': '⚠️ Chantiers en retard', 'termine': '✅ Chantiers terminés' };
       const liste = chantiers.filter(critere[creationRecapFiltre]).sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
       recapHtml = `<div style="margin:-0.4rem 0 1rem">
@@ -4851,6 +4865,7 @@ function renderCreation() {
       </div>`;
     }
     dash.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
+      ${tuile('actifs', '📋 Vue d\'ensemble', '#6f42c1')}
       ${tuile('en-cours', '🔧 En cours', '#e67e22')}
       ${tuile('a-venir', '📅 À venir', '#2980b9')}
       ${tuile('en-retard', '⚠️ En retard', '#c0392b')}
