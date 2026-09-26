@@ -4747,7 +4747,7 @@ function sauvegarderContrat() {
   const clientId = document.getElementById('ct-client-id').value;
   if (!clientId) { alert('Veuillez sélectionner un client.'); return; }
   const services = [...document.querySelectorAll('.ct-service-cb:checked')].map(cb => cb.value);
-  saveDoc('contrats', {
+  const ct = {
     id: currentContratId || uuid(),
     clientId,
     annee: parseInt(document.getElementById('ct-annee').value) || new Date().getFullYear(),
@@ -4757,8 +4757,33 @@ function sauvegarderContrat() {
     services,
     moisEntretien: [...document.querySelectorAll('#ct-mois .membre-chip.selected')].map(c => parseInt(c.dataset.mois, 10)).sort((a, b) => a - b),
     notes: document.getElementById('ct-notes').value.trim()
-  });
+  };
+  saveDoc('contrats', ct);
   fermerModal('modal-contrat');
+  // Génération auto du pré-planning : les mois cochés apparaissent tout de suite dans le planning
+  // (brouillons 🗓️ « à confirmer »), sans écraser les passages déjà présents.
+  const anCt = ct.annee || new Date().getFullYear();
+  const nb = creerPrePlanningContrat(ct, anCt);
+  if (nb > 0) setTimeout(() => alert(`✅ ${nb} passage(s) d'entretien ${anCt} ajouté(s) au planning (brouillons « 🗓️ pré-planning »).\nRetrouve-les dans Planning (vue mois) — ajuste la date par glisser-déposer et assigne l'équipe quand tu veux.`), 300);
+}
+// Crée les passages d'entretien manquants d'UN contrat pour une année donnée (brouillons pré-planning).
+// Non destructif : ne recrée pas un mois qui a déjà une intervention (réelle OU brouillon).
+function creerPrePlanningContrat(ct, an) {
+  if (!ct || !(ct.moisEntretien || []).length) return 0;
+  let created = 0;
+  (ct.moisEntretien || []).forEach(mo => {
+    const mm = String(mo).padStart(2, '0');
+    const deja = (appData.interventions || []).some(iv =>
+      iv.clientId === ct.clientId && iv.type === 'entretien' &&
+      (iv.date || '').slice(0, 7) === `${an}-${mm}`);
+    if (deja) return;
+    const d = new Date(an, mo - 1, 15);
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+    saveDoc('interventions', { id: uuid(), clientId: ct.clientId, date: formatDate(d), type: 'entretien', adresse: '', chef: 'Jimi', membres: ['Jimi'], materiel: '', dechets: null, duree: null, demandes: 'Pré-planning auto — à confirmer', remarquesClient: '', statut: 'planifie', prePlanning: true, contratId: ct.id, heuresParMembre: null, pulve: null, facturee: false, remarques: [] });
+    created++;
+  });
+  return created;
 }
 function genererPrePlanning() {
   if (!voitChantierFinances()) return;
@@ -4775,18 +4800,7 @@ function genererPrePlanning() {
   if (!confirm(msg)) return;
   const creer = () => {
     let created = 0;
-    contrats.forEach(ct => {
-      (ct.moisEntretien || []).forEach(mo => {
-        const mm = String(mo).padStart(2, '0');
-        const dejaReel = (appData.interventions || []).some(iv => iv.clientId === ct.clientId && !iv.prePlanning && iv.type === 'entretien' && (iv.date || '').slice(0, 7) === `${an}-${mm}`);
-        if (dejaReel) return;
-        const d = new Date(an, mo - 1, 15);
-        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
-        if (d.getDay() === 6) d.setDate(d.getDate() + 2);
-        saveDoc('interventions', { id: uuid(), clientId: ct.clientId, date: formatDate(d), type: 'entretien', adresse: '', chef: 'Jimi', membres: ['Jimi'], materiel: '', dechets: null, duree: null, demandes: 'Pré-planning auto — à confirmer', remarquesClient: '', statut: 'planifie', prePlanning: true, contratId: ct.id, heuresParMembre: null, pulve: null, facturee: false, remarques: [] });
-        created++;
-      });
-    });
+    contrats.forEach(ct => { created += creerPrePlanningContrat(ct, an); });
     setTimeout(() => alert(`✅ Pré-planning ${an} généré : ${created} passage(s) posé(s) sur le calendrier.\nAjuste les dates par glisser-déposer. Les brouillons sont marqués « 🗓️ pré-planning ».`), 400);
   };
   Promise.all(anciens.map(iv => Promise.resolve(deleteDoc('interventions', iv.id)))).then(creer);
