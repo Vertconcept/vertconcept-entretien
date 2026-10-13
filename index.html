@@ -104,6 +104,7 @@
   .interv-card.equipe-timo { border-left-color: var(--vert-clair); }
   .interv-card.equipe-mateo { border-left-color: #6f42c1; }
   .interv-card .client-name { font-weight: 700; color: #212529; }
+  .ordre-passage { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-width: 20px; border-radius: 50%; background: var(--vert); color: #fff; font-size: 0.72rem; font-weight: 800; margin-right: 5px; vertical-align: middle; }
   .interv-card .interv-meta { color: var(--gris); margin-top: 2px; }
   .add-interv-btn { width: 100%; border: 1.5px dashed var(--border); background: transparent; border-radius: 6px; padding: 6px; font-size: 0.78rem; color: var(--gris); cursor: pointer; margin-top: 4px; }
   .add-interv-btn:hover { background: var(--gris-clair); }
@@ -2995,11 +2996,15 @@ function renderPlanningSemail() {
       body.addEventListener('drop', e => { e.preventDefault(); body.classList.remove('drop-target'); const id = e.dataTransfer.getData('text/plain'); if (id) deplacerInterventionDate(id, dateStr); });
     }
 
-    interventions.filter(iv => iv.date === dateStr)
-      .sort((a, b) => ((a.ordreJour ?? 1e9) - (b.ordreJour ?? 1e9)))
-      .forEach(iv => {
+    const ivJour = interventions.filter(iv => iv.date === dateStr)
+      .sort((a, b) => ((a.ordreJour ?? 1e9) - (b.ordreJour ?? 1e9)));
+    ivJour.forEach((iv, idx) => {
       const card = document.createElement('div');
       const estMarco = currentUser && currentUser.name === 'Marco';
+      // Numéro d'ordre de passage (visible dès qu'il y a 2+ interventions ce jour-là)
+      const ordreBadge = ivJour.length > 1
+        ? `<span class="ordre-passage" title="Ordre de passage — glissez les cartes pour le changer">${idx + 1}</span>`
+        : '';
       card.className = 'interv-card'
         + (iv.type === 'tonte' ? ' tonte' : '')
         + (iv.chef === 'Timo' ? ' equipe-timo' : iv.chef === 'Mateo' ? ' equipe-mateo' : '')
@@ -3007,7 +3012,7 @@ function renderPlanningSemail() {
         + (estMarco && iv.facturee ? ' facturee' : '');
       const membres = iv.membres || [iv.chef];
       card.innerHTML = `
-        <div class="client-name">${getNomClient(iv, clients)}</div>
+        <div class="client-name">${ordreBadge}${getNomClient(iv, clients)}</div>
         ${iv.clientPrevenu ? '<div style="display:inline-block;background:#e6b800;color:#3a2f00;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:20px;margin:2px 0">📢 Client prévenu</div>' : ''}
         ${(iv.prePlanning && iv.statut === 'planifie') ? '<div style="display:inline-block;background:#8e44ad22;color:#8e44ad;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:20px;margin:2px 0">🗓️ pré-planning</div>' : ''}
         <div class="interv-meta">${iv.type}${iv.dureeType === 'matin' ? ' · 🌅 matin' : iv.dureeType === 'apresmidi' ? ' · 🌇 aprem' : ''}</div>
