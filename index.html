@@ -2998,12 +2998,16 @@ function renderPlanningSemail() {
 
     const ivJour = interventions.filter(iv => iv.date === dateStr)
       .sort((a, b) => ((a.ordreJour ?? 1e9) - (b.ordreJour ?? 1e9)));
-    ivJour.forEach((iv, idx) => {
+    // Ordre de passage numéroté PAR chef d'équipe (dans l'ordre d'affichage du jour)
+    const parChef = {};
+    ivJour.forEach(iv => { const ch = iv.chef || '?'; (parChef[ch] = parChef[ch] || []).push(iv.id); });
+    ivJour.forEach((iv) => {
       const card = document.createElement('div');
       const estMarco = currentUser && currentUser.name === 'Marco';
-      // Numéro d'ordre de passage (visible dès qu'il y a 2+ interventions ce jour-là)
-      const ordreBadge = ivJour.length > 1
-        ? `<span class="ordre-passage" title="Ordre de passage — glissez les cartes pour le changer">${idx + 1}</span>`
+      // Numéro visible seulement si CE chef a 2+ interventions ce jour-là (sinon inutile)
+      const idsChef = parChef[iv.chef || '?'] || [];
+      const ordreBadge = idsChef.length > 1
+        ? `<span class="ordre-passage" title="Ordre de passage de ${iv.chef || 'l\'équipe'} — glissez les cartes pour le changer">${idsChef.indexOf(iv.id) + 1}</span>`
         : '';
       card.className = 'interv-card'
         + (iv.type === 'tonte' ? ' tonte' : '')
