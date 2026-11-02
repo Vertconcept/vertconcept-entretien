@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2236,7 +2237,9 @@
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">Client / prospect *</label>
-        <input type="text" class="form-control" id="rdv-nom" placeholder="Nom du client ou du prospect">
+        <input type="text" class="form-control" id="rdv-nom" list="rdv-clients-list" autocomplete="off" onchange="rdvAutoRemplir()" placeholder="Nom du client existant ou nouveau prospect">
+        <datalist id="rdv-clients-list"></datalist>
+        <div style="font-size:0.76rem;color:var(--gris);margin-top:3px">Commence à taper : les clients existants sont suggérés (tél/adresse remplis automatiquement). Sinon, tape un nouveau prospect.</div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -2275,6 +2278,12 @@
       <div class="form-group">
         <label class="form-label">Notes (demande du client, mesures, accès…)</label>
         <textarea class="form-control" id="rdv-notes" rows="4" placeholder="Détaille la demande, les contraintes, les mesures prises…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">📎 Pièces jointes (photos, plans, PDF…)</label>
+        <input type="file" id="rdv-fichier" accept="image/*,application/pdf" multiple onchange="rdvUploadFichiers(this)" style="font-size:0.85rem">
+        <span id="rdv-upload-status" style="font-size:0.8rem;color:var(--gris);margin-left:6px"></span>
+        <div id="rdv-pieces" style="margin-top:8px"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2338,6 +2347,7 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 const auth = firebase.auth();
+const storage = firebase.storage();
 const ADMINS = ['Marco', 'Jimi', 'Justin', 'Thibaut']; // comptes avec accès admin (Thibaut = chef création)
 // Pôle de chaque personne : 'entretien' | 'creation' | 'direction' (voit tout). Défaut = entretien.
 const USER_POLES = {
@@ -4919,6 +4929,8 @@ const RDV_STATUTS = {
 };
 const RDV_TYPES = ['Devis / offre', 'Métré', 'Visite conseil', 'SAV / retour', 'Autre'];
 let currentRdvId = null;
+let rdvUploadId = null;   // id (stable) servant de dossier Storage pour les pièces jointes
+let rdvPiecesTemp = [];   // pièces jointes en cours d'édition dans la modale
 
 function renderRdv() {
   if (!voitChantierFinances()) return;
@@ -4950,6 +4962,9 @@ function renderRdv() {
       ${(tel || mail) ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:0.85rem">${tel}${mail}</div>` : ''}
       ${adr}
       ${r.notes ? `<div style="margin-top:5px;font-size:0.85rem;white-space:pre-wrap;background:var(--vert-pale);border-radius:6px;padding:6px 8px">${esc(r.notes)}</div>` : ''}
+      ${(r.pieces && r.pieces.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.pieces.map(p => ('' + (p.type || '')).startsWith('image/')
+        ? `<a href="${p.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${p.url}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block"></a>`
+        : `<a href="${p.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:0.8rem;color:var(--vert);font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">📄 ${esc(p.nom) || 'PDF'}</a>`).join('')}</div>` : ''}
       <div onclick="event.stopPropagation()" style="margin-top:7px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="form-control" style="max-width:195px;height:32px;padding:2px 8px;font-size:0.8rem" onchange="changerStatutRdv('${r.id}', this.value)">${opts}</select>
         <button class="btn btn-secondary btn-sm" onclick="ouvrirRdv('${r.id}')">✏️ Modifier</button>
@@ -4982,6 +4997,13 @@ function ouvrirRdv(id) {
   const r = id ? (appData.rdv || []).find(x => x.id === id) : null;
   document.getElementById('modal-rdv-titre').textContent = r ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous';
   document.getElementById('btn-suppr-rdv').style.display = r ? '' : 'none';
+  const clis = (appData.clients || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+  document.getElementById('rdv-clients-list').innerHTML = clis.map(c => `<option value="${('' + (c.nom || '')).replace(/"/g, '&quot;')}"></option>`).join('');
+  rdvUploadId = (id || (r && r.id)) || uuid();
+  rdvPiecesTemp = (r && Array.isArray(r.pieces)) ? r.pieces.slice() : [];
+  document.getElementById('rdv-fichier').value = '';
+  document.getElementById('rdv-upload-status').textContent = '';
+  renderRdvPieces();
   document.getElementById('rdv-type').innerHTML = RDV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
   document.getElementById('rdv-statut').innerHTML = Object.entries(RDV_STATUTS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   document.getElementById('rdv-date').value = r?.date || '';
@@ -5002,7 +5024,8 @@ function sauvegarderRdv() {
   if (!nom) { alert('Indique au moins le nom du client / prospect.'); return; }
   const ancien = currentRdvId ? (appData.rdv || []).find(x => x.id === currentRdvId) : null;
   saveDoc('rdv', {
-    id: currentRdvId || uuid(),
+    id: currentRdvId || rdvUploadId || uuid(),
+    pieces: rdvPiecesTemp,
     date: document.getElementById('rdv-date').value || '',
     heure: document.getElementById('rdv-heure').value || '',
     nom,
@@ -5018,6 +5041,18 @@ function sauvegarderRdv() {
   fermerModal('modal-rdv');
 }
 
+// Auto-remplissage quand le nom tapé correspond à un client existant (ne remplace pas un champ déjà saisi)
+function rdvAutoRemplir() {
+  const val = document.getElementById('rdv-nom').value.trim().toLowerCase();
+  if (!val) return;
+  const c = (appData.clients || []).find(x => ('' + (x.nom || '')).trim().toLowerCase() === val);
+  if (!c) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value.trim() && v) el.value = v; };
+  set('rdv-tel', c.tel);
+  set('rdv-mail', c.email);
+  set('rdv-adresse', c.adresse);
+}
+
 function changerStatutRdv(id, statut) {
   const r = (appData.rdv || []).find(x => x.id === id);
   if (!r) return;
@@ -5027,8 +5062,66 @@ function changerStatutRdv(id, statut) {
 function supprimerRdv(id) {
   const r = (appData.rdv || []).find(x => x.id === id);
   if (!r || !confirm(`Supprimer le rendez-vous « ${r.nom || ''} » ?`)) return;
+  (r.pieces || []).forEach(p => { if (p.path) storage.ref().child(p.path).delete().catch(() => {}); });
   deleteDoc('rdv', id);
   if (currentRdvId === id) fermerModal('modal-rdv');
+}
+
+// --- Pièces jointes RDV (Firebase Storage) ---
+async function rdvUploadFichiers(input) {
+  const files = [...input.files];
+  input.value = '';
+  if (!files.length) return;
+  const statut = document.getElementById('rdv-upload-status');
+  for (const file of files) {
+    if (file.size > 25 * 1024 * 1024) { alert(`« ${file.name} » dépasse 25 Mo — non envoyé.`); continue; }
+    const pieceId = uuid();
+    const safe = file.name.replace(/[^\w.\-]+/g, '_');
+    const path = `rdv/${rdvUploadId}/${pieceId}_${safe}`;
+    try {
+      if (statut) statut.textContent = `⏳ Envoi de ${file.name}…`;
+      const refF = storage.ref().child(path);
+      await refF.put(file);
+      const url = await refF.getDownloadURL();
+      rdvPiecesTemp.push({ id: pieceId, nom: file.name, type: file.type || '', path, url });
+      renderRdvPieces();
+      // Persiste tout de suite si le RDV existe déjà (sinon enregistré au « Enregistrer »)
+      const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
+      if (existant) saveDoc('rdv', { ...existant, pieces: rdvPiecesTemp });
+    } catch (e) {
+      console.error('upload pièce', e);
+      alert(`Échec de l'envoi de ${file.name}.`);
+    }
+  }
+  if (statut) statut.textContent = '';
+}
+
+function renderRdvPieces() {
+  const el = document.getElementById('rdv-pieces');
+  if (!el) return;
+  const esc = s => ('' + (s || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (!rdvPiecesTemp.length) { el.innerHTML = '<div style="font-size:0.8rem;color:var(--gris)">Aucune pièce jointe.</div>'; return; }
+  el.innerHTML = rdvPiecesTemp.map(p => {
+    const isImg = ('' + (p.type || '')).startsWith('image/');
+    const vign = isImg
+      ? `<img src="${p.url}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;display:block">`
+      : '<span style="font-size:1.6rem">📄</span>';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
+      <a href="${p.url}" target="_blank" rel="noopener">${vign}</a>
+      <a href="${p.url}" target="_blank" rel="noopener" style="flex:1;font-size:0.82rem;color:var(--vert);font-weight:600;word-break:break-all">${esc(p.nom) || 'Fichier'}</a>
+      <button class="btn btn-danger btn-sm" onclick="rdvSupprimerPiece('${p.id}')">🗑️</button>
+    </div>`;
+  }).join('');
+}
+
+function rdvSupprimerPiece(id) {
+  const p = rdvPiecesTemp.find(x => x.id === id);
+  if (!p || !confirm('Supprimer cette pièce jointe ?')) return;
+  if (p.path) storage.ref().child(p.path).delete().catch(() => {});
+  rdvPiecesTemp = rdvPiecesTemp.filter(x => x.id !== id);
+  renderRdvPieces();
+  const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
+  if (existant) saveDoc('rdv', { ...existant, pieces: rdvPiecesTemp });
 }
 
 // =====================================================
