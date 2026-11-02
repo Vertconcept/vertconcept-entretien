@@ -8,7 +8,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2364,8 +2363,8 @@
         <textarea class="form-control" id="rdv-notes" rows="4" placeholder="Détaille la demande, les contraintes, les mesures prises…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">📎 Pièces jointes (photos, plans, PDF…)</label>
-        <input type="file" id="rdv-fichier" accept="image/*,application/pdf" multiple onchange="rdvUploadFichiers(this)" style="font-size:0.85rem">
+        <label class="form-label">📎 Photos (prises sur place, plans photographiés…)</label>
+        <input type="file" id="rdv-fichier" accept="image/*" multiple onchange="rdvUploadFichiers(this)" style="font-size:0.85rem">
         <span id="rdv-upload-status" style="font-size:0.8rem;color:var(--gris);margin-left:6px"></span>
         <div id="rdv-pieces" style="margin-top:8px"></div>
       </div>
@@ -2431,7 +2430,6 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 const auth = firebase.auth();
-const storage = firebase.storage();
 const ADMINS = ['Marco', 'Jimi', 'Justin', 'Thibaut']; // comptes avec accès admin (Thibaut = chef création)
 // Pôle de chaque personne : 'entretien' | 'creation' | 'direction' (voit tout). Défaut = entretien.
 const USER_POLES = {
@@ -5240,9 +5238,9 @@ function renderRdv() {
       ${(tel || mail) ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:0.85rem">${tel}${mail}</div>` : ''}
       ${adr}
       ${r.notes ? `<div style="margin-top:5px;font-size:0.85rem;white-space:pre-wrap;background:var(--vert-pale);border-radius:6px;padding:6px 8px">${esc(r.notes)}</div>` : ''}
-      ${(r.pieces && r.pieces.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.pieces.map(p => ('' + (p.type || '')).startsWith('image/')
-        ? `<a href="${p.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${p.url}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block"></a>`
-        : `<a href="${p.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:0.8rem;color:var(--vert);font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">📄 ${esc(p.nom) || 'PDF'}</a>`).join('')}</div>` : ''}
+      ${(r.pieces && r.pieces.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.pieces.map(p => { const src = p.data || p.url || ''; const isImg = p.data || ('' + (p.type || '')).startsWith('image/'); return isImg
+        ? `<a href="${src}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${src}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block"></a>`
+        : `<a href="${src}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:0.8rem;color:var(--vert);font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">📄 ${esc(p.nom) || 'Fichier'}</a>`; }).join('')}</div>` : ''}
       <div onclick="event.stopPropagation()" style="margin-top:7px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="form-control" style="max-width:195px;height:32px;padding:2px 8px;font-size:0.8rem" onchange="changerStatutRdv('${r.id}', this.value)">${opts}</select>
         <button class="btn btn-secondary btn-sm" onclick="ouvrirRdv('${r.id}')">✏️ Modifier</button>
@@ -5340,35 +5338,53 @@ function changerStatutRdv(id, statut) {
 function supprimerRdv(id) {
   const r = (appData.rdv || []).find(x => x.id === id);
   if (!r || !confirm(`Supprimer le rendez-vous « ${r.nom || ''} » ?`)) return;
-  (r.pieces || []).forEach(p => { if (p.path) storage.ref().child(p.path).delete().catch(() => {}); });
   deleteDoc('rdv', id);
   if (currentRdvId === id) fermerModal('modal-rdv');
 }
 
-// --- Pièces jointes RDV (Firebase Storage) ---
+// --- Photos RDV (compressées, stockées dans la base — sans Storage/facturation) ---
+// Redimensionne une image et renvoie un dataURL JPEG léger.
+function compresserImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w >= h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else if (h > w && h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function rdvUploadFichiers(input) {
   const files = [...input.files];
   input.value = '';
   if (!files.length) return;
   const statut = document.getElementById('rdv-upload-status');
   for (const file of files) {
-    if (file.size > 25 * 1024 * 1024) { alert(`« ${file.name} » dépasse 25 Mo — non envoyé.`); continue; }
-    const pieceId = uuid();
-    const safe = file.name.replace(/[^\w.\-]+/g, '_');
-    const path = `rdv/${rdvUploadId}/${pieceId}_${safe}`;
+    if (!('' + (file.type || '')).startsWith('image/')) { alert(`« ${file.name} » n'est pas une image — seules les photos sont acceptées ici.`); continue; }
     try {
-      if (statut) statut.textContent = `⏳ Envoi de ${file.name}…`;
-      const refF = storage.ref().child(path);
-      await refF.put(file);
-      const url = await refF.getDownloadURL();
-      rdvPiecesTemp.push({ id: pieceId, nom: file.name, type: file.type || '', path, url });
+      if (statut) statut.textContent = `⏳ Traitement de ${file.name}…`;
+      const data = await compresserImage(file, 1280, 0.6);
+      const tailleTotale = rdvPiecesTemp.reduce((a, p) => a + (('' + (p.data || '')).length), 0) + data.length;
+      if (tailleTotale > 900000) { alert(`Limite de photos atteinte pour ce rendez-vous (~900 Ko sans Storage).\nSupprime une photo avant d'ajouter « ${file.name} ».`); continue; }
+      rdvPiecesTemp.push({ id: uuid(), nom: file.name, type: 'image/jpeg', data });
       renderRdvPieces();
-      // Persiste tout de suite si le RDV existe déjà (sinon enregistré au « Enregistrer »)
       const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
       if (existant) saveDoc('rdv', { ...existant, pieces: rdvPiecesTemp });
     } catch (e) {
-      console.error('upload pièce', e);
-      alert(`Échec de l'envoi de ${file.name}.`);
+      console.error('compression photo', e);
+      alert(`Impossible de traiter ${file.name}.`);
     }
   }
   if (statut) statut.textContent = '';
@@ -5380,13 +5396,14 @@ function renderRdvPieces() {
   const esc = s => ('' + (s || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   if (!rdvPiecesTemp.length) { el.innerHTML = '<div style="font-size:0.8rem;color:var(--gris)">Aucune pièce jointe.</div>'; return; }
   el.innerHTML = rdvPiecesTemp.map(p => {
-    const isImg = ('' + (p.type || '')).startsWith('image/');
+    const src = p.data || p.url || '';
+    const isImg = p.data || ('' + (p.type || '')).startsWith('image/');
     const vign = isImg
-      ? `<img src="${p.url}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;display:block">`
+      ? `<img src="${src}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;display:block">`
       : '<span style="font-size:1.6rem">📄</span>';
     return `<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-      <a href="${p.url}" target="_blank" rel="noopener">${vign}</a>
-      <a href="${p.url}" target="_blank" rel="noopener" style="flex:1;font-size:0.82rem;color:var(--vert);font-weight:600;word-break:break-all">${esc(p.nom) || 'Fichier'}</a>
+      <a href="${src}" target="_blank" rel="noopener">${vign}</a>
+      <a href="${src}" target="_blank" rel="noopener" style="flex:1;font-size:0.82rem;color:var(--vert);font-weight:600;word-break:break-all">${esc(p.nom) || 'Photo'}</a>
       <button class="btn btn-danger btn-sm" onclick="rdvSupprimerPiece('${p.id}')">🗑️</button>
     </div>`;
   }).join('');
@@ -5394,8 +5411,7 @@ function renderRdvPieces() {
 
 function rdvSupprimerPiece(id) {
   const p = rdvPiecesTemp.find(x => x.id === id);
-  if (!p || !confirm('Supprimer cette pièce jointe ?')) return;
-  if (p.path) storage.ref().child(p.path).delete().catch(() => {});
+  if (!p || !confirm('Supprimer cette photo ?')) return;
   rdvPiecesTemp = rdvPiecesTemp.filter(x => x.id !== id);
   renderRdvPieces();
   const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
