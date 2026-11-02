@@ -580,6 +580,7 @@
     <button onclick="showPage('planning')" id="nav-planning" class="active">Entretien</button>
     <button onclick="showPage('tontes')" id="nav-tontes">Tontes</button>
     <button onclick="showPage('contrats')" id="nav-contrats">Contrats</button>
+    <button onclick="showPage('rdv')" id="nav-rdv" style="display:none">📇 Rendez-vous</button>
     <button onclick="showPage('clients')" id="nav-clients">Clients</button>
     <button onclick="showPage('materiel')" id="nav-materiel">Matériel</button>
     <button onclick="showPage('conges')" id="nav-conges">☀️ Congés <span id="conges-badge" style="display:none;background:#c0392b;color:#fff;border-radius:10px;font-size:0.68rem;font-weight:700;padding:0 5px;margin-left:2px"></span></button>
@@ -616,6 +617,9 @@
   </button>
   <button onclick="showPage('contrats')" id="bnav-contrats">
     <span class="nav-icon">📝</span>Contrats
+  </button>
+  <button onclick="showPage('rdv')" id="bnav-rdv" style="display:none">
+    <span class="nav-icon">📇</span>RDV
   </button>
   <button onclick="showPage('clients')" id="bnav-clients">
     <span class="nav-icon">👥</span>Clients
@@ -726,6 +730,16 @@
       <button class="btn btn-primary btn-sm" id="btn-nouveau-contrat" onclick="ouvrirContrat()" style="margin-left:8px;white-space:nowrap;display:none">+ Nouveau contrat</button>
     </div>
     <div id="contrats-list"></div>
+  </div>
+
+  <!-- ===== RENDEZ-VOUS (mini-CRM clients) ===== -->
+  <div class="page" id="page-rdv">
+    <div class="flex-between mb-1">
+      <div class="alert alert-info" style="margin:0;flex:1">📇 Rendez-vous clients — visites, notes et suivi des offres</div>
+      <input type="text" class="form-control" id="rdv-filtre" placeholder="🔍 Nom, adresse, note…" style="max-width:220px;margin-left:8px" oninput="renderRdv()">
+      <button class="btn btn-primary btn-sm" onclick="ouvrirRdv()" style="margin-left:8px;white-space:nowrap">+ Nouveau rendez-vous</button>
+    </div>
+    <div id="rdv-list"></div>
   </div>
 
   <!-- ===== CRÉATION (chantiers) ===== -->
@@ -2212,6 +2226,65 @@
   </div>
 </div>
 
+<!-- ===== MODAL RENDEZ-VOUS ===== -->
+<div class="modal-overlay hidden" id="modal-rdv">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-rdv-titre">Nouveau rendez-vous</h3>
+      <button class="close-btn" onclick="fermerModal('modal-rdv')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Client / prospect *</label>
+        <input type="text" class="form-control" id="rdv-nom" placeholder="Nom du client ou du prospect">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input type="date" class="form-control" id="rdv-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Heure</label>
+          <input type="time" class="form-control" id="rdv-heure">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Téléphone</label>
+          <input type="tel" class="form-control" id="rdv-tel" placeholder="ex : 0470 12 34 56">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" id="rdv-mail" placeholder="client@email.be">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Adresse</label>
+        <input type="text" class="form-control" id="rdv-adresse" placeholder="Rue, n°, code postal, commune">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Type de visite</label>
+          <select class="form-control" id="rdv-type"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Statut</label>
+          <select class="form-control" id="rdv-statut"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (demande du client, mesures, accès…)</label>
+        <textarea class="form-control" id="rdv-notes" rows="4" placeholder="Détaille la demande, les contraintes, les mesures prises…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-suppr-rdv" onclick="supprimerRdv(currentRdvId)" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn btn-secondary" onclick="fermerModal('modal-rdv')">Annuler</button>
+      <button class="btn btn-primary" onclick="sauvegarderRdv()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="modal-detail">
   <div class="modal">
     <div class="modal-header">
@@ -2314,7 +2387,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [], reservationsCreation: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [], reservationsCreation: [], rdv: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2367,7 +2440,7 @@ function showLoading(show) {
 // Re-rend la page active après chaque mise à jour Firestore
 function renderCurrentPage() {
   const pages = { planning: renderPlanning, fiches: renderFiche,
-    clients: renderClients, tontes: renderTontes, facturation: renderFacturation, materiel: renderMateriel, conges: renderConges };
+    clients: renderClients, tontes: renderTontes, facturation: renderFacturation, materiel: renderMateriel, conges: renderConges, rdv: renderRdv };
   for (const [name, fn] of Object.entries(pages)) {
     if (document.getElementById('page-'+name)?.classList.contains('active')) { fn(); break; }
   }
@@ -2472,6 +2545,12 @@ function initFirestore() {
     appData.contrats = snap.docs.map(d => d.data());
     if (document.getElementById('page-contrats')?.classList.contains('active')) renderContrats();
     if (document.getElementById('page-facturation')?.classList.contains('active')) renderContratsAFacturer();
+  });
+
+  // Rendez-vous clients (mini-CRM — Marco + Justin)
+  db.collection('rdv').onSnapshot(snap => {
+    appData.rdv = snap.docs.map(d => d.data());
+    if (document.getElementById('page-rdv')?.classList.contains('active')) renderRdv();
   });
 
   // Frais de fonctionnement des tontes (doc unique)
@@ -2599,6 +2678,7 @@ function showPage(name) {
   if (name === 'facturation') renderFacturation();
   if (name === 'materiel') renderMateriel();
   if (name === 'conges') renderConges();
+  if (name === 'rdv') renderRdv();
 }
 
 // =====================================================
@@ -2681,6 +2761,9 @@ function applyUser(user) {
   const voitFactu = user.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
+  const voitRdv = voitChantierFinances();
+  document.getElementById('nav-rdv').style.display = voitRdv ? '' : 'none';
+  document.getElementById('bnav-rdv').style.display = voitRdv ? '' : 'none';
   appliquerVisibilitePoles();
   appliquerNavIcones();
   updateCongesBadge();
@@ -2728,6 +2811,9 @@ function toggleMode() {
   const voitFactu = currentUser && currentUser.name === 'Marco';
   document.getElementById('nav-facturation').style.display = voitFactu ? '' : 'none';
   document.getElementById('bnav-facturation').style.display = voitFactu ? '' : 'none';
+  const voitRdv = voitChantierFinances();
+  document.getElementById('nav-rdv').style.display = voitRdv ? '' : 'none';
+  document.getElementById('bnav-rdv').style.display = voitRdv ? '' : 'none';
   appliquerVisibilitePoles();
   if (!voitFactu && document.getElementById('page-facturation').classList.contains('active')) {
     showPage('planning');
@@ -4818,6 +4904,131 @@ function supprimerContrat() {
   if (!currentContratId || !confirm('Supprimer ce contrat ?')) return;
   deleteDoc('contrats', currentContratId);
   fermerModal('modal-contrat');
+}
+
+// =====================================================
+// RENDEZ-VOUS CLIENTS (mini-CRM — Marco + Justin)
+// =====================================================
+const RDV_STATUTS = {
+  'a-planifier':   { label: '📞 À planifier',        c: '#7f8c8d' },
+  'rdv-fixe':      { label: '📅 RDV fixé',           c: '#2980b9' },
+  'a-chiffrer':    { label: '📝 Vu — offre à faire', c: '#e67e22' },
+  'offre-envoyee': { label: '📤 Offre envoyée',      c: '#8e44ad' },
+  'gagne':         { label: '✅ Gagné',              c: '#35503a' },
+  'perdu':         { label: '❌ Perdu',              c: '#c0392b' }
+};
+const RDV_TYPES = ['Devis / offre', 'Métré', 'Visite conseil', 'SAV / retour', 'Autre'];
+let currentRdvId = null;
+
+function renderRdv() {
+  if (!voitChantierFinances()) return;
+  const cont = document.getElementById('rdv-list');
+  if (!cont) return;
+  const esc = s => ('' + (s || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const filtre = (document.getElementById('rdv-filtre')?.value || '').toLowerCase().trim();
+  let items = (appData.rdv || []).slice();
+  if (filtre) items = items.filter(r => [r.nom, r.adresse, r.notes, r.tel, r.mail].some(v => ('' + (v || '')).toLowerCase().includes(filtre)));
+  const fmtD = d => { if (!d) return ''; const [y, m, j] = d.split('-'); return `${j}/${m}/${y.slice(2)}`; };
+
+  const carte = r => {
+    const st = RDV_STATUTS[r.statut] || RDV_STATUTS['a-planifier'];
+    const tel = r.tel ? `<a href="tel:${esc(r.tel).replace(/\s/g, '')}" style="color:var(--vert);font-weight:600">📞 ${esc(r.tel)}</a>` : '';
+    const mail = r.mail ? `<a href="mailto:${esc(r.mail)}" style="color:var(--vert);font-weight:600">✉️ ${esc(r.mail)}</a>` : '';
+    const adr = r.adresse ? `<div style="margin-top:2px">📍 ${lienAdresse(r.adresse)}</div>` : '';
+    const quand = r.date
+      ? `<span style="font-weight:700">${fmtD(r.date)}${r.heure ? ' · ' + esc(r.heure) : ''}</span>`
+      : '<span style="color:var(--gris)">date à fixer</span>';
+    const opts = Object.entries(RDV_STATUTS).map(([k, v]) => `<option value="${k}"${k === r.statut ? ' selected' : ''}>${v.label}</option>`).join('');
+    return `<div class="card" style="margin-bottom:8px;border-left:4px solid ${st.c};cursor:pointer" onclick="ouvrirRdv('${r.id}')">
+      <div class="flex-between" style="align-items:flex-start;gap:8px">
+        <div>
+          <div style="font-size:1.02rem;font-weight:800">${esc(r.nom) || 'Sans nom'}</div>
+          <div style="font-size:0.82rem;color:var(--gris)">${quand}${r.type ? ' · ' + esc(r.type) : ''}</div>
+        </div>
+        <span style="background:${st.c};color:#fff;font-size:0.68rem;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap">${st.label}</span>
+      </div>
+      ${(tel || mail) ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:0.85rem">${tel}${mail}</div>` : ''}
+      ${adr}
+      ${r.notes ? `<div style="margin-top:5px;font-size:0.85rem;white-space:pre-wrap;background:var(--vert-pale);border-radius:6px;padding:6px 8px">${esc(r.notes)}</div>` : ''}
+      <div onclick="event.stopPropagation()" style="margin-top:7px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="form-control" style="max-width:195px;height:32px;padding:2px 8px;font-size:0.8rem" onchange="changerStatutRdv('${r.id}', this.value)">${opts}</select>
+        <button class="btn btn-secondary btn-sm" onclick="ouvrirRdv('${r.id}')">✏️ Modifier</button>
+        <button class="btn btn-danger btn-sm" onclick="supprimerRdv('${r.id}')">🗑️</button>
+      </div>
+    </div>`;
+  };
+
+  const actifsStatuts = ['a-planifier', 'rdv-fixe', 'a-chiffrer', 'offre-envoyee'];
+  const actifs = items.filter(r => actifsStatuts.includes(r.statut || 'a-planifier'))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.nom || '').localeCompare(b.nom || ''));
+  const clos = items.filter(r => ['gagne', 'perdu'].includes(r.statut))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const nbChiffrer = items.filter(r => r.statut === 'a-chiffrer').length;
+
+  let html = '';
+  if (nbChiffrer) html += `<div style="background:#fff3cd;color:#7a5b00;border-radius:8px;padding:8px 12px;font-weight:600;margin-bottom:10px;font-size:0.9rem">📝 ${nbChiffrer} visite(s) vue(s) en attente d'offre.</div>`;
+  html += `<div class="card-title" style="margin:6px 0">🔔 À suivre (${actifs.length})</div>`;
+  html += actifs.length ? actifs.map(carte).join('') : `<div class="card"><div class="empty-state">Aucun rendez-vous en cours.<br>Clique « + Nouveau rendez-vous ».</div></div>`;
+  if (clos.length) {
+    html += `<div class="card-title" style="margin:16px 0 6px">📁 Clôturés (${clos.length})</div>`;
+    html += clos.map(carte).join('');
+  }
+  cont.innerHTML = html;
+}
+
+function ouvrirRdv(id) {
+  if (!voitChantierFinances()) return;
+  currentRdvId = id || null;
+  const r = id ? (appData.rdv || []).find(x => x.id === id) : null;
+  document.getElementById('modal-rdv-titre').textContent = r ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous';
+  document.getElementById('btn-suppr-rdv').style.display = r ? '' : 'none';
+  document.getElementById('rdv-type').innerHTML = RDV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+  document.getElementById('rdv-statut').innerHTML = Object.entries(RDV_STATUTS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+  document.getElementById('rdv-date').value = r?.date || '';
+  document.getElementById('rdv-heure').value = r?.heure || '';
+  document.getElementById('rdv-nom').value = r?.nom || '';
+  document.getElementById('rdv-tel').value = r?.tel || '';
+  document.getElementById('rdv-mail').value = r?.mail || '';
+  document.getElementById('rdv-adresse').value = r?.adresse || '';
+  document.getElementById('rdv-type').value = r?.type || RDV_TYPES[0];
+  document.getElementById('rdv-statut').value = r?.statut || 'a-planifier';
+  document.getElementById('rdv-notes').value = r?.notes || '';
+  document.getElementById('modal-rdv').classList.remove('hidden');
+}
+
+function sauvegarderRdv() {
+  if (!voitChantierFinances()) return;
+  const nom = document.getElementById('rdv-nom').value.trim();
+  if (!nom) { alert('Indique au moins le nom du client / prospect.'); return; }
+  const ancien = currentRdvId ? (appData.rdv || []).find(x => x.id === currentRdvId) : null;
+  saveDoc('rdv', {
+    id: currentRdvId || uuid(),
+    date: document.getElementById('rdv-date').value || '',
+    heure: document.getElementById('rdv-heure').value || '',
+    nom,
+    tel: document.getElementById('rdv-tel').value.trim(),
+    mail: document.getElementById('rdv-mail').value.trim(),
+    adresse: document.getElementById('rdv-adresse').value.trim(),
+    type: document.getElementById('rdv-type').value,
+    statut: document.getElementById('rdv-statut').value,
+    notes: document.getElementById('rdv-notes').value.trim(),
+    creeLe: ancien?.creeLe || formatDate(new Date()),
+    creePar: ancien?.creePar || (currentUser ? currentUser.name : '')
+  });
+  fermerModal('modal-rdv');
+}
+
+function changerStatutRdv(id, statut) {
+  const r = (appData.rdv || []).find(x => x.id === id);
+  if (!r) return;
+  saveDoc('rdv', { ...r, statut });
+}
+
+function supprimerRdv(id) {
+  const r = (appData.rdv || []).find(x => x.id === id);
+  if (!r || !confirm(`Supprimer le rendez-vous « ${r.nom || ''} » ?`)) return;
+  deleteDoc('rdv', id);
+  if (currentRdvId === id) fermerModal('modal-rdv');
 }
 
 // =====================================================
