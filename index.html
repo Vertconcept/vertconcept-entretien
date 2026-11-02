@@ -2479,7 +2479,7 @@ function emailToName(email) {
 }
 
 // Cache mémoire local — mis à jour par onSnapshot
-let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [], reservationsCreation: [], rdv: [] };
+let appData = { clients: [], interventions: [], machines: [], pannes: [], achats: [], stock: [], backlog: [], backlogCreation: [], contrats: [], tontesPassages: [], chantiers: [], chantierHeures: [], chantierMateriaux: [], chantierMessages: [], chantierSupplements: [], chantierAppro: [], chantierPlanning: [], chantierDegats: [], chantierMachines: [], conges: [], reservationsCreation: [], rdv: [], rdvPhotos: [] };
 
 // getData() retourne une copie profonde pour que les mutations des appelants
 // ne perturbent pas le cache avant saveData()
@@ -2642,6 +2642,11 @@ function initFirestore() {
   // Rendez-vous clients (mini-CRM — Marco + Justin)
   db.collection('rdv').onSnapshot(snap => {
     appData.rdv = snap.docs.map(d => d.data());
+    if (document.getElementById('page-rdv')?.classList.contains('active')) renderRdv();
+  });
+  // Photos des RDV (1 document par photo, pour ne pas saturer le doc RDV)
+  db.collection('rdvPhotos').onSnapshot(snap => {
+    appData.rdvPhotos = snap.docs.map(d => d.data());
     if (document.getElementById('page-rdv')?.classList.contains('active')) renderRdv();
   });
 
@@ -5208,6 +5213,12 @@ let currentRdvId = null;
 let rdvUploadId = null;   // id (stable) servant de dossier Storage pour les pièces jointes
 let rdvPiecesTemp = [];   // pièces jointes en cours d'édition dans la modale
 
+function rdvPhotosDe(r) {
+  const sep = (appData.rdvPhotos || []).filter(p => p.rdvId === r.id);
+  const legacy = Array.isArray(r.pieces) ? r.pieces : [];
+  return [...sep, ...legacy].filter(p => p.data || p.url);
+}
+
 function renderRdv() {
   if (!voitChantierFinances()) return;
   const cont = document.getElementById('rdv-list');
@@ -5238,9 +5249,7 @@ function renderRdv() {
       ${(tel || mail) ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:0.85rem">${tel}${mail}</div>` : ''}
       ${adr}
       ${r.notes ? `<div style="margin-top:5px;font-size:0.85rem;white-space:pre-wrap;background:var(--vert-pale);border-radius:6px;padding:6px 8px">${esc(r.notes)}</div>` : ''}
-      ${(r.pieces && r.pieces.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.pieces.map(p => { const src = p.data || p.url || ''; const isImg = p.data || ('' + (p.type || '')).startsWith('image/'); return isImg
-        ? `<a href="${src}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${src}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block"></a>`
-        : `<a href="${src}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:0.8rem;color:var(--vert);font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">📄 ${esc(p.nom) || 'Fichier'}</a>`; }).join('')}</div>` : ''}
+      ${(() => { const ph = rdvPhotosDe(r); return ph.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${ph.map(p => { const src = p.data || p.url || ''; return `<a href="${src}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${src}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block"></a>`; }).join('')}</div>` : ''; })()}
       <div onclick="event.stopPropagation()" style="margin-top:7px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="form-control" style="max-width:195px;height:32px;padding:2px 8px;font-size:0.8rem" onchange="changerStatutRdv('${r.id}', this.value)">${opts}</select>
         <button class="btn btn-secondary btn-sm" onclick="ouvrirRdv('${r.id}')">✏️ Modifier</button>
@@ -5276,7 +5285,11 @@ function ouvrirRdv(id) {
   const clis = (appData.clients || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
   document.getElementById('rdv-clients-list').innerHTML = clis.map(c => `<option value="${('' + (c.nom || '')).replace(/"/g, '&quot;')}"></option>`).join('');
   rdvUploadId = (id || (r && r.id)) || uuid();
-  rdvPiecesTemp = (r && Array.isArray(r.pieces)) ? r.pieces.slice() : [];
+  const photosExist = (appData.rdvPhotos || []).filter(p => p.rdvId === rdvUploadId);
+  const legacy = (r && Array.isArray(r.pieces)) ? r.pieces : [];
+  rdvPiecesTemp = [...photosExist, ...legacy]
+    .map(p => ({ id: p.id || uuid(), rdvId: rdvUploadId, nom: p.nom || 'Photo', type: p.type || 'image/jpeg', data: p.data || '' }))
+    .filter(p => p.data);
   document.getElementById('rdv-fichier').value = '';
   document.getElementById('rdv-upload-status').textContent = '';
   renderRdvPieces();
@@ -5299,9 +5312,9 @@ function sauvegarderRdv() {
   const nom = document.getElementById('rdv-nom').value.trim();
   if (!nom) { alert('Indique au moins le nom du client / prospect.'); return; }
   const ancien = currentRdvId ? (appData.rdv || []).find(x => x.id === currentRdvId) : null;
+  const rid = currentRdvId || rdvUploadId || uuid();
   saveDoc('rdv', {
-    id: currentRdvId || rdvUploadId || uuid(),
-    pieces: rdvPiecesTemp,
+    id: rid,
     date: document.getElementById('rdv-date').value || '',
     heure: document.getElementById('rdv-heure').value || '',
     nom,
@@ -5314,6 +5327,8 @@ function sauvegarderRdv() {
     creeLe: ancien?.creeLe || formatDate(new Date()),
     creePar: ancien?.creePar || (currentUser ? currentUser.name : '')
   });
+  // Écrit / met à jour les photos (1 doc chacune) rattachées à ce RDV
+  rdvPiecesTemp.forEach(p => saveDoc('rdvPhotos', { id: p.id, rdvId: rid, nom: p.nom, type: p.type || 'image/jpeg', data: p.data }));
   fermerModal('modal-rdv');
 }
 
@@ -5338,6 +5353,7 @@ function changerStatutRdv(id, statut) {
 function supprimerRdv(id) {
   const r = (appData.rdv || []).find(x => x.id === id);
   if (!r || !confirm(`Supprimer le rendez-vous « ${r.nom || ''} » ?`)) return;
+  (appData.rdvPhotos || []).filter(p => p.rdvId === id).forEach(p => deleteDoc('rdvPhotos', p.id));
   deleteDoc('rdv', id);
   if (currentRdvId === id) fermerModal('modal-rdv');
 }
@@ -5376,12 +5392,13 @@ async function rdvUploadFichiers(input) {
     try {
       if (statut) statut.textContent = `⏳ Traitement de ${file.name}…`;
       const data = await compresserImage(file, 1280, 0.6);
-      const tailleTotale = rdvPiecesTemp.reduce((a, p) => a + (('' + (p.data || '')).length), 0) + data.length;
-      if (tailleTotale > 900000) { alert(`Limite de photos atteinte pour ce rendez-vous (~900 Ko sans Storage).\nSupprime une photo avant d'ajouter « ${file.name} ».`); continue; }
-      rdvPiecesTemp.push({ id: uuid(), nom: file.name, type: 'image/jpeg', data });
+      if (data.length > 1000000) { alert(`« ${file.name} » reste trop lourde même compressée — ignorée.`); continue; }
+      const photo = { id: uuid(), rdvId: rdvUploadId, nom: file.name, type: 'image/jpeg', data };
+      rdvPiecesTemp.push(photo);
       renderRdvPieces();
+      // Chaque photo = un document séparé → aucune limite de nombre par rendez-vous
       const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
-      if (existant) saveDoc('rdv', { ...existant, pieces: rdvPiecesTemp });
+      if (existant) saveDoc('rdvPhotos', photo);
     } catch (e) {
       console.error('compression photo', e);
       alert(`Impossible de traiter ${file.name}.`);
@@ -5414,8 +5431,7 @@ function rdvSupprimerPiece(id) {
   if (!p || !confirm('Supprimer cette photo ?')) return;
   rdvPiecesTemp = rdvPiecesTemp.filter(x => x.id !== id);
   renderRdvPieces();
-  const existant = (appData.rdv || []).find(x => x.id === rdvUploadId);
-  if (existant) saveDoc('rdv', { ...existant, pieces: rdvPiecesTemp });
+  deleteDoc('rdvPhotos', id);
 }
 
 // =====================================================
