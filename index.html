@@ -5089,15 +5089,31 @@ function calculerSimul() {
   const dechets = forfaitDechets(dechetsM3, f);
 
   const total = mainOeuvre + outils + vehicule + carburant + produits + dechets + tonteForfaitTotal;
-  const prixConseille = marge < 1 ? total / (1 - marge) : total;
-  return { kmAR, deplacements, deplacementsAuto, manHours, elapsed, mainOeuvre, outils, vehicule, carburant, produits, dechets, tonteForfaitTotal, total, prixConseille, marge: marge * 100 };
+  const diviser = x => marge < 1 ? x / (1 - marge) : x;
+  // Part « tontes » isolée pour la proposer en option dans l'offre
+  const tonteDeplacements = Math.min(tonteNb, deplacements);
+  let tonteCout;
+  if (tonteMode === 'forfait') {
+    tonteCout = tonteForfaitTotal;
+  } else {
+    const tMan = tonteNb * tonteH * tonteHommes;
+    const tElapsed = tonteNb * tonteH;
+    tonteCout = tMan * (f.coutHoraireOuvrier || 0) + tMan * (f.contributionOutils || 0)
+      + coutVanJour * (tElapsed / (f.vanHeuresJour || 8))
+      + tonteDeplacements * kmAR * ((f.consoLitres100 || 0) / 100) * (f.prixCarburant || 0);
+  }
+  const resteCout = Math.max(0, total - tonteCout);
+  const prixConseille = diviser(total);
+  const tontePrix = diviser(tonteCout);
+  const restePrix = diviser(resteCout);
+  return { kmAR, deplacements, deplacementsAuto, manHours, elapsed, mainOeuvre, outils, vehicule, carburant, produits, dechets, tonteForfaitTotal, total, prixConseille, tonteNb, tonteCout, tontePrix, resteCout, restePrix, marge: marge * 100 };
 }
 
 function renderSimulResult() {
   const r = calculerSimul();
   const eur = n => (n || 0).toFixed(2).replace('.', ',') + ' €';
   const ligne = (l, val, note) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 4px">${l}${note ? ` <span style="color:var(--gris);font-size:0.78rem">${note}</span>` : ''}</td><td style="padding:5px 4px;text-align:right">${eur(val)}</td></tr>`;
-  return `<table style="width:100%;border-collapse:collapse;font-size:0.86rem">
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:0.86rem">
     ${ligne("👷 Main-d'œuvre", r.mainOeuvre, `${r.manHours.toFixed(1)} h`)}
     ${ligne('🧰 Consommables + outils', r.outils, `${r.manHours.toFixed(1)} h`)}
     ${ligne('🚐 Camionnette', r.vehicule, `${r.elapsed.toFixed(1)} h sur place`)}
@@ -5106,8 +5122,18 @@ function renderSimulResult() {
     ${r.tonteForfaitTotal ? ligne('🌿 Tontes (forfait)', r.tonteForfaitTotal) : ''}
     ${r.dechets ? ligne('🗑️ Évacuation déchets', r.dechets) : ''}
     <tr style="border-top:2px solid var(--gris)"><td style="padding:7px 4px;font-weight:800">Coût de revient annuel</td><td style="padding:7px 4px;text-align:right;font-weight:800">${eur(r.total)}</td></tr>
-    <tr style="border-top:2px solid var(--vert)"><td style="padding:8px 4px;font-weight:800;color:var(--vert)">💰 Prix annuel conseillé (marge ${r.marge.toFixed(0)} %)</td><td style="padding:8px 4px;text-align:right;font-weight:800;font-size:1.15rem;color:var(--vert)">${eur(r.prixConseille)} HTVA</td></tr>
   </table>`;
+  const box = (l, val, big, color) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 2px;${big ? 'border-top:2px solid ' + (color || 'var(--vert)') + ';' : ''}"><span style="font-weight:800;${color ? 'color:' + color : ''}">${l}</span><span style="font-weight:800;${big ? 'font-size:1.12rem;' : ''}${color ? 'color:' + color : ''};white-space:nowrap">${eur(val)} HTVA</span></div>`;
+  html += '<div style="margin-top:8px">';
+  if (r.tonteNb > 0) {
+    html += box('💰 Entretien (hors tontes)', r.restePrix, true, 'var(--vert)');
+    html += box(`🌿 Option tontes (${r.tonteNb}/an)`, r.tontePrix, false, '#8e44ad');
+    html += box(`= Total si tout inclus (marge ${r.marge.toFixed(0)} %)`, r.prixConseille, true, 'var(--gris)');
+  } else {
+    html += box(`💰 Prix annuel conseillé (marge ${r.marge.toFixed(0)} %)`, r.prixConseille, true, 'var(--vert)');
+  }
+  html += '</div>';
+  return html;
 }
 
 function recalcSimul() {
@@ -5138,7 +5164,13 @@ function simulRecapTexte(r) {
   if (parseFloat(v('sim-tonte-nb'))) t += `• ${v('sim-tonte-nb')} tonte(s)/an` + (document.getElementById('sim-tonte-mode').value === 'forfait' ? ` (forfait ${v('sim-tonte-forfait')} €)` : ` de ${v('sim-tonte-h')} h à ${v('sim-tonte-hommes')} homme(s)`) + `\n`;
   simulLignes.forEach(l => { if (l.label || l.heures || l.produit) t += `• ${l.label || 'Prestation'} : ${l.qte}× (${l.heures} h, ${l.hommes} h., produit ${eur(l.produit)})\n`; });
   if (parseFloat(v('sim-dechets'))) t += `• Évacuation déchets : ${v('sim-dechets')} m³/an\n`;
-  t += `\nPrix annuel conseillé : ${eur(r.prixConseille)} HTVA\n(coût de revient ${eur(r.total)}, marge ${r.marge.toFixed(0)} %)`;
+  if (r.tonteNb > 0) {
+    t += `\nPrix entretien (hors tontes) : ${eur(r.restePrix)} HTVA`;
+    t += `\nOption tontes (${r.tonteNb}/an) : ${eur(r.tontePrix)} HTVA`;
+    t += `\nTotal si tout inclus : ${eur(r.prixConseille)} HTVA (marge ${r.marge.toFixed(0)} %)`;
+  } else {
+    t += `\nPrix annuel conseillé : ${eur(r.prixConseille)} HTVA (marge ${r.marge.toFixed(0)} %)`;
+  }
   return t;
 }
 
