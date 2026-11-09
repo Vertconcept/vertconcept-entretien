@@ -1758,6 +1758,7 @@
           <input type="hidden" id="interv-client-id">
           <div class="client-search-dropdown" id="interv-client-dropdown"></div>
         </div>
+        <div style="margin-top:5px"><button type="button" class="btn btn-secondary btn-sm" onclick="modifierClientSelection('interv')" title="Corriger l'adresse / les coordonnées du client sélectionné (utile pour les clients importés)">✏️ Modifier la fiche client</button></div>
         <select class="form-control" id="interv-chantier-select" style="display:none"></select>
         <div id="interv-rappel-remarque" style="display:none;margin-top:6px;background:#fff3e0;border:1px solid #e67e22;border-radius:8px;padding:7px 10px;font-size:0.82rem;color:#664d03"></div>
       </div>
@@ -4551,7 +4552,8 @@ function ouvrirFormClient(id) {
 
   document.getElementById('client-prenom').value = client ? (client.prenom || '') : '';
   document.getElementById('client-nom').value    = client ? (client.nomFamille || client.nom || '') : '';
-  document.getElementById('client-rue').value    = client ? (client.rue || '') : '';
+  // Clients importés : si pas de rue/CP/ville structurés, on affiche l'adresse brute dans « Rue » pour pouvoir la corriger
+  document.getElementById('client-rue').value    = client ? (client.rue || ((!client.codePostal && !client.ville) ? (client.adresse || '') : '')) : '';
   document.getElementById('client-cp').value     = client ? (client.codePostal || '') : '';
   document.getElementById('client-ville').value  = client ? (client.ville || '') : '';
   document.getElementById('client-tel').value    = client ? (client.tel || '') : '';
@@ -9136,6 +9138,14 @@ function renderClientSearchDropdown(prefix, filtre) {
 
 // Création d'un client à la volée depuis un menu de recherche (revient ensuite à l'endroit d'origine)
 let retourRechercheClient = null;
+// Ouvre la fiche du client sélectionné pour la corriger (adresse importée mal formatée, etc.),
+// puis revient à l'écran en cours avec le client toujours sélectionné.
+function modifierClientSelection(prefix) {
+  const id = document.getElementById(prefix + '-client-id').value;
+  if (!id) { alert('Sélectionne d\'abord un client dans la liste.'); return; }
+  retourRechercheClient = prefix;
+  ouvrirFormClient(id);
+}
 function nouveauClientDepuisRecherche(prefix) {
   retourRechercheClient = prefix;
   const texte = (document.getElementById(prefix + '-client-search').value || '').trim();
