@@ -3397,21 +3397,52 @@ function renderRemarquesClients() {
   const card = document.getElementById('card-remarques-clients');
   if (!card) return;
   const { interventions, clients } = getData();
-  const liste = interventions
+  const esc = v => ('' + (v || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const toutes = interventions
     .filter(iv => (iv.remarquesClient || '').trim())
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-    .slice(0, 50);
+    .slice(0, 80);
   const cont = document.getElementById('fiches-remarques-recap');
-  if (!liste.length) { card.style.display = 'none'; return; } // masqué tant qu'il n'y a aucune remarque
+  if (!toutes.length) { card.style.display = 'none'; return; } // masqué tant qu'il n'y a aucune remarque
   card.style.display = '';
-  cont.innerHTML = liste.map(iv => {
-    const c = clients.find(x => x.id === iv.clientId);
-    const auteur = iv.soumisePar || iv.chef || '?';
-    return `<div onclick="ouvrirDetailIntervention('${iv.id}')" style="cursor:pointer;border-left:4px solid #e67e22;background:#fffaf3;border-radius:8px;padding:8px 12px;margin-bottom:8px">
-      <div style="font-weight:700">${c ? c.nom : (iv.clientNom || 'Client')} <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— ${formatDateFR(iv.date)} · ${auteur}</span></div>
-      <div style="color:#664d03;font-size:0.9rem;margin-top:2px">💬 ${iv.remarquesClient}</div>
+  const aFaire = toutes.filter(iv => !iv.remarquesClientTraitee);
+  const faites = toutes.filter(iv => iv.remarquesClientTraitee);
+  const nomC = iv => { const c = clients.find(x => x.id === iv.clientId); return esc(c ? c.nom : (iv.clientNom || 'Client')); };
+
+  const row = (iv, traitee) => {
+    const auteur = esc(iv.soumisePar || iv.chef || '?');
+    return `<div style="display:flex;align-items:flex-start;gap:9px;border-left:4px solid ${traitee ? '#9bb89b' : '#e67e22'};background:${traitee ? '#f3f5f3' : '#fffaf3'};border-radius:8px;padding:8px 12px;margin-bottom:8px">
+      <input type="checkbox" ${traitee ? 'checked' : ''} onchange="toggleRemarqueTraitee('${iv.id}')" title="Cocher quand c'est traité" style="width:18px;height:18px;margin-top:2px;flex:none;cursor:pointer">
+      <div style="flex:1;cursor:pointer${traitee ? ';opacity:0.6' : ''}" onclick="ouvrirDetailIntervention('${iv.id}')">
+        <div style="font-weight:700${traitee ? ';text-decoration:line-through' : ''}">${nomC(iv)} <span style="font-weight:400;color:var(--gris);font-size:0.8rem">— ${formatDateFR(iv.date)} · ${auteur}</span></div>
+        <div style="color:#664d03;font-size:0.9rem;margin-top:2px${traitee ? ';text-decoration:line-through' : ''}">💬 ${esc(iv.remarquesClient)}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" style="flex:none" title="Supprimer cette remarque" onclick="supprimerRemarqueClient('${iv.id}')">🗑️</button>
     </div>`;
-  }).join('');
+  };
+
+  let html = aFaire.length ? aFaire.map(iv => row(iv, false)).join('')
+    : '<div style="font-size:0.85rem;color:var(--vert)">✅ Toutes les remarques ont été traitées.</div>';
+  if (faites.length) {
+    html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.85rem;color:var(--gris);font-weight:600">✓ Traitées (${faites.length})</summary><div style="margin-top:8px">${faites.map(iv => row(iv, true)).join('')}</div></details>`;
+  }
+  cont.innerHTML = html;
+  const titre = card.querySelector('.card-title');
+  if (titre) titre.innerHTML = `💬 Remarques clients à prendre en compte${aFaire.length ? ` <span style="background:#e67e22;color:#fff;border-radius:12px;font-size:0.72rem;font-weight:700;padding:1px 8px">${aFaire.length}</span>` : ''}`;
+}
+
+// Cocher / décocher une remarque client comme « traitée »
+function toggleRemarqueTraitee(ivId) {
+  const iv = appData.interventions.find(x => x.id === ivId);
+  if (!iv) return;
+  saveDoc('interventions', { ...iv, remarquesClientTraitee: !iv.remarquesClientTraitee });
+}
+// Supprimer définitivement le texte de la remarque (la fiche intervention est conservée)
+function supprimerRemarqueClient(ivId) {
+  const iv = appData.interventions.find(x => x.id === ivId);
+  if (!iv) return;
+  if (!confirm('Supprimer définitivement cette remarque client ?\n(La fiche intervention, elle, est conservée.)')) return;
+  saveDoc('interventions', { ...iv, remarquesClient: '', remarquesClientTraitee: false });
 }
 
 // Dernière remarque connue d'un client (hors intervention en cours d'édition)
