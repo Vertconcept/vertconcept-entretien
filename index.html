@@ -4407,14 +4407,14 @@ function ouvrirDetailIntervention(id) {
     ` : ''}
     ${iv.remarques && iv.remarques.length ? `<hr><div class="fiche-field-label">📝 Remarques ouvriers</div><ul class="remarques-list mt-1">${iv.remarques.map(r=>`<li><div class="meta">${r.auteur} — ${formatDateFR(r.date)}</div>${r.texte}</li>`).join('')}</ul>` : ''}
     <hr>
-    <div class="fiche-field-label">📁 Documents (plan de plantation, d'implantation…)</div>
+    <div class="fiche-field-label">📎 Photos & documents (plan, photo envoyée par le client…)</div>
     <div style="margin-top:4px">${(iv.fichiers || []).length ? (iv.fichiers || []).map(f => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:5px 8px;background:#f8f9fa;border-radius:8px;margin-bottom:4px">
         <span style="cursor:pointer;flex:1;min-width:0" onclick="voirFichierIntervention('${f.id}','${(f.type || '').replace(/'/g, '')}')">${(f.type || '').startsWith('image/') ? '🖼️' : '📄'} <span style="text-decoration:underline">${(f.nom || '').replace(/</g, '&lt;')}</span></span>
         ${modeAdmin ? `<button onclick="supprimerFichierIntervention('${id}','${f.id}')" title="Supprimer" style="background:none;border:none;cursor:pointer">🗑️</button>` : ''}
       </div>`).join('') : '<div style="font-size:0.82rem;color:var(--gris)">Aucun document.</div>'}</div>
     <div style="margin-top:6px">
       <input type="file" accept="image/*,application/pdf,.pdf" id="iv-fichier-input" multiple onchange="televerserFichierIntervention('${id}',this)">
-      <div style="font-size:0.76rem;color:var(--gris);margin-top:2px">PDF ou images · max ~700 Ko par fichier.</div>
+      <div style="font-size:0.76rem;color:var(--gris);margin-top:2px">Photos (compressées automatiquement) et PDF. Les PDF/plans doivent rester légers (~1 Mo).</div>
       <div id="iv-fichier-status" style="font-size:0.8rem;color:var(--gris);margin-top:2px"></div>
     </div>
   `;
@@ -6704,30 +6704,46 @@ function retirerDevisChantier(id) {
 
 // --- Documents du chantier (plans, esquisses, photos…) ---
 const FICHIER_MAX_OCTETS = 700 * 1024;
-function televerserFichierChantier(input) {
+// Prépare un fichier pour stockage en base : COMPRESSE les images (JPEG), garde les PDF tels quels.
+// Renvoie { data, type, nom } ou { tooBig:true, nom } si on ne peut pas passer sous la limite.
+async function fichierVersDataURL(file) {
+  const CIBLE = 950000; // ~ limite 1 Mo par document Firestore
+  if (('' + (file.type || '')).startsWith('image/')) {
+    for (const [dim, q] of [[1600, 0.72], [1280, 0.6], [1024, 0.5], [800, 0.45]]) {
+      const d = await compresserImage(file, dim, q);
+      if (d.length <= CIBLE) return { data: d, type: 'image/jpeg', nom: file.name };
+    }
+    const last = await compresserImage(file, 700, 0.4);
+    return last.length <= CIBLE ? { data: last, type: 'image/jpeg', nom: file.name } : { tooBig: true, nom: file.name };
+  }
+  const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+  if (('' + data).length > CIBLE) return { tooBig: true, nom: file.name };
+  return { data, type: file.type || 'application/pdf', nom: file.name };
+}
+
+async function televerserFichierChantier(input) {
   const files = [...(input.files || [])];
   if (!files.length) return;
   const ch = appData.chantiers.find(c => c.id === currentChantierDetailId);
   if (!ch) return;
   const statut = document.getElementById('ch-fichier-status');
-  const valides = files.filter(f => (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) && f.size <= FICHIER_MAX_OCTETS);
-  const rejetes = files.length - valides.length;
-  if (!valides.length) { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Fichier(s) refusé(s) : PDF ou image, max ~700 Ko chacun.</span>'; input.value = ''; return; }
-  if (statut) statut.textContent = '⏳ Envoi en cours…';
-  Promise.all(valides.map(f => new Promise(res => {
-    const r = new FileReader();
-    r.onload = () => res({ id: 'fc_' + uuid(), nom: f.name, type: f.type || 'application/pdf', data: r.result });
-    r.onerror = () => res(null);
-    r.readAsDataURL(f);
-  }))).then(async results => {
-    const ok = results.filter(Boolean);
-    for (const it of ok) await saveDoc('chantierFichiers', { id: it.id, chantierId: ch.id, nom: it.nom, type: it.type, data: it.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
-    const meta = ok.map(it => ({ id: it.id, nom: it.nom, type: it.type }));
-    await saveDoc('chantiers', { ...ch, fichiers: [...(ch.fichiers || []), ...meta] });
-    input.value = '';
-    if (statut && rejetes) statut.innerHTML = `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (trop lourd ou format non supporté).</span>`;
-    if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
-  }).catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec de l\'envoi (fichier peut-être trop lourd).</span>'; });
+  const accepte = f => ('' + (f.type || '')).startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  if (statut) statut.textContent = '⏳ Traitement…';
+  const meta = []; let rejetes = 0;
+  for (const f of files) {
+    if (!accepte(f)) { rejetes++; continue; }
+    try {
+      const r = await fichierVersDataURL(f);
+      if (!r || r.tooBig) { rejetes++; continue; }
+      const id = 'fc_' + uuid();
+      await saveDoc('chantierFichiers', { id, chantierId: ch.id, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+      meta.push({ id, nom: r.nom, type: r.type });
+    } catch (e) { console.error('fichier chantier', e); rejetes++; }
+  }
+  if (meta.length) await saveDoc('chantiers', { ...ch, fichiers: [...(ch.fichiers || []), ...meta] });
+  input.value = '';
+  if (statut) statut.innerHTML = rejetes ? `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (PDF trop lourd ou format non supporté).</span>` : '';
+  if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
 }
 
 function voirFichierChantier(id, type) {
@@ -6780,30 +6796,29 @@ function supprimerFichierChantier(chId, fileId) {
 }
 
 // --- Documents joints à une intervention (entretien) ---
-function televerserFichierIntervention(ivId, input) {
+async function televerserFichierIntervention(ivId, input) {
   const files = [...(input.files || [])];
   if (!files.length) return;
   const iv = appData.interventions.find(i => i.id === ivId);
   if (!iv) return;
   const statut = document.getElementById('iv-fichier-status');
-  const valides = files.filter(f => (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) && f.size <= FICHIER_MAX_OCTETS);
-  const rejetes = files.length - valides.length;
-  if (!valides.length) { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Fichier(s) refusé(s) : PDF ou image, max ~700 Ko.</span>'; input.value = ''; return; }
-  if (statut) statut.textContent = '⏳ Envoi en cours…';
-  Promise.all(valides.map(f => new Promise(res => {
-    const r = new FileReader();
-    r.onload = () => res({ id: 'fi_' + uuid(), nom: f.name, type: f.type || 'application/pdf', data: r.result });
-    r.onerror = () => res(null);
-    r.readAsDataURL(f);
-  }))).then(async results => {
-    const ok = results.filter(Boolean);
-    for (const it of ok) await saveDoc('interventionFichiers', { id: it.id, interventionId: ivId, nom: it.nom, type: it.type, data: it.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
-    const meta = ok.map(it => ({ id: it.id, nom: it.nom, type: it.type }));
-    await saveDoc('interventions', { ...iv, fichiers: [...(iv.fichiers || []), ...meta] });
-    input.value = '';
-    if (statut && rejetes) statut.innerHTML = `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s).</span>`;
-    ouvrirDetailIntervention(ivId);
-  }).catch(() => { if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Échec de l\'envoi (fichier peut-être trop lourd).</span>'; });
+  const accepte = f => ('' + (f.type || '')).startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  if (statut) statut.textContent = '⏳ Traitement…';
+  const meta = []; let rejetes = 0;
+  for (const f of files) {
+    if (!accepte(f)) { rejetes++; continue; }
+    try {
+      const r = await fichierVersDataURL(f);
+      if (!r || r.tooBig) { rejetes++; continue; }
+      const id = 'fi_' + uuid();
+      await saveDoc('interventionFichiers', { id, interventionId: ivId, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+      meta.push({ id, nom: r.nom, type: r.type });
+    } catch (e) { console.error('fichier intervention', e); rejetes++; }
+  }
+  if (meta.length) await saveDoc('interventions', { ...iv, fichiers: [...(iv.fichiers || []), ...meta] });
+  input.value = '';
+  if (statut) statut.innerHTML = rejetes ? `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (PDF trop lourd ou format non supporté).</span>` : '';
+  ouvrirDetailIntervention(ivId);
 }
 function voirFichierIntervention(id, type) {
   db.collection('interventionFichiers').doc(id).get().then(doc => {
