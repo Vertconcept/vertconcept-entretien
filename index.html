@@ -6707,13 +6707,13 @@ const FICHIER_MAX_OCTETS = 700 * 1024;
 // Prépare un fichier pour stockage en base : COMPRESSE les images (JPEG), garde les PDF tels quels.
 // Renvoie { data, type, nom } ou { tooBig:true, nom } si on ne peut pas passer sous la limite.
 async function fichierVersDataURL(file) {
-  const CIBLE = 950000; // ~ limite 1 Mo par document Firestore
+  const CIBLE = 700000; // marge de sécurité sous la limite 1 Mo/doc Firestore (base64 + métadonnées)
   if (('' + (file.type || '')).startsWith('image/')) {
-    for (const [dim, q] of [[1600, 0.72], [1280, 0.6], [1024, 0.5], [800, 0.45]]) {
+    for (const [dim, q] of [[1280, 0.6], [1024, 0.5], [900, 0.5], [800, 0.45], [700, 0.4]]) {
       const d = await compresserImage(file, dim, q);
       if (d.length <= CIBLE) return { data: d, type: 'image/jpeg', nom: file.name };
     }
-    const last = await compresserImage(file, 700, 0.4);
+    const last = await compresserImage(file, 600, 0.38);
     return last.length <= CIBLE ? { data: last, type: 'image/jpeg', nom: file.name } : { tooBig: true, nom: file.name };
   }
   const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
@@ -6736,11 +6736,17 @@ async function televerserFichierChantier(input) {
       const r = await fichierVersDataURL(f);
       if (!r || r.tooBig) { rejetes++; continue; }
       const id = 'fc_' + uuid();
-      await saveDoc('chantierFichiers', { id, chantierId: ch.id, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+      await db.collection('chantierFichiers').doc(id).set({ id, chantierId: ch.id, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
       meta.push({ id, nom: r.nom, type: r.type });
     } catch (e) { console.error('fichier chantier', e); rejetes++; }
   }
-  if (meta.length) await saveDoc('chantiers', { ...ch, fichiers: [...(ch.fichiers || []), ...meta] });
+  if (meta.length) {
+    const nouv = [...(ch.fichiers || []), ...meta];
+    try { await db.collection('chantiers').doc(ch.id).set({ ...ch, fichiers: nouv }); }
+    catch (e) { console.error('maj chantier fichiers', e); if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Enregistrement impossible.</span>'; return; }
+    const idx = appData.chantiers.findIndex(c => c.id === ch.id);
+    if (idx >= 0) appData.chantiers[idx] = { ...appData.chantiers[idx], fichiers: nouv };
+  }
   input.value = '';
   if (statut) statut.innerHTML = rejetes ? `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (PDF trop lourd ou format non supporté).</span>` : '';
   if (document.getElementById('page-chantier-detail').classList.contains('active')) renderChantierDetail();
@@ -6811,11 +6817,17 @@ async function televerserFichierIntervention(ivId, input) {
       const r = await fichierVersDataURL(f);
       if (!r || r.tooBig) { rejetes++; continue; }
       const id = 'fi_' + uuid();
-      await saveDoc('interventionFichiers', { id, interventionId: ivId, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
+      await db.collection('interventionFichiers').doc(id).set({ id, interventionId: ivId, nom: r.nom, type: r.type, data: r.data, ts: new Date().toISOString(), auteur: currentUser ? currentUser.name : '' });
       meta.push({ id, nom: r.nom, type: r.type });
     } catch (e) { console.error('fichier intervention', e); rejetes++; }
   }
-  if (meta.length) await saveDoc('interventions', { ...iv, fichiers: [...(iv.fichiers || []), ...meta] });
+  if (meta.length) {
+    const nouv = [...(iv.fichiers || []), ...meta];
+    try { await db.collection('interventions').doc(ivId).set({ ...iv, fichiers: nouv }); }
+    catch (e) { console.error('maj intervention fichiers', e); if (statut) statut.innerHTML = '<span style="color:#c0392b">❌ Enregistrement impossible.</span>'; return; }
+    const idx = appData.interventions.findIndex(i => i.id === ivId);
+    if (idx >= 0) appData.interventions[idx] = { ...appData.interventions[idx], fichiers: nouv };
+  }
   input.value = '';
   if (statut) statut.innerHTML = rejetes ? `<span style="color:#c0392b">${rejetes} fichier(s) ignoré(s) (PDF trop lourd ou format non supporté).</span>` : '';
   ouvrirDetailIntervention(ivId);
